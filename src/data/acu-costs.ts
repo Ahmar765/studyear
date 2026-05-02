@@ -1,0 +1,46 @@
+
+
+export const ACU_FEATURE_COSTS = {
+  // Explanations & Tutoring
+  AI_EXPLANATION: 5,
+  AI_INTERACTIVE_LESSON: 15,
+  AI_TUTOR_SESSION: 5, // Per interaction cost
+
+  // Planning & Diagnostics
+  AI_STUDY_PLAN: 25,
+  AI_MIND_MAP: 5,
+  DIAGNOSTIC_REPORT: 20,
+  RECOVERY_PLAN: 30,
+
+  // Practice & Assessment
+  AI_QUIZ_GENERATION: 10,
+  EXAM_SIMULATION: 20,
+  GRADE_PREDICTION: 10,
+  
+  // Written Feedback
+  AI_FEEDBACK: 15,
+  AI_ASSIGNMENT_REVIEW: 20,
+  AI_ESSAY_REVIEW: 25,
+  AI_DISSERTATION_REVIEW: 60,
+
+  // Resource Generation
+  AI_COURSE_GENERATOR: 30,
+  FORMULA_SHEET: 3,
+  TOPIC_SUMMARY: 5,
+
+  // Visual Tools
+  VISUAL_DRAWING: 8,
+  EDUCATIONAL_IMAGE: 10,
+  BAR_GRAPH: 5,
+  LINE_GRAPH: 5,
+  PIE_CHART: 5,
+  SCATTER_PLOT: 6,
+  HISTOGRAM: 6,
+  PICTOGRAPH: 8,
+  COORDINATE_GRAPH: 7,
+  GEOMETRY_DIAGRAM: 8,
+  FUNCTION_GRAPH: 8,
+  GRAPH_THEORY_DIAGRAM: 8,
+} as const;
+
+export type FeatureKey = keyof typeof ACU_FEATURE_COSTS;

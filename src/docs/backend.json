@@ -1,0 +1,498 @@
+
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Core user identity data. This is the central authentication record.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "The user's unique Firebase Auth ID." },
+        "email": { "type": "string", "format": "email" },
+        "name": { "type": "string", "nullable": true },
+        "role": { "type": "string", "enum": ["STUDENT", "PARENT", "PRIVATE_TUTOR", "SCHOOL_ADMIN", "SCHOOL_TUTOR", "ADMIN"] },
+        "profileImageUrl": { "type": "string", "format": "uri", "nullable": true },
+        "coverImageUrl": { "type": "string", "format": "uri", "nullable": true },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "Subscription": {
+      "title": "Subscription",
+      "description": "Manages the user's subscription plan and status.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "type": { "type": "string", "enum": ["FREE", "STUDENT_PREMIUM", "PARENT_PRO", "PARENT_PRO_PLUS", "PRIVATE_TUTOR", "SCHOOL_STARTER", "SCHOOL_GROWTH", "SCHOOL_ENTERPRISE"] },
+        "status": { "type": "string", "enum": ["ACTIVE", "INACTIVE", "CANCELLED", "EXPIRED", "PENDING_PAYMENT"] },
+        "startedAt": { "type": "string", "format": "date-time" },
+        "expiresAt": { "type": "string", "format": "date-time", "nullable": true }
+      }
+    },
+     "ACUWallet": {
+      "title": "ACU Wallet",
+      "description": "Manages the AI Credit Unit (ACU) balance for a user or school.",
+      "properties": {
+        "ownerType": { "type": "string", "enum": ["USER", "SCHOOL"] },
+        "userId": { "type": "string", "nullable": true },
+        "schoolId": { "type": "string", "nullable": true },
+        "balance": { "type": "number", "default": 0 },
+        "locked": { "type": "boolean", "default": false },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "ACUTransaction": {
+      "title": "ACU Transaction",
+      "description": "An entry in the ACU ledger representing a debit or credit.",
+      "properties": {
+        "walletId": { "type": "string" },
+        "type": { "type": "string", "enum": ["PURCHASE", "BONUS", "DEBIT", "REFUND", "ADMIN_ADJUSTMENT"] },
+        "featureKey": { "type": "string", "nullable": true },
+        "amount": { "type": "number" },
+        "balanceBefore": { "type": "number" },
+        "balanceAfter": { "type": "number" },
+        "actualAICostGBP": { "type": "number", "nullable": true },
+        "platformChargeGBP": { "type": "number", "nullable": true },
+        "metadata": { "type": "object", "nullable": true },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "StudentProfile": {
+      "title": "Student Profile",
+      "description": "Detailed academic and preference data for a student user.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "studyLevel": { "type": "string", "nullable": true },
+        "yearGroup": { "type": "string", "nullable": true },
+        "course": { "type": "string", "nullable": true },
+        "examBoard": { "type": "string", "nullable": true },
+        "subjects": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "targetGrade": { "type": "string" }, "currentGrade": { "type": "string", "nullable": true } } } }
+      }
+    },
+    "ParentProfile": {
+      "title": "Parent Profile",
+      "description": "Profile data specific to a parent user.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" }
+      }
+    },
+    "TutorProfile": {
+      "title": "Tutor Profile",
+      "description": "Profile data for private and school tutors.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "approvalStatus": { "type": "string", "enum": ["PENDING", "APPROVED", "REJECTED"] },
+        "bio": { "type": "string", "nullable": true },
+        "subjects": { "type": "object", "nullable": true },
+        "hourlyRate": { "type": "number", "nullable": true },
+        "onboardingPaid": { "type": "boolean", "default": false },
+        "commissionRate": { "type": "number", "default": 20 }
+      }
+    },
+    "SchoolAccount": {
+      "title": "School Account",
+      "description": "Represents an entire school or institution.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "approvalStatus": { "type": "string", "enum": ["PENDING", "APPROVED", "REJECTED"] },
+        "misProvider": { "type": "string", "nullable": true },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "SchoolStaff": {
+      "title": "School Staff",
+      "description": "Links a user to a school account.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "schoolId": { "type": "string" },
+        "role": { "type": "string", "enum": ["SCHOOL_ADMIN", "SCHOOL_TUTOR"] }
+      }
+    },
+    "ParentStudentLink": {
+      "title": "Parent-Student Link",
+      "description": "Links a parent user to a student user.",
+      "type": "object",
+      "properties": {
+        "parentId": { "type": "string" },
+        "studentId": { "type": "string" },
+        "status": { "type": "string", "enum": ["PENDING", "APPROVED", "REJECTED"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "TutorSession": {
+        "title": "Tutor Session",
+        "description": "Represents a tutoring session between a student and a tutor.",
+        "type": "object",
+        "properties": {
+            "studentId": { "type": "string" },
+            "tutorId": { "type": "string" },
+            "status": { "type": "string", "enum": ["REQUESTED", "ACCEPTED", "DECLINED", "COMPLETED", "CANCELLED"] },
+            "scheduledAt": { "type": "string", "format": "date-time", "nullable": true },
+            "meetingUrl": { "type": "string", "format": "uri", "nullable": true },
+            "notes": { "type": "object", "nullable": true },
+            "createdAt": { "type": "string", "format": "date-time" },
+            "updatedAt": { "type": "string", "format": "date-time" }
+        }
+    },
+    "DiagnosticResult": {
+      "title": "Diagnostic Result",
+      "properties": {
+        "userId": { "type": "string" },
+        "studentId": { "type": "string" },
+        "subject": { "type": "string" },
+        "aiSummary": { "type": "object" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "StudyPlan": {
+        "title": "Study Plan",
+        "properties": {
+            "userId": { "type": "string" },
+            "studentId": { "type": "string" },
+            "diagnosticId": { "type": "string", "nullable": true },
+            "title": { "type": "string" },
+            "plan": { "type": "object" },
+            "active": { "type": "boolean", "default": true },
+            "createdAt": { "type": "string", "format": "date-time" },
+            "updatedAt": { "type": "string", "format": "date-time" }
+        }
+    },
+    "RecoveryPlan": {
+      "title": "Recovery Plan",
+      "description": "A corrective intervention plan generated when a student's performance drops.",
+      "properties": {
+        "userId": { "type": "string" },
+        "studentId": { "type": "string" },
+        "diagnosticId": { "type": "string" },
+        "title": { "type": "string" },
+        "plan": { "type": "object", "description": "The detailed recovery plan content." },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "ResourceUpload": {
+      "title": "Resource Upload",
+      "type": "object",
+      "properties": {
+        "uploadedById": { "type": "string" },
+        "type": { "type": "string", "enum": ["PAST_PAPER", "VIDEO", "AI_INTERACTIVE_LESSON", "AI_TUTOR_SESSION", "AI_COURSE", "FLASHCARD", "QUIZ", "FORMULA_SHEET", "MIND_MAP", "ESSAY_PLAN", "TOPIC_SUMMARY", "DIAGNOSTIC_REPORT", "STUDY_PLAN", "RECOVERY_PLAN"] },
+        "title": { "type": "string" },
+        "description": { "type": "string", "nullable": true },
+        "fileUrl": { "type": "string", "format": "uri", "nullable": true },
+        "videoUrl": { "type": "string", "format": "uri", "nullable": true },
+        "approvalStatus": { "type": "string", "enum": ["PENDING", "APPROVED", "REJECTED"] },
+        "rejectionReason": { "type": "string", "nullable": true },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "SavedResource": {
+      "title": "Saved Resource",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "studentId": { "type": "string" },
+        "type": { "type": "string", "enum": ["PAST_PAPER", "VIDEO", "AI_INTERACTIVE_LESSON", "AI_TUTOR_SESSION", "AI_COURSE", "FLASHCARD", "QUIZ", "FORMULA_SHEET", "MIND_MAP", "ESSAY_PLAN", "TOPIC_SUMMARY", "DIAGNOSTIC_REPORT", "STUDY_PLAN", "RECOVERY_PLAN"] },
+        "title": { "type": "string" },
+        "content": { "type": "object", "nullable": true },
+        "sourceInput": { "type": "string", "nullable": true },
+        "linkedEntityId": { "type": "string", "nullable": true },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "SystemSetting": {
+      "title": "System Setting",
+      "description": "A generic key-value store for global platform settings.",
+      "type": "object",
+      "properties": {
+        "key": { "type": "string" },
+        "value": { "type": "object" }
+      }
+    },
+    "KnowledgeNode": {
+      "title": "Knowledge Node",
+      "description": "Represents a single, atomic piece of knowledge in the curriculum.",
+      "properties": {
+        "level": { "type": "string" },
+        "subject": { "type": "string" },
+        "topic": { "type": "string" },
+        "subtopic": { "type": "string", "nullable": true },
+        "concept": { "type": "string", "nullable": true },
+        "microSkill": { "type": "string", "nullable": true },
+        "examBoard": { "type": "string", "nullable": true }
+      }
+    },
+    "MasteryRecord": {
+      "title": "Mastery Record",
+      "description": "Tracks a student's mastery over a single Knowledge Node.",
+      "properties": {
+        "studentId": { "type": "string" },
+        "knowledgeNodeId": { "type": "string" },
+        "masteryScore": { "type": "number", "default": 0 },
+        "confidenceScore": { "type": "number", "default": 0 },
+        "struggleScore": { "type": "number", "default": 0 },
+        "lastAttemptAt": { "type": "string", "format": "date-time", "nullable": true },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "Prediction": {
+      "title": "Grade Prediction",
+      "description": "Stores a historical record of AI-generated grade predictions.",
+      "properties": {
+        "studentId": { "type": "string" },
+        "predictedGrade": { "type": "string" },
+        "riskScore": { "type": "number", "nullable": true },
+        "confidenceScore": { "type": "number", "nullable": true },
+        "reason": { "type": "string", "nullable": true },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "StudentDashboardState": {
+      "title": "Student Dashboard State",
+      "description": "Aggregated data for quick dashboard loads.",
+      "properties": {
+        "studentId": { "type": "string" },
+        "progressScore": { "type": "number", "default": 0 },
+        "predictedGrade": { "type": "string", "nullable": true },
+        "weakSubjects": { "type": "object", "nullable": true },
+        "strongSubjects": { "type": "object", "nullable": true },
+        "todayTasks": { "type": "object", "nullable": true },
+        "recommendations": { "type": "object", "nullable": true },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+     "LearningEvent": {
+      "title": "Learning Event",
+      "properties": {
+        "studentId": { "type": "string" },
+        "type": { "type": "string" },
+        "stage": { "type": "string" },
+        "payload": { "type": "object" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "AuditLog": {
+      "title": "Audit Log",
+      "properties": {
+        "userId": { "type": "string" },
+        "action": { "type": "string" },
+        "metadata": { "type": "object" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "AutosaveEvent": {
+      "title": "Autosave Event",
+      "properties": {
+        "userId": { "type": "string" },
+        "studentId": { "type": "string", "nullable": true },
+        "entityType": { "type": "string" },
+        "entityId": { "type": "string" },
+        "action": { "type": "string" },
+        "payload": { "type": "object" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "AISession": {
+      "title": "AI Session",
+      "description": "A record of an interaction with the AI Tutor.",
+      "properties": {
+        "studentId": { "type": "string" },
+        "mode": { "type": "string" },
+        "subject": { "type": "string" },
+        "topic": { "type": "string", "nullable": true },
+        "transcript": { 
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "role": { "type": "string", "enum": ["user", "assistant"] },
+                    "content": { "type": "string" }
+                }
+            }
+        },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "GeneratedVisual": {
+      "title": "Generated Visual",
+      "description": "A record of a generated visual resource like an image or chart.",
+      "properties": {
+        "studentId": { "type": "string" },
+        "userId": { "type": "string" },
+        "type": { "type": "string" },
+        "title": { "type": "string" },
+        "prompt": { "type": "string", "nullable": true },
+        "data": { "type": "object", "nullable": true },
+        "svg": { "type": "string", "nullable": true },
+        "imageUrl": { "type": "string", "format": "uri", "nullable": true },
+        "chartConfig": { "type": "object", "nullable": true },
+        "acuCost": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "AssignmentSubmission": {
+      "title": "Assignment Submission",
+      "description": "A record of a student's written work submitted for AI review.",
+      "type": "object",
+      "properties": {
+        "studentId": { "type": "string" },
+        "userId": { "type": "string" },
+        "type": { "type": "string", "enum": ["HOMEWORK", "ASSIGNMENT", "ESSAY", "COURSEWORK", "REPORT", "DISSERTATION", "THESIS", "PERSONAL_STATEMENT", "OTHER"] },
+        "title": { "type": "string" },
+        "subject": { "type": "string", "nullable": true },
+        "studyLevel": { "type": "string", "nullable": true },
+        "examBoard": { "type": "string", "nullable": true },
+        "fileUrl": { "type": "string", "format": "uri", "nullable": true },
+        "pastedText": { "type": "string", "nullable": true },
+        "wordCount": { "type": "number", "nullable": true },
+        "status": { "type": "string", "enum": ["PENDING", "PROCESSING", "COMPLETED", "FAILED"], "default": "PENDING" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "AssignmentReview": {
+      "title": "Assignment Review",
+      "description": "The AI-generated feedback for a specific assignment submission.",
+      "type": "object",
+      "properties": {
+        "submissionId": { "type": "string" },
+        "studentId": { "type": "string" },
+        "userId": { "type": "string" },
+        "summary": { "type": "string" },
+        "overallFeedback": { "type": "object" },
+        "inlineComments": { "type": "object" },
+        "strengths": { "type": "object" },
+        "weaknesses": { "type": "object" },
+        "improvementRecommendations": { "type": "object" },
+        "predictedCurrentGrade": { "type": "string", "nullable": true },
+        "predictedCurrentScore": { "type": "number", "nullable": true },
+        "predictedGradeAfterImprovement": { "type": "string", "nullable": true },
+        "predictedScoreAfterImprovement": { "type": "number", "nullable": true },
+        "markingCriteria": { "type": "object", "nullable": true },
+        "academicIntegrityFlags": { "type": "object", "nullable": true },
+        "nextActions": { "type": "object", "nullable": true },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "description": "Core user identity data.",
+      "schema": { "$ref": "#/entities/User" }
+    },
+    "subscriptions/{userId}": {
+      "description": "User subscription status.",
+      "schema": { "$ref": "#/entities/Subscription" }
+    },
+    "acuWallets/{walletId}": {
+      "description": "Manages ACU balances. Doc ID is userId for users.",
+      "schema": { "$ref": "#/entities/ACUWallet" }
+    },
+    "acuTransactions/{transactionId}": {
+      "description": "Ledger of all ACU debits and credits.",
+      "schema": { "$ref": "#/entities/ACUTransaction" }
+    },
+    "student_profiles/{userId}": {
+      "description": "Detailed academic profile for a student.",
+      "schema": { "$ref": "#/entities/StudentProfile" }
+    },
+     "student_dashboard_states/{studentId}": {
+      "description": "Aggregated data for the student dashboard.",
+      "schema": { "$ref": "#/entities/StudentDashboardState" }
+    },
+    "parent_profiles/{userId}": {
+      "description": "Profile for a parent.",
+      "schema": { "$ref": "#/entities/ParentProfile" }
+    },
+    "tutor_profiles/{userId}": {
+      "description": "Profile for a tutor.",
+      "schema": { "$ref": "#/entities/TutorProfile" }
+    },
+    "tutor_sessions/{sessionId}": {
+      "description": "A tutoring session between a student and a tutor.",
+      "schema": { "$ref": "#/entities/TutorSession" }
+    },
+    "school_accounts/{schoolId}": {
+      "description": "An institutional account.",
+      "schema": { "$ref": "#/entities/SchoolAccount" }
+    },
+    "school_staff/{staffId}": {
+      "description": "Links a user to a school as staff.",
+      "schema": { "$ref": "#/entities/SchoolStaff" }
+    },
+    "parent_student_links/{linkId}": {
+        "description": "Links a parent user to a student user. Doc ID is {studentId}_{parentId}",
+        "schema": { "$ref": "#/entities/ParentStudentLink" }
+    },
+    "diagnostic_results/{resultId}": {
+        "description": "Stores results from academic diagnostics.",
+        "schema": { "$ref": "#/entities/DiagnosticResult" }
+    },
+    "study_plans/{planId}": {
+        "description": "A generated study plan for a student.",
+        "schema": { "$ref": "#/entities/StudyPlan" }
+    },
+    "recovery_plans/{planId}": {
+        "description": "A corrective intervention plan for a student.",
+        "schema": { "$ref": "#/entities/RecoveryPlan" }
+    },
+    "resource_uploads/{uploadId}": {
+      "description": "Record of user-uploaded resources pending approval.",
+      "schema": { "$ref": "#/entities/ResourceUpload" }
+    },
+    "generated_visuals/{visualId}": {
+      "description": "A generated visual resource.",
+      "schema": { "$ref": "#/entities/GeneratedVisual" }
+    },
+    "assignment_submissions/{submissionId}": {
+      "description": "Stores student work submitted for AI review.",
+      "schema": { "$ref": "#/entities/AssignmentSubmission" }
+    },
+    "assignment_reviews/{reviewId}": {
+      "description": "Stores the AI-generated review for a submission. Doc ID could be same as submissionId.",
+      "schema": { "$ref": "#/entities/AssignmentReview" }
+    },
+    "users/{userId}/saved_resources/{resourceId}": {
+      "description": "A student's personal collection of saved resources.",
+      "schema": { "$ref": "#/entities/SavedResource" }
+    },
+     "users/{userId}/ai_sessions/{sessionId}": {
+      "description": "A record of an AI Tutor interaction.",
+      "schema": { "$ref": "#/entities/AISession" }
+    },
+    "system_settings/global": {
+      "description": "A single document containing all global system settings.",
+      "schema": { "$ref": "#/entities/SystemSetting" }
+    },
+    "knowledge_nodes/{nodeId}": {
+      "description": "Global repository of all knowledge nodes.",
+      "schema": { "$ref": "#/entities/KnowledgeNode" }
+    },
+    "student_profiles/{userId}/mastery_records/{recordId}": {
+      "description": "Tracks student mastery of specific knowledge nodes.",
+      "schema": { "$ref": "#/entities/MasteryRecord" }
+    },
+    "student_profiles/{userId}/predictions/{predictionId}": {
+      "description": "Stores historical grade predictions for a student.",
+      "schema": { "$ref": "#/entities/Prediction" }
+    },
+    "learning_events/{eventId}": {
+        "description": "Records significant learning events for a student.",
+        "schema": { "$ref": "#/entities/LearningEvent" }
+    },
+    "audit_logs/{logId}": {
+        "description": "Logs all significant user and system actions.",
+        "schema": { "$ref": "#/entities/AuditLog" }
+    },
+    "autosave_events/{eventId}": {
+        "description": "Captures the state of an action for recovery and debugging.",
+        "schema": { "$ref": "#/entities/AutosaveEvent" }
+    }
+  },
+  "auth": {
+    "providers": ["email", "google.com"]
+  }
+}

@@ -1,0 +1,229 @@
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // =====================================================================
+    //  HELPER FUNCTIONS
+    // =====================================================================
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function getUserRole(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data.role;
+    }
+
+    function hasRole(role) {
+      return isSignedIn() && getUserRole(request.auth.uid) == role;
+    }
+    
+    function isPlatformAdmin() {
+      return hasRole("ADMIN");
+    }
+
+    function isParentOf(studentId) {
+      return isSignedIn() && exists(/databases/$(database)/documents/parent_student_links/$(studentId + "_" + request.auth.uid));
+    }
+    
+    // Placeholder for tutor relationship check
+    function isTutorOf(studentId) {
+      return false; 
+    }
+    
+    // Placeholder for school staff relationship check
+    function isSchoolStaffFor(studentId) {
+        return false;
+    }
+
+    // =====================================================================
+    //  CORE ENTITIES
+    // =====================================================================
+
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isOwner(userId);
+      // Merged updates still include `role`, so check equality — not `!("role" in request.resource.data)` (that blocked all updates).
+      allow update: if isOwner(userId) && request.resource.data.role == resource.data.role;
+      allow delete: if isPlatformAdmin();
+    }
+    
+    match /subscriptions/{userId} {
+      allow read: if isOwner(userId) || isPlatformAdmin();
+      allow write: if false; // Managed by backend
+    }
+
+    match /acuWallets/{walletId} {
+      allow read: if isOwner(walletId) || isPlatformAdmin();
+      allow write: if false; // Managed by backend only
+    }
+
+    match /acuTransactions/{transactionId} {
+      allow read: if isOwner(resource.data.userId) || isPlatformAdmin();
+      allow write: if false; // Managed by backend only
+    }
+
+    match /intelligence_briefings/{userId} {
+      allow read: if isOwner(userId) || isPlatformAdmin();
+      allow write: if false; // Admin SDK only
+    }
+
+    // =====================================================================
+    //  PROFILE & STATE COLLECTIONS
+    // =====================================================================
+
+    match /student_profiles/{studentId} {
+      allow read: if isOwner(studentId) || isParentOf(studentId) || isTutorOf(studentId) || isSchoolStaffFor(studentId) || isPlatformAdmin();
+      allow create, update: if isOwner(studentId) || isPlatformAdmin();
+      allow delete: if isPlatformAdmin();
+
+       match /mastery_records/{recordId} {
+        allow read, write: if isOwner(studentId) || isPlatformAdmin();
+      }
+
+      match /predictions/{predictionId} {
+        allow read: if isOwner(studentId) || isParentOf(studentId) || isPlatformAdmin();
+        allow create: if isOwner(studentId) || isPlatformAdmin();
+        allow write: if false; // Immutable
+      }
+    }
+    
+    match /parent_profiles/{parentId} {
+      allow read, create, update: if isOwner(parentId);
+      allow delete: if isPlatformAdmin();
+    }
+    
+    match /tutor_profiles/{tutorId} {
+      allow read: if isSignedIn();
+      allow create, update: if isOwner(tutorId) || isPlatformAdmin();
+      allow delete: if isPlatformAdmin();
+    }
+
+    match /student_dashboard_states/{studentId} {
+        allow read: if isOwner(studentId) || isParentOf(studentId) || isPlatformAdmin();
+        allow write: if false; // Managed by backend
+    }
+
+    // =====================================================================
+    //  RELATIONAL & INSTITUTIONAL COLLECTIONS
+    // =====================================================================
+
+    match /parent_student_links/{linkId} {
+      allow read: if isSignedIn() && (linkId.matches(request.auth.uid + '_*') || linkId.matches('*_' + request.auth.uid));
+      allow create: if hasRole("SCHOOL_ADMIN") || isPlatformAdmin(); // Only admins can create links for now
+      allow delete: if hasRole("SCHOOL_ADMIN") || isPlatformAdmin();
+    }
+    
+    match /school_accounts/{schoolId} {
+      allow read: if isSignedIn(); // Broad read for now
+      allow write: if isPlatformAdmin();
+    }
+    
+    match /school_staff/{staffId} {
+       allow read: if isSignedIn();
+       allow write: if hasRole("SCHOOL_ADMIN") || isPlatformAdmin();
+    }
+
+    // =====================================================================
+    //  ACADEMIC & CONTENT COLLECTIONS
+    // =====================================================================
+    
+    match /diagnostic_results/{resultId} {
+        allow read: if isOwner(resource.data.studentId) || isParentOf(resource.data.studentId) || isPlatformAdmin();
+        allow create: if isOwner(request.resource.data.studentId);
+        allow write: if false; // Immutable after creation
+    }
+
+    match /study_plans/{planId} {
+      allow read: if isOwner(resource.data.studentId) || isParentOf(resource.data.studentId) || isPlatformAdmin();
+      allow create: if isOwner(request.resource.data.studentId);
+      allow update, delete: if isOwner(resource.data.studentId) || isPlatformAdmin();
+    }
+
+    match /recovery_plans/{planId} {
+      allow read: if isOwner(resource.data.studentId) || isParentOf(resource.data.studentId) || isPlatformAdmin();
+      allow create: if isOwner(request.resource.data.studentId);
+      allow update, delete: if isOwner(resource.data.studentId) || isPlatformAdmin();
+    }
+    
+    match /study_tasks/{taskId} {
+      allow read, update: if isOwner(resource.data.userId); // Assuming userId field exists
+      allow create: if isOwner(request.resource.data.userId);
+      allow delete: if isOwner(resource.data.userId) || isPlatformAdmin();
+    }
+
+    match /tutor_sessions/{sessionId} {
+      allow read: if isSignedIn() && (isOwner(resource.data.studentId) || isOwner(resource.data.tutorId));
+      allow create: if isOwner(request.resource.data.studentId);
+      allow update: if (isOwner(resource.data.tutorId)) || 
+                     (isOwner(resource.data.studentId) && request.resource.data.status == 'CANCELLED');
+      allow delete: if false;
+    }
+
+    match /resource_uploads/{uploadId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isPlatformAdmin(); // Only admins can approve/reject
+      allow delete: if isOwner(resource.data.uploadedById) || isPlatformAdmin();
+    }
+
+    match /generated_visuals/{visualId} {
+        allow read: if isOwner(resource.data.userId);
+        allow write: if false;
+    }
+    
+    match /assignment_submissions/{submissionId} {
+      allow read: if isOwner(resource.data.userId) || isParentOf(resource.data.studentId) || isSchoolStaffFor(resource.data.studentId) || isPlatformAdmin();
+      allow create: if isOwner(request.resource.data.userId);
+      allow update: if isOwner(resource.data.userId) || isPlatformAdmin(); // For status updates
+      allow delete: if isPlatformAdmin();
+    }
+
+    match /assignment_reviews/{reviewId} {
+      allow read: if isOwner(resource.data.userId) || isParentOf(resource.data.studentId) || isSchoolStaffFor(resource.data.studentId) || isPlatformAdmin();
+      allow write: if false; // Backend only
+    }
+
+    match /users/{userId}/saved_resources/{resourceId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    match /users/{userId}/ai_sessions/{sessionId} {
+      allow read, write: if isOwner(userId);
+    }
+    
+    match /knowledge_nodes/{nodeId} {
+      allow read: if isSignedIn();
+      allow write: if isPlatformAdmin();
+    }
+
+    // =====================================================================
+    //  LOGGING & EVENT COLLECTIONS (BACKEND WRITE ONLY)
+    // =====================================================================
+    
+    match /learning_events/{eventId} {
+        allow read: if isPlatformAdmin();
+        allow write: if false;
+    }
+    
+    match /audit_logs/{logId} {
+        allow read: if isPlatformAdmin();
+        allow write: if false;
+    }
+
+    match /autosave_events/{eventId} {
+        allow read: if isPlatformAdmin();
+        allow write: if false;
+    }
+    
+    // Default deny all other collections
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
