@@ -1,5 +1,5 @@
 
-import { db } from '@/lib/firebase/client-app';
+import { getFirestoreDb } from '@/lib/firebase/client-app';
 import { doc, onSnapshot, Timestamp } from 'firebase/firestore';
 import type { AcuWallet as AcuWalletSchema } from '@/server/schemas';
 
@@ -8,6 +8,7 @@ export type AcuWallet = AcuWalletSchema;
 
 export function getAcuWallet(uid: string, callback: (wallet: AcuWallet | null) => void) {
   try {
+    const db = getFirestoreDb();
     // Must match admin SDK collection: server uses `acuWallets` (see acu-service, auth-actions).
     const walletDocRef = doc(db, 'acuWallets', uid);
 

@@ -5,7 +5,7 @@ import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { auth } from '@/lib/firebase/client-app';
+import { getFirebaseAuth } from '@/lib/firebase/client-app';
 import { useToast } from '@/hooks/use-toast';
 import { ImagePlus, Loader2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -49,7 +49,7 @@ export function ProfileImageUpload({
       return;
     }
 
-    const user = auth.currentUser;
+    const user = getFirebaseAuth().currentUser;
     if (!user) {
       toast({ variant: 'destructive', title: 'Sign in required', description: 'Please sign in to upload images.' });
       return;

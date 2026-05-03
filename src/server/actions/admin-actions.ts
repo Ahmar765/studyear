@@ -2,7 +2,7 @@
 'use server';
 
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import { app } from '@/lib/firebase/client-app';
+import { getFirebaseApp } from '@/lib/firebase/client-app';
 import { z } from 'zod';
 import { adminDb, adminAuth } from '@/lib/firebase/admin-app';
 import { UserProfile } from '@/lib/firebase/services/user';
@@ -17,7 +17,7 @@ import { ACUService } from '../services/acu-service';
 
 export async function startImpersonationAction(targetUid: string, reason: string): Promise<{ success: boolean; customToken?: string; impersonationLogId?: string; error?: string }> {
     try {
-        const functions = getFunctions(app, 'europe-west2');
+        const functions = getFunctions(getFirebaseApp(), 'europe-west2');
         const startImpersonationFn = httpsCallable(functions, 'startImpersonationSession');
         
         const result = await startImpersonationFn({ targetUid, reason });
@@ -37,7 +37,7 @@ export async function startImpersonationAction(targetUid: string, reason: string
 
 export async function endImpersonationAction(impersonationLogId: string): Promise<{ success: boolean; error?: string }> {
      try {
-        const functions = getFunctions(app, 'europe-west2');
+        const functions = getFunctions(getFirebaseApp(), 'europe-west2');
         const endImpersonationFn = httpsCallable(functions, 'endImpersonationSession');
         await endImpersonationFn({ impersonationLogId });
         return { success: true };

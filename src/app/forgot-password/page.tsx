@@ -13,7 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useTransition, useState } from 'react';
 import Link from 'next/link';
 import { sendPasswordResetEmail } from 'firebase/auth';
-import { auth } from '@/lib/firebase/client-app';
+import { getFirebaseAuth } from '@/lib/firebase/client-app';
 
 const formSchema = z.object({
   email: z.string().email('Please enter a valid email address.'),
@@ -32,7 +32,7 @@ export default function ForgotPasswordPage() {
   const onSubmit = (values: z.infer<typeof formSchema>) => {
     startTransition(async () => {
       try {
-        await sendPasswordResetEmail(auth, values.email);
+        await sendPasswordResetEmail(getFirebaseAuth(), values.email);
         setEmailSent(true);
       } catch (error: any) {
         toast({

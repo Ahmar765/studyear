@@ -26,7 +26,7 @@ import { useImpersonation } from '@/hooks/use-impersonation';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { deleteUser } from 'firebase/auth';
 import { doc, deleteDoc } from 'firebase/firestore';
-import { auth, db } from '@/lib/firebase/client-app';
+import { getFirebaseAuth, getFirestoreDb } from '@/lib/firebase/client-app';
 import placeholderImages from '@/lib/placeholder-images.json';
 import SystemVisual from '@/components/system-visual';
 import Image from 'next/image';
@@ -77,7 +77,7 @@ export default function AccountPage() {
 
     startTransition(async () => {
         try {
-            const user = auth.currentUser;
+            const user = getFirebaseAuth().currentUser;
             if (!user) {
                 throw new Error('You must be logged in to delete your account.');
             }
@@ -86,7 +86,7 @@ export default function AccountPage() {
             const uid = userForDeletion.uid;
 
             // 1. Delete user from Firestore
-            await deleteDoc(doc(db, 'users', uid));
+            await deleteDoc(doc(getFirestoreDb(), 'users', uid));
             
             // 2. Delete user from Firebase Auth
             await deleteUser(userForDeletion);

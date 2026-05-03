@@ -1,5 +1,5 @@
 
-import {db} from '@/lib/firebase/client-app';
+import { getFirestoreDb } from '@/lib/firebase/client-app';
 import {doc, onSnapshot, Timestamp} from 'firebase/firestore';
 
 // Base User data from /users/{uid}
@@ -68,7 +68,8 @@ export function getUserProfile(
   uid: string,
   callback: (profile: UserProfile | null) => void
 ): () => void {
-  
+  const db = getFirestoreDb();
+
   let userData: UserData | null = null;
   let studentProfileData: StudentProfileData | null = null;
   let parentProfileData: ParentProfileData | null = null;

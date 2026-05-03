@@ -11,7 +11,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/hooks/use-auth";
 import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
-import { auth } from "@/lib/firebase/client-app";
+import { getFirebaseAuth } from "@/lib/firebase/client-app";
 import { useToast } from "@/hooks/use-toast";
 import { Separator } from "@/components/ui/separator";
 import { handleSocialSignIn, handleEmailLogin } from "@/server/actions/auth-actions";
@@ -40,7 +40,7 @@ export default function LoginPage() {
     const password = formData.get('password') as string;
 
     try {
-        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        const userCredential = await signInWithEmailAndPassword(getFirebaseAuth(), email, password);
         const { sessionId } = await handleEmailLogin(userCredential.user);
         if (sessionId) {
             sessionStorage.setItem('sessionId', sessionId);
@@ -61,7 +61,7 @@ export default function LoginPage() {
     setIsGoogleSubmitting(true);
     const provider = new GoogleAuthProvider();
     try {
-        const result = await signInWithPopup(auth, provider);
+        const result = await signInWithPopup(getFirebaseAuth(), provider);
         const { newUser, sessionId } = await handleSocialSignIn(result.user);
          if (sessionId) {
             sessionStorage.setItem('sessionId', sessionId);

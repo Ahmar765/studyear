@@ -1,7 +1,7 @@
 'use client';
 
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '@/lib/firebase/client-app';
+import { getFirestoreDb } from '@/lib/firebase/client-app';
 
 export interface StudentProfileSavePayload {
   fullName: string;
@@ -20,6 +20,7 @@ export interface StudentProfileSavePayload {
  * (`role` must stay equal). A failed users write used to reject the whole batch.
  */
 export async function saveStudentAcademicClient(uid: string, data: StudentProfileSavePayload): Promise<void> {
+  const db = getFirestoreDb();
   const rawExam = data.preferences?.examBoard;
   const examBoard = rawExam && rawExam !== 'none' ? rawExam : null;
 

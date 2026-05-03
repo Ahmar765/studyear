@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { signInWithCustomToken } from 'firebase/auth';
-import { auth } from '@/lib/firebase/client-app';
+import { getFirebaseAuth } from '@/lib/firebase/client-app';
 import { Loader } from 'lucide-react';
 
 export default function ImpersonatePage() {
@@ -22,7 +22,7 @@ export default function ImpersonatePage() {
       return;
     }
 
-    signInWithCustomToken(auth, token)
+    signInWithCustomToken(getFirebaseAuth(), token)
       .then((userCredential) => {
         // The custom token automatically signs the user in.
         // We now store the log ID to manage the session state.

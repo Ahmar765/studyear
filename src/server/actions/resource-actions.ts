@@ -3,8 +3,6 @@
 
 import { adminDb } from '@/lib/firebase/admin-app';
 import { HttpsError } from '../lib/errors';
-import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase/client-app';
 import { getCurrentUser } from '../lib/auth';
 import * as admin from 'firebase-admin';
 import { z } from 'zod';
@@ -63,14 +61,14 @@ export async function saveUserResourceAction(resourceId: string, userId: string)
             throw new HttpsError('unauthenticated', 'You must be logged in to save a resource.');
         }
 
-        const resourceRef = doc(db, 'resources', resourceId);
-        const resourceSnap = await getDoc(resourceRef);
+        const resourceRef = adminDb.collection('resources').doc(resourceId);
+        const resourceSnap = await resourceRef.get();
 
         if (!resourceSnap.exists) {
             throw new HttpsError('not-found', 'The resource you are trying to save does not exist.');
         }
 
-        const resourceData = resourceSnap.data();
+        const resourceData = resourceSnap.data()!;
 
         await savedResourceService.save({
             studentId: userId,

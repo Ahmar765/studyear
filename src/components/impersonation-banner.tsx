@@ -6,6 +6,7 @@ import { Button } from './ui/button';
 import { useAuth } from '@/hooks/use-auth';
 import { endImpersonationAction } from '@/server/actions/admin-actions';
 import { useToast } from '@/hooks/use-toast';
+import { getFirebaseAuth } from '@/lib/firebase/client-app';
 
 export default function ImpersonationBanner() {
     const { user } = useAuth();
@@ -33,7 +34,7 @@ export default function ImpersonationBanner() {
             // Close the window to return to the admin's original tab.
             window.close();
             // As a fallback if the window doesn't close, sign out and redirect.
-            await auth.signOut();
+            await getFirebaseAuth().signOut();
             window.location.href = '/login';
         }
     };

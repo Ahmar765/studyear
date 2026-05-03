@@ -14,7 +14,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { signup, handleSocialSignIn } from "@/server/actions/auth-actions";
 import { UserCredential, createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
-import { auth } from "@/lib/firebase/client-app";
+import { getFirebaseAuth } from "@/lib/firebase/client-app";
 import { Separator } from "@/components/ui/separator";
 import { Loader } from "lucide-react";
 
@@ -48,7 +48,7 @@ export default function SignupPage() {
     const role = formData.get("role") as string;
 
     try {
-        const userCredential: UserCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const userCredential: UserCredential = await createUserWithEmailAndPassword(getFirebaseAuth(), email, password);
         const result = await signup(userCredential.user.uid, email, role);
 
         if (result.message === "Success") {
@@ -84,7 +84,7 @@ export default function SignupPage() {
     setIsGoogleSubmitting(true);
     const provider = new GoogleAuthProvider();
     try {
-        const result = await signInWithPopup(auth, provider);
+        const result = await signInWithPopup(getFirebaseAuth(), provider);
         const { sessionId } = await handleSocialSignIn(result.user);
         if (sessionId) {
             sessionStorage.setItem('sessionId', sessionId);

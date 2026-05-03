@@ -16,7 +16,7 @@ import { useImpersonation } from '@/hooks/use-impersonation';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { AlertTriangle } from 'lucide-react';
 import { updatePassword } from 'firebase/auth';
-import { auth } from '@/lib/firebase/client-app';
+import { getFirebaseAuth } from '@/lib/firebase/client-app';
 
 const formSchema = z.object({
   newPassword: z.string().min(6, 'Password must be at least 6 characters.'),
@@ -45,7 +45,7 @@ export default function ChangePasswordPage() {
     
     startTransition(async () => {
       try {
-        const user = auth.currentUser;
+        const user = getFirebaseAuth().currentUser;
         if (!user) {
             throw new Error('You must be logged in to change your password.');
         }

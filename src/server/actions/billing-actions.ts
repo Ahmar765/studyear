@@ -2,7 +2,7 @@
 'use server';
 
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import { app } from '@/lib/firebase/client-app';
+import { getFirebaseApp } from '@/lib/firebase/client-app';
 
 export async function createCheckoutSession(productCode: string, userId: string | undefined): Promise<{ success: boolean; sessionId?: string; error?: string }> {
   if (!userId) {
@@ -10,7 +10,7 @@ export async function createCheckoutSession(productCode: string, userId: string 
   }
   
   try {
-    const functions = getFunctions(app, 'europe-west2');
+    const functions = getFunctions(getFirebaseApp(), 'europe-west2');
     const createStripeCheckoutSessionFn = httpsCallable(functions, 'createStripeCheckoutSession');
     
     // Pass the userId to the Cloud Function so it can be added to Stripe's metadata

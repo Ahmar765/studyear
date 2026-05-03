@@ -3,7 +3,7 @@
 
 import { createContext, useState, useEffect, ReactNode, useCallback } from "react";
 import { User, onAuthStateChanged } from "firebase/auth";
-import { auth } from "@/lib/firebase/client-app";
+import { getFirebaseAuth } from "@/lib/firebase/client-app";
 import { useRouter } from "next/navigation";
 
 export interface AuthContextType {
@@ -20,6 +20,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
+    const auth = getFirebaseAuth();
     // This listener is the single source of truth for auth state.
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
@@ -30,7 +31,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
-    await auth.signOut();
+    await getFirebaseAuth().signOut();
     // The onAuthStateChanged listener will handle clearing state.
     // We can push to /login for a faster UI response.
     router.push('/login');
