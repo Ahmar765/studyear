@@ -143,7 +143,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     }
 
     if (user && isAuthPage) {
-      router.replace('/dashboard');
+      // Land on home so role-based redirects send admins/staff to the right dashboard
+      // without a flash of /dashboard (student shell).
+      router.replace('/');
       return;
     }
 
@@ -152,7 +154,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         return;
     }
 
-    if(userProfile && onboardingComplete) {
+    // Route staff/parent dashboards by role whenever we have a profile. Do not require
+    // onboardingComplete here — admins often never set student onboarding flags, and would
+    // otherwise stay on /dashboard (student) forever after login.
+    if (userProfile) {
         const role = userProfile.role;
         const isAdminDashboard = pathname.startsWith('/admin');
         const isTeacherDashboard = pathname.startsWith('/teacher');
