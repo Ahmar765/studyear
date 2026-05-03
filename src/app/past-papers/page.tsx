@@ -14,6 +14,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import ContributionForm from "./contribution-form";
 
+/** Radix Select forbids `value=""` on items; map this to “no filter” in state. */
+const FILTER_ALL = "__past_papers_all__";
+
 interface Subject {
     code: string;
     name: string;
@@ -86,20 +89,32 @@ export default function PastPapersPage() {
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
                       <div className="space-y-2">
                         <Label>Subject</Label>
-                        <Select value={filters.subjectId} onValueChange={(v) => handleFilterChange('subjectId', v)} disabled={isFetchingFilters}>
+                        <Select
+                          value={filters.subjectId === "" ? FILTER_ALL : filters.subjectId}
+                          onValueChange={(v) =>
+                            handleFilterChange("subjectId", v === FILTER_ALL ? "" : v)
+                          }
+                          disabled={isFetchingFilters}
+                        >
                           <SelectTrigger><SelectValue placeholder="All Subjects" /></SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="">All Subjects</SelectItem>
+                            <SelectItem value={FILTER_ALL}>All Subjects</SelectItem>
                             {subjects.map((s) => <SelectItem key={s.code} value={s.code}>{s.name}</SelectItem>)}
                           </SelectContent>
                         </Select>
                       </div>
                        <div className="space-y-2">
                         <Label>Exam Board</Label>
-                        <Select value={filters.examBoard} onValueChange={(v) => handleFilterChange('examBoard', v)} disabled={isFetchingFilters}>
+                        <Select
+                          value={filters.examBoard === "" ? FILTER_ALL : filters.examBoard}
+                          onValueChange={(v) =>
+                            handleFilterChange("examBoard", v === FILTER_ALL ? "" : v)
+                          }
+                          disabled={isFetchingFilters}
+                        >
                           <SelectTrigger><SelectValue placeholder="All Boards" /></SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="">All Boards</SelectItem>
+                            <SelectItem value={FILTER_ALL}>All Boards</SelectItem>
                             {examBoards.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}
                           </SelectContent>
                         </Select>

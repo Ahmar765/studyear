@@ -87,13 +87,16 @@ export default function InteractiveLessonPage() {
       });
   }
 
-  const handleQuizComplete = (score: number, total: number) => {
+  const handleQuizComplete = (score: number, mcqTotal: number) => {
       setLessonState('complete');
       toast({
           title: "Lesson Complete!",
-          description: `You scored ${score}/${total} on the quiz. Great work!`
-      })
-  }
+          description:
+              mcqTotal > 0
+                  ? `You scored ${score}/${mcqTotal} on the multiple-choice questions. Great work!`
+                  : "You've finished the lesson quiz. Review the model answers for any written questions.",
+      });
+  };
   
   const handleReset = () => {
       setTopic('');

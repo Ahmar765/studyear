@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { User as UserIcon, Loader, Edit, LayoutDashboard, KeyRound, Trash2, Fuel, PlusCircle, AlertTriangle } from 'lucide-react';
+import { User as UserIcon, Loader, Edit, LayoutDashboard, KeyRound, Trash2, Crown, PlusCircle, AlertTriangle, Fuel } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,6 +21,7 @@ import {
 import { useTransition, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { subscriptionTypeDisplayName } from '@/data/subscription-plans';
 import { useAcuWallet } from '@/hooks/use-acu-wallet';
 import { useImpersonation } from '@/hooks/use-impersonation';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
@@ -42,14 +43,17 @@ export default function AccountPage() {
   const searchParams = useSearchParams();
   const { isImpersonating } = useImpersonation();
 
+  const isStudentLike =
+    userProfile?.role === 'STUDENT' || userProfile?.role === 'PRIVATE_TUTOR';
 
-  const loading = profileLoading || walletLoading;
+  const loading = profileLoading || (!!userProfile && isStudentLike && walletLoading);
 
   useEffect(() => {
     if (searchParams.get('purchase') === 'success') {
       toast({
-        title: 'Purchase Successful!',
-        description: 'Your ACU balance has been updated.',
+        title: 'Purchase successful',
+        description:
+          'Your ACU balance or subscription will update shortly. Refresh the page if you do not see changes.',
       });
       // Clean the URL
       router.replace('/account', { scroll: false });
@@ -201,20 +205,53 @@ export default function AccountPage() {
         </Card>
         
         <div className="grid md:grid-cols-2 gap-8">
-            <Card>
+            {isStudentLike ? (
+              <Card>
                 <CardHeader>
-                    <CardTitle className="flex items-center gap-2"><Fuel /> ACU Wallet</CardTitle>
-                    <CardDescription>Your balance of AI Credit Units for generating content.</CardDescription>
+                  <CardTitle className="flex items-center gap-2">
+                    <Fuel /> ACU wallet
+                  </CardTitle>
+                  <CardDescription>
+                    AI Credit Units power tutor sessions, diagnostics, generated courses, and most AI tools.
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <p className="text-4xl font-bold">{Number(wallet?.balance ?? 0).toLocaleString()}</p>
-                    <p className="text-sm text-muted-foreground">ACUs available</p>
+                  <p className="text-4xl font-bold">{Number(wallet?.balance ?? 0).toLocaleString()}</p>
+                  <p className="text-sm text-muted-foreground">ACUs available</p>
                 </CardContent>
                 <CardFooter>
-                    <Button asChild><Link href="/checkout"><PlusCircle className="mr-2 h-4 w-4"/> Top Up Wallet</Link></Button>
+                  <Button asChild>
+                    <Link href="/checkout">
+                      <PlusCircle className="mr-2 h-4 w-4" /> Top up ACUs
+                    </Link>
+                  </Button>
+                </CardFooter>
+              </Card>
+            ) : null}
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2"><Crown /> Subscription</CardTitle>
+                    <CardDescription>
+                      {isStudentLike
+                        ? 'Optional Premium monthly plan — broader toolkit without per-feature ACU usage on included tools.'
+                        : 'Your current StudYear plan. Manage upgrades via Stripe checkout.'}
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <p className="text-3xl font-bold">{subscriptionTypeDisplayName(userProfile.subscription)}</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {isStudentLike
+                        ? 'Most students use ACUs only; Premium is optional.'
+                        : 'Premium features unlock automatically when payment completes.'}
+                    </p>
+                </CardContent>
+                <CardFooter>
+                    <Button asChild><Link href="/checkout"><PlusCircle className="mr-2 h-4 w-4"/> {isStudentLike ? 'Plans & top-up' : 'View plans'}</Link></Button>
                 </CardFooter>
             </Card>
-            <Card className='border-destructive/50'>
+        </div>
+
+        <Card className="border-destructive/50 max-w-4xl mx-auto mt-8">
               <CardHeader>
                   <CardTitle>Danger Zone</CardTitle>
                   <CardDescription>Irreversible actions for your account.</CardDescription>
@@ -245,7 +282,6 @@ export default function AccountPage() {
                   <p className="text-xs text-muted-foreground mt-2">Permanently delete your account and all associated data.</p>
               </CardContent>
           </Card>
-        </div>
       </div>
     </div>
   );

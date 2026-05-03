@@ -254,12 +254,18 @@ export default function QuizGenerator({ levels, subjectsByLevel }: QuizGenerator
                             </div>
                           </RadioGroup>
                       ) : (
-                        <>
+                        <div className="space-y-3">
+                            <Label htmlFor={`quiz-sa-${index}`} className="text-muted-foreground font-normal">
+                              Your answer
+                            </Label>
                             <Textarea
-                                placeholder="Type your answer here..."
+                                id={`quiz-sa-${index}`}
+                                placeholder="Write your answer here…"
                                 disabled={submitted}
                                 value={userAnswers[index] || ''}
                                 onChange={(e) => handleAnswerChange(index, e.target.value)}
+                                rows={6}
+                                className="min-h-[160px] w-full resize-y text-base leading-relaxed"
                             />
                             {submitted && (
                                 <Card className="mt-4 bg-muted/50">
@@ -271,7 +277,7 @@ export default function QuizGenerator({ levels, subjectsByLevel }: QuizGenerator
                                     </CardContent>
                                 </Card>
                             )}
-                        </>
+                        </div>
                       )}
                     </div>
                   ))}

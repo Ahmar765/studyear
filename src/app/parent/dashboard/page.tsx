@@ -31,13 +31,27 @@ export default function ParentDashboardPage() {
   useEffect(() => {
     if (user) {
         setState({ isLoading: true, data: null, error: null });
-        getParentDashboardDataAction().then(result => {
-            if (result.success) {
-                setState({ isLoading: false, data: result.data || [], error: null });
-            } else {
-                setState({ isLoading: false, data: null, error: { message: result.error!, code: result.errorCode } });
-            }
-        });
+        user
+            .getIdToken()
+            .then((token) => getParentDashboardDataAction(token))
+            .then((result) => {
+                if (result.success) {
+                    setState({ isLoading: false, data: result.data || [], error: null });
+                } else {
+                    setState({
+                        isLoading: false,
+                        data: null,
+                        error: { message: result.error!, code: result.errorCode },
+                    });
+                }
+            })
+            .catch(() => {
+                setState({
+                    isLoading: false,
+                    data: null,
+                    error: { message: 'Could not verify your session. Try refreshing the page.', code: 'UNAUTHENTICATED' },
+                });
+            });
     } else {
         // AuthProvider should handle redirect, but as a fallback:
         setState({ isLoading: false, data: null, error: null });

@@ -1,7 +1,7 @@
 
 'use server';
 
-import { getCurrentUser } from '../lib/auth';
+import { getVerifiedUser } from '../lib/auth';
 import { adminDb } from '@/lib/firebase/admin-app';
 import { HttpsError } from '../lib/errors';
 import type { UserData, StudentProfileData } from '@/lib/firebase/services/user';
@@ -30,8 +30,10 @@ export interface StudentData {
     savedResources: SavedResourceSummary[];
 }
 
-export async function getParentDashboardDataAction(): Promise<{ success: boolean; data?: StudentData[]; error?: string; errorCode?: string; }> {
-    const parentUser = await getCurrentUser();
+export async function getParentDashboardDataAction(
+    idToken?: string | null,
+): Promise<{ success: boolean; data?: StudentData[]; error?: string; errorCode?: string; }> {
+    const parentUser = await getVerifiedUser(idToken);
     if (!parentUser) {
         return { success: false, error: 'You must be logged in to view this data.', errorCode: 'UNAUTHENTICATED' };
     }
@@ -108,8 +110,11 @@ export async function getParentDashboardDataAction(): Promise<{ success: boolean
     }
 }
 
-export async function requestStudentLinkAction(studentIdentifier: string): Promise<{ success: boolean; error?: string }> {
-    const parentUser = await getCurrentUser();
+export async function requestStudentLinkAction(
+    idToken: string | null | undefined,
+    studentIdentifier: string,
+): Promise<{ success: boolean; error?: string }> {
+    const parentUser = await getVerifiedUser(idToken);
     if (!parentUser) {
         return { success: false, error: "You must be logged in." };
     }

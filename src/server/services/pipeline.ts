@@ -5,6 +5,7 @@ import { auditLogService } from "./audit";
 import { runPaidAIFeature, PaidAIFeatureResult } from "./run-paid-ai-feature";
 import { FeatureKey } from "@/data/acu-costs";
 import { randomUUID } from "crypto";
+import { stripUndefinedDeep } from "@/server/lib/strip-undefined-deep";
 
 export async function runStudYearAction<T>(input: {
   userId: string;
@@ -33,26 +34,25 @@ export async function runStudYearAction<T>(input: {
       action: input.execute,
     });
 
+    const successPayload = stripUndefinedDeep({
+      input: input.payload,
+      result: result.result,
+    });
+
     await autosaveService.capture({
       userId: input.userId,
       studentId: input.studentId,
       entityType: input.entityType,
       entityId: entityId,
       action: input.action,
-      payload: {
-        input: input.payload,
-        result: result.result
-      }
+      payload: successPayload,
     });
 
     await learningEventService.create({
       studentId: input.studentId,
       type: input.eventType as any,
       stage: input.stage,
-      payload: {
-        input: input.payload,
-        result: result.result
-      }
+      payload: successPayload,
     });
 
     await auditLogService.record({
@@ -75,10 +75,10 @@ export async function runStudYearAction<T>(input: {
       entityType: input.entityType,
       entityId: entityId,
       action: "FAILED",
-      payload: {
+      payload: stripUndefinedDeep({
         originalAction: input.action,
-        error: error.message
-      }
+        error: error.message,
+      }),
     });
 
     // Re-throw the error so the client knows the action failed

@@ -11,6 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader } from 'lucide-react';
 import { requestStudentLinkAction } from '@/server/actions/parent-actions';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '@/hooks/use-auth';
 
 const FormSchema = z.object({
   email: z.string().email("Please enter a valid email address."),
@@ -20,6 +21,7 @@ export default function LinkStudentDialog() {
   const [isPending, startTransition] = useTransition();
   const { toast } = useToast();
   const router = useRouter();
+  const { user } = useAuth();
 
   const form = useForm<z.infer<typeof FormSchema>>({
     resolver: zodResolver(FormSchema),
@@ -28,7 +30,12 @@ export default function LinkStudentDialog() {
 
   const onSubmit = (values: z.infer<typeof FormSchema>) => {
     startTransition(async () => {
-      const result = await requestStudentLinkAction(values.email);
+      if (!user) {
+        toast({ variant: 'destructive', title: 'Not signed in', description: 'Please log in and try again.' });
+        return;
+      }
+      const token = await user.getIdToken();
+      const result = await requestStudentLinkAction(token, values.email);
       if (result.success) {
         toast({ title: "Link Request Sent!", description: "The student will now appear on your dashboard after they approve." });
         form.reset();

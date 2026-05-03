@@ -7,7 +7,8 @@
  */
 
 import { ai } from '..';
-import {z} from 'zod';
+import { toGoogleAiGenkitModel } from '@/server/ai/genkit-model';
+import { z } from 'zod';
 
 const SubjectPerformanceSchema = z.object({
     subject: z.string(),
@@ -33,8 +34,11 @@ export const GenerateExamPredictionOutputSchema = z.object({
 });
 export type GenerateExamPredictionOutput = z.infer<typeof GenerateExamPredictionOutputSchema>;
 
-export async function generateExamPrediction(input: GenerateExamPredictionInput): Promise<GenerateExamPredictionOutput> {
-  return examPredictionGenerationFlow(input);
+export async function generateExamPrediction(
+  input: GenerateExamPredictionInput,
+  options?: { model?: string },
+): Promise<GenerateExamPredictionOutput> {
+  return examPredictionGenerationFlow(input, options);
 }
 
 const prompt = ai.definePrompt({
@@ -71,8 +75,8 @@ const examPredictionGenerationFlow = ai.defineFlow(
     inputSchema: GenerateExamPredictionInputSchema,
     outputSchema: GenerateExamPredictionOutputSchema,
   },
-  async input => {
-    const {output} = await prompt(input);
+  async (input, options) => {
+    const { output } = await prompt(input, { model: toGoogleAiGenkitModel(options?.model) });
     return output!;
-  }
+  },
 );

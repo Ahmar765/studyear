@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useTransition, useEffect } from "react";
+import { useState, useTransition, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -25,6 +25,29 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/use-auth";
 import { useRouter } from "next/navigation";
 import { ToastAction } from "@/components/ui/toast";
+import { parseProfileSubjectsList, normalizeSubjectTitle } from "@/lib/profile-academic";
+import type { UserProfile } from "@/lib/firebase/services/user";
+
+function subjectRowsFromProfile(profile: UserProfile | null): { name: string; currentGrade?: string }[] {
+    if (!profile?.subjects) return [];
+    const names = parseProfileSubjectsList(profile.subjects);
+    const rawList = profile.subjects as unknown[];
+    return names.map((name) => {
+        const raw = rawList.find((s) => {
+            if (typeof s === "string") return normalizeSubjectTitle(s.trim()) === name;
+            if (s && typeof s === "object" && "name" in s) {
+                return normalizeSubjectTitle(String((s as { name?: string }).name ?? "").trim()) === name;
+            }
+            return false;
+        });
+        let currentGrade: string | undefined;
+        if (raw && typeof raw === "object" && "targetGrade" in (raw as object)) {
+            const g = String((raw as { targetGrade?: string }).targetGrade ?? "").trim();
+            currentGrade = g || undefined;
+        }
+        return { name, currentGrade };
+    });
+}
 
 interface StudyPlannerProps {
     subjectsByLevel: Record<string, string[]>;
@@ -53,18 +76,39 @@ const getCellTextColor = (subject: string) => {
 export default function StudyPlanner({ subjectsByLevel, grades }: StudyPlannerProps) {
     const { user } = useAuth();
     const { userProfile, loading: profileLoading } = useUserProfile();
-    const [subjectDetails, setSubjectDetails] = useState<{name: string, currentGrade?: string}[]>([]);
+    const [planScope, setPlanScope] = useState<"all" | "single">("all");
+    const [singleSubjectName, setSingleSubjectName] = useState("");
+    const [gradeOverrides, setGradeOverrides] = useState<Record<string, string>>({});
     const [examDate, setExamDate] = useState<Date>();
     const [generatedPlan, setGeneratedPlan] = useState<GenerateStudyPlanOutput | null>(null);
     const [isPending, startTransition] = useTransition();
     const { toast } = useToast();
     const router = useRouter();
 
+    const profileSubjectRows = useMemo(
+        () => subjectRowsFromProfile(userProfile ?? null),
+        [userProfile],
+    );
+
     useEffect(() => {
-        if(userProfile?.target?.subjects) {
-            setSubjectDetails(userProfile.target.subjects.map(s => ({ name: s.subjectId, currentGrade: s.currentGrade })));
-        }
-    }, [userProfile]);
+        if (planScope !== "single") return;
+        if (singleSubjectName) return;
+        const first = profileSubjectRows[0]?.name;
+        if (first) setSingleSubjectName(first);
+    }, [planScope, singleSubjectName, profileSubjectRows]);
+
+    const subjectDetails = useMemo(() => {
+        const base =
+            planScope === "single"
+                ? singleSubjectName
+                    ? profileSubjectRows.filter((r) => r.name === singleSubjectName)
+                    : []
+                : profileSubjectRows;
+        return base.map((s) => ({
+            ...s,
+            currentGrade: gradeOverrides[s.name] ?? s.currentGrade,
+        }));
+    }, [planScope, singleSubjectName, profileSubjectRows, gradeOverrides]);
 
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -123,35 +167,83 @@ export default function StudyPlanner({ subjectsByLevel, grades }: StudyPlannerPr
                 <Card>
                     <CardHeader>
                         <CardTitle>Plan your studies</CardTitle>
-                        <CardDescription>Tell the AI about your goals to generate a hyper-personalized plan.</CardDescription>
+                        <CardDescription>
+                            Tell the AI about your goals. You can plan for <strong>all</strong> profile subjects or{" "}
+                            <strong>one subject</strong> (e.g. before a single exam).
+                        </CardDescription>
                     </CardHeader>
                     <CardContent>
                         {profileLoading ? <Skeleton className="h-64 w-full" /> : (
                         <form onSubmit={handleSubmit} className="space-y-6">
                            <div className="space-y-2">
-                                <Label>What subjects are you studying?</Label>
-                                <div className="space-y-2 rounded-md border p-2">
-                                    {subjectDetails.length > 0 ? subjectDetails.map((s, i) => (
-                                        <div key={i} className="flex items-center gap-2">
-                                            <Input value={s.name} disabled className="flex-1"/>
+                                <Label>Subjects in this plan</Label>
+                                {profileSubjectRows.length > 0 ? (
+                                    <>
+                                        <Select
+                                            value={planScope}
+                                            onValueChange={(v) => setPlanScope(v as "all" | "single")}
+                                            disabled={isPending}
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="all">All my profile subjects</SelectItem>
+                                                <SelectItem value="single">One subject only</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                        {planScope === "single" && (
                                             <Select
-                                                defaultValue={s.currentGrade}
-                                                onValueChange={(grade) => {
-                                                    const newDetails = [...subjectDetails];
-                                                    newDetails[i].currentGrade = grade;
-                                                    setSubjectDetails(newDetails);
-                                                }}
+                                                value={singleSubjectName || undefined}
+                                                onValueChange={setSingleSubjectName}
+                                                disabled={isPending}
                                             >
-                                                <SelectTrigger className="w-[100px]">
-                                                    <SelectValue placeholder="Grade"/>
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Choose subject" />
                                                 </SelectTrigger>
                                                 <SelectContent>
-                                                    {grades.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
+                                                    {profileSubjectRows.map((r) => (
+                                                        <SelectItem key={r.name} value={r.name}>
+                                                            {r.name}
+                                                        </SelectItem>
+                                                    ))}
                                                 </SelectContent>
                                             </Select>
+                                        )}
+                                        <div className="space-y-2 rounded-md border p-2">
+                                            {subjectDetails.map((s, i) => (
+                                                <div key={`${s.name}-${i}`} className="flex items-center gap-2">
+                                                    <Input value={s.name} readOnly className="flex-1" />
+                                                    <Select
+                                                        value={s.currentGrade || undefined}
+                                                        onValueChange={(grade) =>
+                                                            setGradeOverrides((prev) => ({ ...prev, [s.name]: grade }))
+                                                        }
+                                                    >
+                                                        <SelectTrigger className="w-[120px] shrink-0">
+                                                            <SelectValue placeholder="Grade" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            {grades.map((g) => (
+                                                                <SelectItem key={g} value={g}>
+                                                                    {g}
+                                                                </SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                            ))}
                                         </div>
-                                    )) : <p className="text-sm text-muted-foreground p-2">Add subjects in your <Link href="/profile-setup" className="underline">profile</Link>.</p>}
-                                </div>
+                                    </>
+                                ) : (
+                                    <p className="text-sm text-muted-foreground p-2 rounded-md border">
+                                        Add subjects in your{" "}
+                                        <Link href="/profile-setup" className="underline">
+                                            profile
+                                        </Link>
+                                        .
+                                    </p>
+                                )}
                            </div>
 
                              <div className="space-y-2">

@@ -216,15 +216,17 @@ export async function getStudentDashboardStatsAction(params: {
     const { userId } = parsed.data;
 
     try {
-        const [dashboardStateSnap, lessonsCompletedSnap, sessionsSnap] = await Promise.all([
+        const [dashboardStateSnap, lessonsEventsSnap, sessionsSnap] = await Promise.all([
             adminDb.collection('student_dashboard_states').doc(userId).get(),
-            adminDb.collection('learning_events').where('studentId', '==', userId).where('type', '==', 'LESSON_COMPLETED').count().get(),
-            adminDb.collection('users').doc(userId).collection('sessions').orderBy('startedAt', 'desc').get()
+            adminDb.collection('learning_events').where('studentId', '==', userId).limit(500).get(),
+            adminDb.collection('users').doc(userId).collection('sessions').orderBy('startedAt', 'desc').get(),
         ]);
-        
+
         const dashboardState = dashboardStateSnap.exists ? dashboardStateSnap.data() : {};
         const weakestSubject = dashboardState?.weakSubjects?.[0]?.name || 'N/A';
-        const lessonsCompleted = lessonsCompletedSnap.data().count;
+        const lessonsCompleted = lessonsEventsSnap.docs.filter(
+            (d) => d.data().type === 'LESSON_COMPLETED',
+        ).length;
 
         // Calculate study streak
         let studyStreak = 0;

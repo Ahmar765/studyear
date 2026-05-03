@@ -38,6 +38,10 @@ import {
   Bookmark,
   FileClock,
   FileCheck2,
+  MessageSquare,
+  TrendingUp,
+  PlayCircle,
+  Wand2,
 } from "lucide-react";
 import Logo from "../logo";
 import { Button } from "../ui/button";
@@ -57,7 +61,7 @@ import { useEffectiveRole } from "@/hooks/use-effective-role";
 import { useEffect } from "react";
 import SplashScreen from "../splash-screen";
 import { logout as endServerSession } from "@/server/actions/auth-actions";
-import AcuBalance from "./acu-balance";
+import PlanSummaryNav from "./plan-summary-nav";
 import placeholderImages from "@/app/lib/placeholder-images.json";
 import ImpersonationBanner from "../impersonation-banner";
 import { useImpersonation } from "@/hooks/use-impersonation";
@@ -68,6 +72,11 @@ const studentNavItems = [
   { href: "/diagnostic-results", label: "Diagnostic Results", icon: FileClock },
   { href: "/recovery-plan", label: "Personal Recovery Plan", icon: ShieldAlert },
   { href: "/planner", label: "AI Study Planner", icon: CalendarCheck },
+  { href: "/ai-tutor", label: "AI Tutor", icon: MessageSquare },
+  { href: "/interactive-lesson", label: "Interactive Lesson", icon: PlayCircle },
+  { href: "/create/ai-course", label: "AI Course", icon: Wand2 },
+  { href: "/progress", label: "My Progress", icon: LineChart },
+  { href: "/predict-grade", label: "Predicted Grade", icon: TrendingUp },
   { href: "/assignment-review", label: "Assignment Review", icon: FileCheck2 },
   { href: "/saved-resources", label: "Saved Resources", icon: Bookmark },
   { href: "/create", label: "Create Resource", icon: PlusCircle },
@@ -116,6 +125,32 @@ const navItemsByRole = {
     PRIVATE_TUTOR: studentNavItems, // Tutors might have a student-like view for resources
     SCHOOL_ADMIN: schoolNavItems,
 };
+
+/** Sidebar highlight: `/create` hub vs `/create/ai-course`, dashboard exact match. */
+function navItemIsActive(pathname: string, itemHref: string): boolean {
+  if (itemHref === '/dashboard') return pathname === '/dashboard';
+  if (itemHref === '/create') return pathname === '/create';
+  return pathname === itemHref || pathname.startsWith(`${itemHref}/`);
+}
+
+function accountRoleLabel(role: string): string {
+  switch (role) {
+    case 'STUDENT':
+      return 'Student';
+    case 'PARENT':
+      return 'Parent';
+    case 'PRIVATE_TUTOR':
+      return 'Private tutor';
+    case 'SCHOOL_ADMIN':
+      return 'School admin';
+    case 'SCHOOL_TUTOR':
+      return 'School tutor';
+    case 'ADMIN':
+      return 'Platform admin';
+    default:
+      return role;
+  }
+}
 
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
@@ -167,11 +202,16 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         const isTeacherDashboard = pathname.startsWith('/teacher');
         const isSchoolDashboard = pathname.startsWith('/school');
         const isParentDashboard = pathname.startsWith('/parent');
+        /** Billing / account live outside `/parent`; allow checkout without bouncing back to the dashboard. */
+        const parentAllowedOutsideParentRoutes =
+          pathname.startsWith('/checkout') || pathname === '/account';
 
         if (role === 'ADMIN' && !isAdminDashboard) router.replace('/admin/dashboard');
         else if (role === 'SCHOOL_ADMIN' && !isSchoolDashboard) router.replace('/school/dashboard');
         else if (role === 'SCHOOL_TUTOR' && !isTeacherDashboard) router.replace('/teacher/dashboard');
-        else if (role === 'PARENT' && !isParentDashboard) router.replace('/parent/dashboard');
+        else if (role === 'PARENT' && !isParentDashboard && !parentAllowedOutsideParentRoutes) {
+            router.replace('/parent/dashboard');
+        }
         else if (['STUDENT', 'PRIVATE_TUTOR'].includes(role) && (isAdminDashboard || isTeacherDashboard || isSchoolDashboard || isParentDashboard)) {
             router.replace('/dashboard');
         } else if (role === 'STUDENT' && pathname === '/') {
@@ -252,7 +292,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                     <Link href={item.href}>
                       <SidebarMenuButton
                         asChild
-                        isActive={pathname.startsWith(item.href) && (item.href !== '/dashboard' || pathname === '/dashboard')}
+                        isActive={navItemIsActive(pathname, item.href)}
                         tooltip={item.label}
                       >
                         <span>
@@ -285,7 +325,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             <div className="flex items-center gap-4">
               { user ? (
                 <>
-                  <AcuBalance />
+                  <PlanSummaryNav />
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button variant="ghost" className="relative h-10 w-10 rounded-full">
@@ -296,7 +336,12 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuLabel>{userProfile?.name || user.email}</DropdownMenuLabel>
+                      <DropdownMenuLabel className="space-y-0.5">
+                        <span className="block font-medium">{userProfile?.name || user.email}</span>
+                        <span className="block text-xs font-normal text-muted-foreground">
+                          {accountRoleLabel(effectiveRole)}
+                        </span>
+                      </DropdownMenuLabel>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem asChild>
                         <Link href="/account">My Account</Link>

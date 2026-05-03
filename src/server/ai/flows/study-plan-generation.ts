@@ -31,12 +31,43 @@ const WeeklyPlanSchema = z.object({
 });
 
 
-export const GenerateStudyPlanInputSchema = z.object({
-  diagnostic: DiagnosticReportSchema.optional().describe("The student's full diagnostic report, if available."),
-  examDate: z.string().optional().describe('The main exam date or deadline for the study plan. Format: YYYY-MM-DD.'),
-  availableHoursPerWeek: z.number().int().positive().optional().describe('The total number of study hours available per week.'),
-  examGoal: z.string().optional().describe("The student's primary goal for their exams."),
+const SubjectFocusSchema = z.object({
+  name: z.string().min(1),
+  currentGrade: z.string().optional(),
 });
+
+export const GenerateStudyPlanInputSchema = z
+  .object({
+    diagnostic: DiagnosticReportSchema.optional().describe(
+      "The student's full diagnostic report, if available.",
+    ),
+    examDate: z.string().optional().describe("The main exam date or deadline for the study plan. Format: YYYY-MM-DD."),
+    availableHoursPerWeek: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe("The total number of study hours available per week."),
+    examGoal: z.string().optional().describe("The student's primary goal for their exams."),
+    subjects: z
+      .array(SubjectFocusSchema)
+      .min(1)
+      .optional()
+      .describe(
+        "Subjects to schedule. If exactly one subject is listed, the entire plan must focus on that subject only.",
+      ),
+  })
+  .superRefine((val, ctx) => {
+    const hasDiagnostic = val.diagnostic != null;
+    const hasSubjects = val.subjects != null && val.subjects.length > 0;
+    if (!hasDiagnostic && !hasSubjects) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Provide either a diagnostic report or at least one subject for the plan.",
+        path: ["subjects"],
+      });
+    }
+  });
 export type GenerateStudyPlanInput = z.infer<typeof GenerateStudyPlanInputSchema>;
 
 export const GenerateStudyPlanOutputSchema = z.object({
@@ -62,7 +93,9 @@ Return JSON only.
 
 Rules:
 - Build a full exam preparation plan, not a list of topics.
-- Use diagnostic weaknesses.
+- Use diagnostic weaknesses when a diagnostic is present; otherwise rely on the listed "subjects" array and goals in the JSON.
+- If the subjects array has exactly one entry, dedicate **all** scheduled sessions to that subject (vary topics, skills, and revision methods). Do not allocate time to other subjects.
+- If the subjects array has multiple entries, balance time across those subjects according to urgency and exam date.
 - Use target grade and exam date if provided.
 - Prioritise high-impact topics.
 - Include daily and weekly structure.

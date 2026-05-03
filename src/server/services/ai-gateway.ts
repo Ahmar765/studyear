@@ -51,7 +51,9 @@ async function routeByTaskType(taskType: AITaskType): Promise<{ provider: AIProv
         throw new HttpsError('internal', 'AI modelMap is missing from configuration.');
     }
 
-    const usePerformanceModel = ['AI_FEEDBACK', 'AI_STUDY_PLAN', 'grade_prediction'].includes(taskType);
+    const usePerformanceModel = ['AI_FEEDBACK', 'AI_STUDY_PLAN', 'GRADE_PREDICTION', 'grade_prediction'].includes(
+        taskType,
+    );
     const modelName = resolveModelId(modelMap, primaryProvider, usePerformanceModel);
 
     const fallbackChain = config.fallbackOrder.map((p) => ({

@@ -35,17 +35,23 @@ export async function getActivityFeedAction(): Promise<{ activities: ActivityFee
     }
     
     try {
-        const eventsSnapshot = await adminDb.collection('learning_events')
+        const eventsSnapshot = await adminDb
+            .collection('learning_events')
             .where('studentId', '==', user.uid)
-            .orderBy('createdAt', 'desc')
-            .limit(10)
+            .limit(80)
             .get();
 
-        if (eventsSnapshot.empty) {
+        const sorted = [...eventsSnapshot.docs].sort((a, b) => {
+            const ta = a.data().createdAt?.toMillis?.() ?? 0;
+            const tb = b.data().createdAt?.toMillis?.() ?? 0;
+            return tb - ta;
+        });
+
+        if (sorted.length === 0) {
             return { activities: [] };
         }
-        
-        const activities = eventsSnapshot.docs.map(doc => {
+
+        const activities = sorted.slice(0, 10).map((doc) => {
             const data = doc.data();
             const payload = data.payload || {};
             const eventType = data.type || 'UNKNOWN';

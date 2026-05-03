@@ -19,12 +19,18 @@ const GenerateCourseSchema = z.object({
   userId: z.string().min(1),
 });
 
+/** `FormData.get` returns `null` for missing keys; Zod optional strings do not accept `null`. */
+function optionalFormString(v: FormDataEntryValue | null): string | undefined {
+  if (v === null || v === "") return undefined;
+  return typeof v === "string" ? v : undefined;
+}
+
 export async function generateCourseAction(formData: FormData) {
   const validatedData = GenerateCourseSchema.parse({
     subject: formData.get("subject"),
     topic: formData.get("topic"),
     level: formData.get("level"),
-    examBoard: formData.get("examBoard"),
+    examBoard: optionalFormString(formData.get("examBoard")),
     userId: formData.get("userId"),
   });
   

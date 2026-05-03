@@ -75,17 +75,27 @@ export async function POST(req: NextRequest) {
       }
       case 'invoice.paid': {
         const invoice = event.data.object as Stripe.Invoice;
-        const userId = invoice.customer_metadata?.userId;
-         if (!userId) {
-            console.error('Webhook Error: Missing userId in invoice.paid metadata.');
-            break;
+        const subId = invoice.subscription as string | null;
+        if (!subId) break;
+
+        const subscription = await stripe.subscriptions.retrieve(subId);
+        const userId =
+          invoice.customer_metadata?.userId || subscription.metadata?.userId;
+        if (!userId) {
+          console.error(
+            'Webhook Error: Missing userId on invoice.paid (set subscription metadata userId from Checkout).',
+          );
+          break;
         }
-        const subscription = await stripe.subscriptions.retrieve(invoice.subscription as string);
-        const productCode = subscription.items.data[0]?.price?.metadata?.productCode;
+        const productCode =
+          subscription.items.data[0]?.price?.metadata?.productCode ||
+          subscription.metadata?.productCode;
 
         if (!productCode) {
-            console.error(`Webhook Error: Missing productCode in price metadata for subscription ${subscription.id}`);
-            break;
+          console.error(
+            `Webhook Error: Missing productCode for subscription ${subscription.id} (Stripe Price metadata or subscription metadata).`,
+          );
+          break;
         }
         await manageSubscriptionStatusChange(
             invoice.subscription as string,
@@ -99,17 +109,27 @@ export async function POST(req: NextRequest) {
       }
       case 'invoice.payment_failed': {
         const invoice = event.data.object as Stripe.Invoice;
-        const userId = invoice.customer_metadata?.userId;
+        const subId = invoice.subscription as string | null;
+        if (!subId) break;
+
+        const subscription = await stripe.subscriptions.retrieve(subId);
+        const userId =
+          invoice.customer_metadata?.userId || subscription.metadata?.userId;
         if (!userId) {
-            console.error('Webhook Error: Missing userId in invoice.payment_failed metadata.');
-            break;
+          console.error(
+            'Webhook Error: Missing userId on invoice.payment_failed (subscription metadata userId).',
+          );
+          break;
         }
-        const subscription = await stripe.subscriptions.retrieve(invoice.subscription as string);
-        const productCode = subscription.items.data[0]?.price?.metadata?.productCode;
+        const productCode =
+          subscription.items.data[0]?.price?.metadata?.productCode ||
+          subscription.metadata?.productCode;
 
         if (!productCode) {
-            console.error(`Webhook Error: Missing productCode in price metadata for subscription ${subscription.id}`);
-            break;
+          console.error(
+            `Webhook Error: Missing productCode for subscription ${subscription.id}.`,
+          );
+          break;
         }
         await manageSubscriptionStatusChange(
             invoice.subscription as string,
@@ -128,10 +148,14 @@ export async function POST(req: NextRequest) {
             console.error('Webhook Error: Missing userId in customer.subscription.deleted metadata.');
             break;
         }
-        const productCode = subscription.items.data[0]?.price?.metadata?.productCode;
+        const productCode =
+          subscription.items.data[0]?.price?.metadata?.productCode ||
+          subscription.metadata?.productCode;
         if (!productCode) {
-            console.error(`Webhook Error: Missing productCode in price metadata for subscription ${subscription.id}`);
-            break;
+          console.error(
+            `Webhook Error: Missing productCode for subscription ${subscription.id}.`,
+          );
+          break;
         }
         await manageSubscriptionStatusChange(
             subscription.id,
@@ -150,10 +174,14 @@ export async function POST(req: NextRequest) {
             console.error('Webhook Error: Missing userId in customer.subscription.updated metadata.');
             break;
         }
-        const productCode = subscription.items.data[0]?.price?.metadata?.productCode;
+        const productCode =
+          subscription.items.data[0]?.price?.metadata?.productCode ||
+          subscription.metadata?.productCode;
         if (!productCode) {
-            console.error(`Webhook Error: Missing productCode in price metadata for subscription ${subscription.id}`);
-            break;
+          console.error(
+            `Webhook Error: Missing productCode for subscription ${subscription.id}.`,
+          );
+          break;
         }
         await manageSubscriptionStatusChange(
             subscription.id,

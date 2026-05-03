@@ -39,7 +39,19 @@ export interface ParentProfileData {
 }
 
 export interface SubscriptionData {
-    type: "FREE" | "STUDENT_PREMIUM" | "PARENT_PRO" | "PARENT_PRO_PLUS" | "PRIVATE_TUTOR" | "SCHOOL_STARTER" | "SCHOOL_GROWTH" | "SCHOOL_ENTERPRISE";
+    type:
+        | "FREE"
+        | "STUDENT_PREMIUM"
+        | "STUDENT_PREMIUM_PLUS"
+        | "PARENT_PRO"
+        | "PARENT_PRO_PLUS"
+        | "PRIVATE_TUTOR"
+        | "SCHOOL_STARTER"
+        | "SCHOOL_GROWTH"
+        | "SCHOOL_ENTERPRISE"
+        | "SCHOOL_TUTOR"
+        | "SCHOOL_ADMIN"
+        | "ADMIN";
     status: "ACTIVE" | "INACTIVE" | "CANCELLED" | "EXPIRED" | "PENDING_PAYMENT";
     startedAt?: Timestamp;
     expiresAt?: Timestamp;

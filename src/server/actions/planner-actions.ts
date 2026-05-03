@@ -87,7 +87,8 @@ export async function createStudyPlan(formData: FormData): Promise<{ success: bo
         diagnosticForPlan = parsedDiag.success ? parsedDiag.data : undefined;
     }
 
-    if (!diagnosticRaw && !validatedData.subjects) {
+    const hasSubjectList = Array.isArray(validatedData.subjects) && validatedData.subjects.length > 0;
+    if (!diagnosticRaw && !hasSubjectList) {
       return {
         success: false,
         error:
@@ -101,6 +102,7 @@ export async function createStudyPlan(formData: FormData): Promise<{ success: bo
         examDate: validatedData.examDate,
         availableHoursPerWeek: validatedData.hoursPerWeek,
         examGoal: validatedData.examGoal,
+        subjects: hasSubjectList ? validatedData.subjects : undefined,
     };
 
     const inputParsed = GenerateStudyPlanInputSchema.safeParse(studyPlanInput);

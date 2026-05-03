@@ -28,6 +28,9 @@ interface Recommendation {
     reasoning: string;
 }
 
+/** Radix Select forbids `value=""` on items; server treats this as “no exam board”. */
+const EXAM_BOARD_ANY = "__exam_board_any__";
+
 const SimpleMarkdown: React.FC<{ content: string }> = ({ content }) => {
     const lines = content.split('\n');
     return (
@@ -55,6 +58,7 @@ export default function AiCourseGenerator({ levels, subjectsByLevel, examBoards 
   const [isGeneratingCourse, startCourseTransition] = useTransition();
   const [isFetchingSimilar, startSimilarTransition] = useTransition();
   const [selectedLevel, setSelectedLevel] = useState<string>("");
+  const [optionalExamBoard, setOptionalExamBoard] = useState<string>(EXAM_BOARD_ANY);
   const { toast } = useToast();
   const { user } = useAuth();
   
@@ -63,6 +67,11 @@ export default function AiCourseGenerator({ levels, subjectsByLevel, examBoards 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
+    if (optionalExamBoard === EXAM_BOARD_ANY) {
+      formData.delete("examBoard");
+    } else {
+      formData.set("examBoard", optionalExamBoard);
+    }
     setGeneratedCourse(null);
     setSimilarContent([]);
 
@@ -148,12 +157,16 @@ export default function AiCourseGenerator({ levels, subjectsByLevel, examBoards 
               </div>
               <div className="space-y-2">
                 <Label htmlFor="exam-board">Exam Board (Optional)</Label>
-                <Select name="examBoard" disabled={isPending}>
+                <Select
+                  value={optionalExamBoard}
+                  onValueChange={setOptionalExamBoard}
+                  disabled={isPending}
+                >
                   <SelectTrigger id="exam-board">
                     <SelectValue placeholder="Select an exam board" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Any</SelectItem>
+                    <SelectItem value={EXAM_BOARD_ANY}>Any</SelectItem>
                     {examBoards.map(board => (
                       <SelectItem key={board} value={board}>{board}</SelectItem>
                     ))}

@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "seed:platform-admin": "node scripts/seed-platform-admin.mjs"
+    "seed:platform-admin": "node scripts/seed-platform-admin.mjs",
+    "stripe:seed-subscription-prices": "node scripts/stripe-seed-subscription-prices.mjs",
+    "stripe:seed-subscription-prices:missing": "node scripts/stripe-seed-subscription-prices.mjs --only-missing"
   },
   "engines": {
     "node": "20"

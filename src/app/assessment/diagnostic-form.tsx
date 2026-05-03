@@ -19,6 +19,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { parseProfileSubjectsList } from "@/lib/profile-academic";
 
 const SubjectConfidenceSchema = z.object({
   subjectId: z.string(),
@@ -49,9 +50,14 @@ export default function DiagnosticForm() {
     const { toast } = useToast();
     const router = useRouter();
 
-    const subjectRows = useMemo(
-        () => (userProfile?.subjects?.map((s) => ({ subjectId: s.name, confidence: 50 })) ?? []),
+    const subjectNames = useMemo(
+        () => parseProfileSubjectsList(userProfile?.subjects),
         [userProfile?.subjects],
+    );
+
+    const subjectRows = useMemo(
+        () => subjectNames.map((name) => ({ subjectId: name, confidence: 50 })),
+        [subjectNames],
     );
 
     const form = useForm<z.infer<typeof DiagnosticFormSchema>>({
@@ -216,12 +222,15 @@ export default function DiagnosticForm() {
         );
     }
 
-    if (!userProfile?.subjects?.length) {
+    if (!subjectNames.length) {
         return (
             <Alert className="max-w-2xl mx-auto">
                 <AlertTitle>Add subjects first</AlertTitle>
                 <AlertDescription className="flex flex-col sm:flex-row sm:items-center gap-2 mt-2">
-                    <span>The diagnostic needs your subjects from profile setup.</span>
+                    <span>
+                        The diagnostic needs at least one subject name from your profile. If you already added
+                        subjects, open profile setup and save once so they are stored in the expected format.
+                    </span>
                     <Button asChild variant="link" className="p-0 h-auto sm:ml-1">
                         <Link href="/profile-setup">Go to profile setup <ArrowRight className="h-4 w-4 ml-1 inline" /></Link>
                     </Button>
@@ -231,11 +240,11 @@ export default function DiagnosticForm() {
     }
 
     return (
-        <Card className="max-w-2xl mx-auto">
+        <Card className="max-w-2xl mx-auto" key={subjectNames.join("|")}>
             <CardHeader>
                 <CardTitle className="text-2xl">Academic diagnostic</CardTitle>
                 <CardDescription>
-                    Rate your confidence in each subject to generate your baseline report. Use subject names from your profile ({fields.length} subject{fields.length === 1 ? '' : 's'}).
+                    Rate your confidence in each subject to generate your baseline report. Subjects from your profile ({subjectNames.length} subject{subjectNames.length === 1 ? "" : "s"}).
                 </CardDescription>
             </CardHeader>
             <Form {...form}>
@@ -272,7 +281,7 @@ export default function DiagnosticForm() {
                         ))}
                     </CardContent>
                     <div className="p-6 border-t">
-                        <Button type="submit" className="w-full" disabled={isPending || fields.length === 0}>
+                        <Button type="submit" className="w-full" disabled={isPending || subjectNames.length === 0}>
                             {isPending ? <Loader className="animate-spin mr-2" /> : <Sparkles className="mr-2 h-4 w-4" />}
                             {isPending ? "Analyzing…" : "Generate my diagnostic report"}
                         </Button>

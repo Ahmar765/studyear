@@ -2,15 +2,37 @@ import type { SubscriptionType } from "@/server/schemas";
 import { FeatureKey } from "./acu-costs";
 
 export const PLAN_ENTITLEMENTS: Record<SubscriptionType, FeatureKey[]> = {
+  /** All keys here are ACU-gated in billing; subscription tiers add allowances / bundles, not hard blocks. */
   FREE: [
     "AI_EXPLANATION",
-    "AI_QUIZ_GENERATION",
-    /** Diagnostic report + study planner use this key; ACUs still debited in `runPaidAIFeature`. */
+    "AI_INTERACTIVE_LESSON",
+    "AI_TUTOR_SESSION",
     "AI_STUDY_PLAN",
-    /** Assignment / essay / dissertation review; ACUs still debited per `ACU_FEATURE_COSTS`. */
+    "AI_MIND_MAP",
+    "DIAGNOSTIC_REPORT",
+    "RECOVERY_PLAN",
+    "AI_QUIZ_GENERATION",
+    "EXAM_SIMULATION",
+    "GRADE_PREDICTION",
+    "AI_FEEDBACK",
     "AI_ASSIGNMENT_REVIEW",
     "AI_ESSAY_REVIEW",
     "AI_DISSERTATION_REVIEW",
+    "AI_COURSE_GENERATOR",
+    "FORMULA_SHEET",
+    "TOPIC_SUMMARY",
+    "VISUAL_DRAWING",
+    "EDUCATIONAL_IMAGE",
+    "BAR_GRAPH",
+    "LINE_GRAPH",
+    "PIE_CHART",
+    "SCATTER_PLOT",
+    "HISTOGRAM",
+    "PICTOGRAPH",
+    "COORDINATE_GRAPH",
+    "GEOMETRY_DIAGRAM",
+    "FUNCTION_GRAPH",
+    "GRAPH_THEORY_DIAGRAM",
   ],
   STUDENT_PREMIUM: [
     "AI_EXPLANATION",
