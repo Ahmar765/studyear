@@ -55,7 +55,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useUserProfile } from "@/hooks/use-user-profile";
 import { useEffect } from "react";
 import SplashScreen from "../splash-screen";
-import { logout } from "@/server/actions/auth-actions";
+import { logout as endServerSession } from "@/server/actions/auth-actions";
 import AcuBalance from "./acu-balance";
 import placeholderImages from "@/app/lib/placeholder-images.json";
 import ImpersonationBanner from "../impersonation-banner";
@@ -119,7 +119,7 @@ const navItemsByRole = {
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, logout: firebaseLogout } = useAuth();
   const { userProfile, loading: profileLoading } = useUserProfile();
   const { isImpersonating } = useImpersonation();
   const router = useRouter();
@@ -178,13 +178,16 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
 
   const handleLogout = async () => {
-    if (user) {
-      const sessionId = sessionStorage.getItem('sessionId');
-      await logout(user.uid, sessionId);
-      sessionStorage.removeItem('sessionId');
-      router.push('/login');
+    if (!user) return;
+    const sessionId = sessionStorage.getItem('sessionId');
+    try {
+      await endServerSession(user.uid, sessionId);
+    } catch (e) {
+      console.error("Failed to end server session:", e);
     }
-  }
+    sessionStorage.removeItem('sessionId');
+    await firebaseLogout();
+  };
 
   useEffect(() => {
     // Register Service Worker
