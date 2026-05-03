@@ -19,7 +19,7 @@ export default function AcuBalance() {
         <div className="flex items-center gap-2">
             <div className="flex items-center gap-2 rounded-md border bg-background/50 px-3 py-1.5 text-sm font-medium">
                 <Fuel className="h-4 w-4 text-accent" />
-                <span>{wallet.balance.toLocaleString()} ACUs</span>
+                <span>{Number(wallet.balance ?? 0).toLocaleString()} ACUs</span>
             </div>
             <Button asChild size="sm">
                 <Link href="/checkout">

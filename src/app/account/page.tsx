@@ -207,7 +207,7 @@ export default function AccountPage() {
                     <CardDescription>Your balance of AI Credit Units for generating content.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <p className="text-4xl font-bold">{wallet?.balance.toLocaleString() || 0}</p>
+                    <p className="text-4xl font-bold">{Number(wallet?.balance ?? 0).toLocaleString()}</p>
                     <p className="text-sm text-muted-foreground">ACUs available</p>
                 </CardContent>
                 <CardFooter>

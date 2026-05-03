@@ -1,5 +1,13 @@
+/* Minimal service worker: network-only pass-through avoids "no-op fetch handler" warnings
+   while keeping install/PWA behaviour predictable. */
+self.addEventListener('install', (event) => {
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', (event) => {
+  event.clients.claim();
+});
+
 self.addEventListener('fetch', (event) => {
-  // A fetch event handler is required for a web app to be installable.
-  // This is a no-op handler, which is sufficient for PWA installation prompts.
-  // In a more advanced PWA, you would implement caching strategies here.
+  event.respondWith(fetch(event.request));
 });
