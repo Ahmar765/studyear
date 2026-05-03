@@ -4,7 +4,6 @@
 import { adminDb, adminAuth } from "@/lib/firebase/admin-app";
 import * as admin from 'firebase-admin';
 import type { DocumentData } from 'firebase-admin/firestore';
-import { User } from "firebase/auth";
 import { createSession, endActiveSession } from "@/server/services/session";
 import type { UserRole, SubscriptionType } from "@/server/schemas";
 
@@ -107,35 +106,43 @@ export async function signup(uid: string, email: string, role: string, displayNa
 }
 
 
-export async function handleSocialSignIn(user: User) {
-    const userRef = adminDb.doc(`users/${user.uid}`);
+/** Pass string fields only — Firebase `User` is not safe to serialize into Server Actions (can overflow the stack). */
+export async function handleSocialSignIn(
+    uid: string,
+    email: string | null,
+    displayName: string | null,
+    photoURL: string | null,
+) {
+    const userRef = adminDb.doc(`users/${uid}`);
     const userDoc = await userRef.get();
     const isNewUser = !userDoc.exists;
     const userRole: UserRole = 'STUDENT';
 
+    if (!email) {
+        throw new Error("Google sign-in did not return an email address.");
+    }
+
     if (isNewUser) {
-       await signup(user.uid, user.email!, userRole, user.displayName, user.photoURL);
+       await signup(uid, email, userRole, displayName, photoURL);
     } else {
-        await adminAuth.setCustomUserClaims(user.uid, { role: userDoc.data()?.role || userRole });
+        await adminAuth.setCustomUserClaims(uid, { role: userDoc.data()?.role || userRole });
     }
 
-    if (user.email) {
-        await tryPromoteToAdmin(user.uid, user.email);
-    }
+    await tryPromoteToAdmin(uid, email);
 
-    const { sessionId } = await createSession(user.uid, { platform: "web", userAgent: "unknown" });
+    const { sessionId } = await createSession(uid, { platform: "web", userAgent: "unknown" });
     return { newUser: isNewUser, sessionId };
 }
 
-export async function handleEmailLogin(user: User) {
-    const userDoc = await adminDb.doc(`users/${user.uid}`).get();
+export async function handleEmailLogin(uid: string, email: string | null) {
+    const userDoc = await adminDb.doc(`users/${uid}`).get();
     const role = userDoc.data()?.role || 'STUDENT';
-    await adminAuth.setCustomUserClaims(user.uid, { role });
+    await adminAuth.setCustomUserClaims(uid, { role });
 
-    if (user.email) {
-        await tryPromoteToAdmin(user.uid, user.email);
+    if (email) {
+        await tryPromoteToAdmin(uid, email);
     }
-    const { sessionId } = await createSession(user.uid, { platform: "web", userAgent: "unknown" });
+    const { sessionId } = await createSession(uid, { platform: "web", userAgent: "unknown" });
     return { sessionId: sessionId || null };
 }
 

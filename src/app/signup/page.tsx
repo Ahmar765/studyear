@@ -85,7 +85,12 @@ export default function SignupPage() {
     const provider = new GoogleAuthProvider();
     try {
         const result = await signInWithPopup(getFirebaseAuth(), provider);
-        const { sessionId } = await handleSocialSignIn(result.user);
+        const { sessionId } = await handleSocialSignIn(
+            result.user.uid,
+            result.user.email,
+            result.user.displayName,
+            result.user.photoURL,
+        );
         if (sessionId) {
             sessionStorage.setItem('sessionId', sessionId);
         }

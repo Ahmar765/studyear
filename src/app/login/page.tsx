@@ -41,7 +41,10 @@ export default function LoginPage() {
 
     try {
         const userCredential = await signInWithEmailAndPassword(getFirebaseAuth(), email, password);
-        const { sessionId } = await handleEmailLogin(userCredential.user);
+        const { sessionId } = await handleEmailLogin(
+            userCredential.user.uid,
+            userCredential.user.email,
+        );
         if (sessionId) {
             sessionStorage.setItem('sessionId', sessionId);
         }
@@ -62,7 +65,12 @@ export default function LoginPage() {
     const provider = new GoogleAuthProvider();
     try {
         const result = await signInWithPopup(getFirebaseAuth(), provider);
-        const { newUser, sessionId } = await handleSocialSignIn(result.user);
+        const { newUser, sessionId } = await handleSocialSignIn(
+            result.user.uid,
+            result.user.email,
+            result.user.displayName,
+            result.user.photoURL,
+        );
          if (sessionId) {
             sessionStorage.setItem('sessionId', sessionId);
         }
