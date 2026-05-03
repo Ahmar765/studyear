@@ -18,6 +18,16 @@ export async function getCurrentUser() {
   return null;
 }
 
+/**
+ * Id tokens passed from client server actions (browser navigations do not send Authorization).
+ * Falls back to Bearer header for API-style callers.
+ */
+export async function getVerifiedUser(idToken?: string | null) {
+  const fromClient = await verifyIdTokenString(idToken ?? undefined);
+  if (fromClient) return fromClient;
+  return getCurrentUser();
+}
+
 /** For server actions / routes where the client passes `user.getIdToken()` (browser navigations do not send Authorization). */
 export async function verifyIdTokenString(
   idToken: string | null | undefined,

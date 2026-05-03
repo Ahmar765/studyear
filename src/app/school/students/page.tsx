@@ -1,13 +1,55 @@
 
+"use client";
+
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users } from "lucide-react";
-import { getSchoolStudentsAction } from "@/server/actions/school-actions";
+import { Users, Loader } from "lucide-react";
+import { getSchoolStudentsAction, type SchoolStudent } from "@/server/actions/school-actions";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
+import { useAuth } from "@/hooks/use-auth";
 
-export default async function SchoolStudentsPage() {
-  const { students, error } = await getSchoolStudentsAction();
+export default function SchoolStudentsPage() {
+  const { user, loading: authLoading } = useAuth();
+  const [students, setStudents] = useState<SchoolStudent[]>([]);
+  const [error, setError] = useState<string | undefined>();
+  const [pending, setPending] = useState(true);
+
+  useEffect(() => {
+    if (authLoading) return;
+    if (!user) {
+      setPending(false);
+      setError("Not authenticated.");
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await user.getIdToken();
+        const res = await getSchoolStudentsAction(token);
+        if (!cancelled) {
+          setStudents(res.students);
+          setError(res.error);
+        }
+      } catch {
+        if (!cancelled) setError("Failed to load students.");
+      } finally {
+        if (!cancelled) setPending(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user, authLoading]);
+
+  if (authLoading || pending) {
+    return (
+      <div className="flex flex-1 items-center justify-center min-h-[40vh]">
+        <Loader className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 space-y-8 p-4 md:p-8">

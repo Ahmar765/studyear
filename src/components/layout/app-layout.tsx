@@ -53,6 +53,7 @@ import {
 } from "../ui/dropdown-menu";
 import { useAuth } from "@/hooks/use-auth";
 import { useUserProfile } from "@/hooks/use-user-profile";
+import { useEffectiveRole } from "@/hooks/use-effective-role";
 import { useEffect } from "react";
 import SplashScreen from "../splash-screen";
 import { logout as endServerSession } from "@/server/actions/auth-actions";
@@ -121,10 +122,14 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { user, loading: authLoading, logout: firebaseLogout } = useAuth();
   const { userProfile, loading: profileLoading } = useUserProfile();
+  const { role: effectiveRole, tokenRoleResolved } = useEffectiveRole();
   const { isImpersonating } = useImpersonation();
   const router = useRouter();
 
-  const loading = authLoading || profileLoading;
+  const loading =
+    authLoading ||
+    profileLoading ||
+    (!!user && !tokenRoleResolved);
 
   const onboardingComplete = userProfile?.onboardingComplete === true;
 
@@ -149,16 +154,15 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    if (user && userProfile && userProfile.role === 'STUDENT' && !onboardingComplete && pathname !== '/profile-setup') {
+    if (user && userProfile && effectiveRole === 'STUDENT' && !onboardingComplete && pathname !== '/profile-setup') {
         router.replace('/profile-setup');
         return;
     }
 
-    // Route staff/parent dashboards by role whenever we have a profile. Do not require
-    // onboardingComplete here — admins often never set student onboarding flags, and would
-    // otherwise stay on /dashboard (student) forever after login.
-    if (userProfile) {
-        const role = userProfile.role;
+    // Route staff/parent dashboards using effective role (JWT claims + Firestore).
+    // Do not require userProfile: missing `users/{uid}` would otherwise block redirects while JWT is correct.
+    if (user && tokenRoleResolved) {
+        const role = effectiveRole;
         const isAdminDashboard = pathname.startsWith('/admin');
         const isTeacherDashboard = pathname.startsWith('/teacher');
         const isSchoolDashboard = pathname.startsWith('/school');
@@ -174,7 +178,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             router.replace('/dashboard');
         }
     }
-  }, [pathname, user, userProfile, loading, router, onboardingComplete]);
+  }, [pathname, user, userProfile, loading, router, onboardingComplete, effectiveRole, tokenRoleResolved]);
 
 
   const handleLogout = async () => {
@@ -230,8 +234,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  const role = userProfile?.role || 'STUDENT';
-  const currentNavItems = navItemsByRole[role] || studentNavItems;
+  const currentNavItems = navItemsByRole[effectiveRole] || studentNavItems;
   const showSidebar = !!user;
 
   return (

@@ -45,6 +45,7 @@ export default function LoginPage() {
             userCredential.user.uid,
             userCredential.user.email,
         );
+        await userCredential.user.getIdToken(true);
         if (sessionId) {
             sessionStorage.setItem('sessionId', sessionId);
         }

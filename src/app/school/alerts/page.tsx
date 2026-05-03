@@ -1,14 +1,56 @@
 
+"use client";
+
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { getAtRiskStudentsAction, AtRiskStudent } from "@/server/actions/school-actions";
-import { ShieldAlert, User, TrendingDown } from "lucide-react";
+import { getAtRiskStudentsAction, type AtRiskStudent } from "@/server/actions/school-actions";
+import { ShieldAlert, User, TrendingDown, Loader } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import Link from 'next/link';
+import { useAuth } from "@/hooks/use-auth";
 
-export default async function SchoolAlertsPage() {
-  const { students, error } = await getAtRiskStudentsAction();
+export default function SchoolAlertsPage() {
+  const { user, loading: authLoading } = useAuth();
+  const [students, setStudents] = useState<AtRiskStudent[]>([]);
+  const [error, setError] = useState<string | undefined>();
+  const [pending, setPending] = useState(true);
+
+  useEffect(() => {
+    if (authLoading) return;
+    if (!user) {
+      setPending(false);
+      setError("Not authenticated.");
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await user.getIdToken();
+        const res = await getAtRiskStudentsAction(token);
+        if (!cancelled) {
+          setStudents(res.students);
+          setError(res.error);
+        }
+      } catch {
+        if (!cancelled) setError("Failed to load alerts.");
+      } finally {
+        if (!cancelled) setPending(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user, authLoading]);
+
+  if (authLoading || pending) {
+    return (
+      <div className="flex flex-1 items-center justify-center min-h-[40vh]">
+        <Loader className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 space-y-8 p-4 md:p-8">

@@ -10,10 +10,99 @@ import { AIRequestLog } from '@/server/services/activity';
 import { AcuTransaction, SubscriptionType, UserRole } from '@/server/schemas';
 import { Timestamp }from 'firebase-admin/firestore';
 import * as admin from 'firebase-admin';
+
+/** Firestore types are not JSON-serializable; RSC → client props must be plain objects. */
+function firestoreValueToPlain(value: unknown): unknown {
+    if (value === null || value === undefined) return value;
+    if (value instanceof Timestamp) {
+        return value.toDate().toISOString();
+    }
+    if (value instanceof Date) {
+        return value.toISOString();
+    }
+    if (Array.isArray(value)) {
+        return value.map((v) => firestoreValueToPlain(v));
+    }
+    if (typeof value === 'object') {
+        const proto = Object.getPrototypeOf(value);
+        if (proto === Object.prototype || proto === null) {
+            const out: Record<string, unknown> = {};
+            for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+                out[k] = firestoreValueToPlain(v);
+            }
+            return out;
+        }
+        if (
+            typeof (value as { toDate?: () => Date }).toDate === 'function'
+        ) {
+            try {
+                return (value as { toDate: () => Date }).toDate().toISOString();
+            } catch {
+                return null;
+            }
+        }
+        return undefined;
+    }
+    return value;
+}
 import { HttpsError } from '../lib/errors';
 import { resourceMetadata, ResourceType } from '@/data/academic';
 import { ACUService } from '../services/acu-service';
+import { getVerifiedUser } from '@/server/lib/auth';
 
+function assertPlatformAdmin(tokenUser: Awaited<ReturnType<typeof getVerifiedUser>>) {
+    if (!tokenUser) throw new Error('Not authenticated.');
+    const role = (tokenUser as { role?: string }).role;
+    if (role !== 'ADMIN') throw new Error('Forbidden.');
+}
+
+export type ImpersonationSearchUserRow = {
+    uid: string;
+    name: string;
+    email: string | null;
+    role: string;
+};
+
+/**
+ * Admin-only: substring match on name / email / uid for the View as User support tool.
+ * Bounded scan (Firestore limit) — sufficient for typical admin support volumes.
+ */
+export async function searchUsersForImpersonationAction(
+    idToken: string | null | undefined,
+    query: string,
+): Promise<{ users: ImpersonationSearchUserRow[]; error?: string }> {
+    try {
+        const u = await getVerifiedUser(idToken);
+        assertPlatformAdmin(u);
+        const q = query.trim().toLowerCase();
+        if (q.length < 2) {
+            return { users: [] };
+        }
+
+        const snap = await adminDb.collection('users').select('name', 'email', 'role').limit(800).get();
+        const users: ImpersonationSearchUserRow[] = snap.docs
+            .map((doc) => {
+                const d = doc.data();
+                return {
+                    uid: doc.id,
+                    name: typeof d.name === 'string' ? d.name : '',
+                    email: typeof d.email === 'string' ? d.email : null,
+                    role: typeof d.role === 'string' ? d.role : '',
+                };
+            })
+            .filter((row) => {
+                const name = row.name.toLowerCase();
+                const email = (row.email || '').toLowerCase();
+                return name.includes(q) || email.includes(q) || row.uid.toLowerCase().includes(q);
+            })
+            .slice(0, 20);
+
+        return { users };
+    } catch (e) {
+        const message = e instanceof Error ? e.message : 'Search failed.';
+        return { users: [], error: message };
+    }
+}
 
 export async function startImpersonationAction(targetUid: string, reason: string): Promise<{ success: boolean; customToken?: string; impersonationLogId?: string; error?: string }> {
     try {
@@ -106,10 +195,11 @@ export async function getUsersAction(): Promise<{ users: UserProfile[], error: s
         const users = usersSnapshot.docs.map(doc => {
             const subscription = subscriptionsMap.get(doc.id);
             const data = doc.data();
+            const plainData = firestoreValueToPlain(data) as Record<string, unknown>;
             return {
                 uid: doc.id,
-                ...data,
-                name: data.name || 'N/A',
+                ...plainData,
+                name: (plainData.name as string) || data.name || 'N/A',
                 subscription: subscription?.type || 'FREE',
             } as UserProfile;
         });
@@ -376,15 +466,15 @@ export async function getTutorApplicationsAction(): Promise<{ applications: Tuto
 
         const applications: TutorApplication[] = [];
         tutorProfilesSnapshot.forEach(doc => {
-            const profileData = doc.data() as TutorProfileData;
-            const userData = usersMap.get(doc.id);
+            const profileData = firestoreValueToPlain(doc.data()) as TutorProfileData;
+            const userData = firestoreValueToPlain(usersMap.get(doc.id)) as Record<string, unknown> | undefined;
             if (userData) {
                  applications.push({
                     ...profileData,
                     userId: doc.id,
-                    displayName: userData.name || 'N/A',
-                    email: userData.email,
-                    role: userData.role,
+                    displayName: (userData.name as string) || 'N/A',
+                    email: userData.email as string,
+                    role: userData.role as TutorApplication['role'],
                 });
             }
         });

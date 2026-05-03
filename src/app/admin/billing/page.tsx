@@ -2,13 +2,9 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { DollarSign, CreditCard, Wallet, AlertCircle } from "lucide-react";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
 import { getAcuTransactionsAction, getRecentPaymentsAction } from "@/server/actions/admin-actions";
 import { adminDb } from "@/lib/firebase/admin-app";
+import DiscountCodesSection from "@/app/admin/billing/discount-codes-section";
 
 export default async function AdminBillingPage() {
   const [{ transactions, error: acuError }, { payments, error: paymentsError }] = await Promise.all([
@@ -119,38 +115,7 @@ export default async function AdminBillingPage() {
                 </CardContent>
             </Card>
 
-            <Card>
-                <CardHeader>
-                    <CardTitle>Manage Discount Codes</CardTitle>
-                    <CardDescription>Create and manage discount codes for promotions.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    <form className="space-y-4">
-                        <div>
-                            <Label htmlFor="discount-code">New Code</Label>
-                            <Input id="discount-code" placeholder="e.g., SUMMER25" disabled />
-                        </div>
-                        <div>
-                            <Label htmlFor="discount-type">Type</Label>
-                            <Select disabled>
-                                <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="percentage">Percentage</SelectItem>
-                                    <SelectItem value="fixed">Fixed Amount</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div>
-                            <Label htmlFor="discount-value">Value</Label>
-                            <Input id="discount-value" type="number" placeholder="e.g., 25" disabled />
-                        </div>
-                        <Button className="w-full" disabled>Create Discount Code</Button>
-                         <p className="text-xs text-muted-foreground text-center pt-2">
-                            This feature requires a dedicated backend function with Stripe secret key access.
-                        </p>
-                    </form>
-                </CardContent>
-            </Card>
+            <DiscountCodesSection />
         </div>
     </div>
   );

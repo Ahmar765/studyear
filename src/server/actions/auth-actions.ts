@@ -9,6 +9,54 @@ import type { UserRole, SubscriptionType } from "@/server/schemas";
 
 const allowedRoles: UserRole[] = ["STUDENT", "PARENT", "PRIVATE_TUTOR", "SCHOOL_ADMIN", "SCHOOL_TUTOR", "ADMIN"];
 
+/** Local/dev accounts that should always resolve as school admins (Firestore + JWT). */
+const DEV_SCHOOL_ADMIN_EMAILS = new Set(['test.schooladmin@local.test']);
+
+async function tryPromoteDevSchoolAdmin(uid: string, email: string | null) {
+    const normalized = email?.trim().toLowerCase();
+    if (!normalized || !DEV_SCHOOL_ADMIN_EMAILS.has(normalized)) return false;
+    const now = admin.firestore.FieldValue.serverTimestamp();
+    try {
+        await adminDb.doc(`users/${uid}`).set(
+            {
+                id: uid,
+                email: normalized,
+                role: 'SCHOOL_ADMIN',
+                updatedAt: now,
+            },
+            { merge: true },
+        );
+        await adminAuth.setCustomUserClaims(uid, { role: 'SCHOOL_ADMIN' });
+
+        const staffSnap = await adminDb
+            .collection('school_staff')
+            .where('userId', '==', uid)
+            .where('role', '==', 'SCHOOL_ADMIN')
+            .limit(1)
+            .get();
+        if (staffSnap.empty) {
+            const schoolAccountRef = adminDb.collection('school_accounts').doc();
+            const domainLabel = normalized.split('@')[1]?.split('.')[0] ?? 'Dev';
+            await schoolAccountRef.set({
+                name: `${domainLabel} (Local)`,
+                approvalStatus: 'APPROVED',
+                createdAt: now,
+            });
+            await adminDb.collection('school_staff').doc().set({
+                userId: uid,
+                schoolId: schoolAccountRef.id,
+                role: 'SCHOOL_ADMIN',
+            });
+        }
+
+        console.info(`Promoted dev school admin ${uid} (${normalized}).`);
+        return true;
+    } catch (error) {
+        console.error(`Failed to promote dev school admin ${uid}:`, error);
+        return false;
+    }
+}
+
 async function tryPromoteToAdmin(uid: string, email: string) {
     if (email === 'admin@studyear.com' || email === 'admin@studyear.ai') {
       try {
@@ -129,19 +177,22 @@ export async function handleSocialSignIn(
     }
 
     await tryPromoteToAdmin(uid, email);
+    await tryPromoteDevSchoolAdmin(uid, email);
 
     const { sessionId } = await createSession(uid, { platform: "web", userAgent: "unknown" });
     return { newUser: isNewUser, sessionId };
 }
 
 export async function handleEmailLogin(uid: string, email: string | null) {
+    if (email) {
+        await tryPromoteToAdmin(uid, email);
+        await tryPromoteDevSchoolAdmin(uid, email);
+    }
+
     const userDoc = await adminDb.doc(`users/${uid}`).get();
     const role = userDoc.data()?.role || 'STUDENT';
     await adminAuth.setCustomUserClaims(uid, { role });
 
-    if (email) {
-        await tryPromoteToAdmin(uid, email);
-    }
     const { sessionId } = await createSession(uid, { platform: "web", userAgent: "unknown" });
     return { sessionId: sessionId || null };
 }

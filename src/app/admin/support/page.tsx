@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useTransition } from 'react';
+import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -12,7 +12,11 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { Eye, Loader } from 'lucide-react';
-import { startImpersonationAction } from '@/server/actions/admin-actions';
+import {
+    searchUsersForImpersonationAction,
+    startImpersonationAction,
+    type ImpersonationSearchUserRow,
+} from '@/server/actions/admin-actions';
 import { useAuth } from '@/hooks/use-auth';
 
 const formSchema = z.object({
@@ -24,11 +28,61 @@ export default function SupportPage() {
   const [isPending, startTransition] = useTransition();
   const { toast } = useToast();
   const { user } = useAuth();
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<ImpersonationSearchUserRow[]>([]);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const searchWrapRef = useRef<HTMLDivElement>(null);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: { targetUid: '', reason: '' },
   });
+
+  const runSearch = useCallback(
+    async (q: string) => {
+      if (!user || q.trim().length < 2) {
+        setSearchResults([]);
+        return;
+      }
+      setSearching(true);
+      try {
+        const idToken = await user.getIdToken();
+        const { users, error } = await searchUsersForImpersonationAction(idToken, q);
+        if (error) {
+          toast({ variant: 'destructive', title: 'Search failed', description: error });
+          setSearchResults([]);
+        } else {
+          setSearchResults(users);
+        }
+      } finally {
+        setSearching(false);
+      }
+    },
+    [user, toast],
+  );
+
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (q.length < 2) {
+      setSearchResults([]);
+      return;
+    }
+    const t = window.setTimeout(() => {
+      void runSearch(q);
+    }, 300);
+    return () => window.clearTimeout(t);
+  }, [searchQuery, runSearch]);
+
+  useEffect(() => {
+    const onDocClick = (e: MouseEvent) => {
+      if (searchWrapRef.current && !searchWrapRef.current.contains(e.target as Node)) {
+        setSearchOpen(false);
+      }
+    };
+    document.addEventListener('click', onDocClick);
+    return () => document.removeEventListener('click', onDocClick);
+  }, []);
 
   const onSubmit = (values: z.infer<typeof formSchema>) => {
     if (!user) return;
@@ -76,10 +130,71 @@ export default function SupportPage() {
                 name="targetUid"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Target User ID</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Enter the User ID (UID) of the target user" {...field} />
-                    </FormControl>
+                    <FormLabel>Target user</FormLabel>
+                    <p className="text-muted-foreground text-sm mb-2">
+                      Search by name or email, or enter a User ID below.
+                    </p>
+                    <div ref={searchWrapRef} className="relative space-y-2">
+                      <Input
+                        placeholder="Search by name or email…"
+                        value={searchQuery}
+                        onChange={(e) => {
+                          setSearchQuery(e.target.value);
+                          setSearchOpen(true);
+                        }}
+                        onFocus={() => setSearchOpen(true)}
+                        autoComplete="off"
+                      />
+                      {searchOpen && searchQuery.trim().length >= 2 && (
+                        <div className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md border bg-popover text-popover-foreground shadow-md">
+                          {searching ? (
+                            <div className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground">
+                              <Loader className="h-4 w-4 animate-spin" />
+                              Searching…
+                            </div>
+                          ) : searchResults.length === 0 ? (
+                            <div className="px-3 py-2 text-sm text-muted-foreground">No matches.</div>
+                          ) : (
+                            <ul className="py-1">
+                              {searchResults.map((row) => (
+                                <li key={row.uid}>
+                                  <button
+                                    type="button"
+                                    className="w-full px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+                                    onClick={() => {
+                                      field.onChange(row.uid);
+                                      setSearchQuery(
+                                        row.name || row.email || row.uid,
+                                      );
+                                      setSearchOpen(false);
+                                    }}
+                                  >
+                                    <span className="font-medium">
+                                      {row.name || '(No name)'}
+                                    </span>
+                                    {row.email ? (
+                                      <span className="text-muted-foreground">
+                                        {' '}
+                                        · {row.email}
+                                      </span>
+                                    ) : null}
+                                    <span className="block truncate font-mono text-xs text-muted-foreground">
+                                      {row.uid}
+                                    </span>
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      )}
+                      <FormControl>
+                        <Input
+                          placeholder="User ID (UID) — filled when you pick a user, or paste directly"
+                          {...field}
+                        />
+                      </FormControl>
+                    </div>
                     <FormMessage />
                   </FormItem>
                 )}

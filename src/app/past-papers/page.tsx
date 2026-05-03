@@ -17,8 +17,6 @@ import ContributionForm from "./contribution-form";
 interface Subject {
     code: string;
     name: string;
-    icon: React.ElementType;
-    keyStages: string[];
 }
 
 export default function PastPapersPage() {
