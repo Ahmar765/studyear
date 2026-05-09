@@ -26,7 +26,7 @@ export async function generateSummary(formData: FormData) {
         const result = await runStudYearAction({
             userId: validatedData.userId,
             studentId: validatedData.userId,
-            featureKey: 'AI_EXPLANATION', // Re-using cost for now
+            featureKey: 'TOPIC_SUMMARY',
             entityType: 'TOPIC_SUMMARY',
             action: 'generateSummary',
             eventType: 'RESOURCE_GENERATED',

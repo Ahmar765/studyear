@@ -78,3 +78,58 @@ export function normalizeSubjectTitle(name: string): string {
   };
   return map[name] ?? name;
 }
+
+export type PlannerSubjectRow = { name: string; currentGrade?: string };
+
+/** Rows used by the AI study planner (canonical names + optional target grades from Firestore). */
+export function profilePlannerSubjectRows(
+  profile: { subjects?: unknown } | null | undefined,
+): PlannerSubjectRow[] {
+  if (!profile?.subjects) return [];
+  const names = parseProfileSubjectsList(profile.subjects);
+  const rawList = profile.subjects as unknown[];
+  return names.map((name) => {
+    const raw = rawList.find((s) => {
+      if (typeof s === 'string') return normalizeSubjectTitle(s.trim()) === name;
+      if (s && typeof s === 'object' && 'name' in s) {
+        return normalizeSubjectTitle(String((s as { name?: string }).name ?? '').trim()) === name;
+      }
+      return false;
+    });
+    let currentGrade: string | undefined;
+    if (raw && typeof raw === 'object' && 'targetGrade' in (raw as object)) {
+      const g = String((raw as { targetGrade?: string }).targetGrade ?? '').trim();
+      currentGrade = g || undefined;
+    }
+    return { name, currentGrade };
+  });
+}
+
+/**
+ * Keeps only subjects that exist on the student's profile (server-side allowlist).
+ * Requested grades override profile when provided.
+ */
+export function filterPlannerSubjectsToProfile(
+  requested: PlannerSubjectRow[] | undefined,
+  profileRows: PlannerSubjectRow[],
+): PlannerSubjectRow[] {
+  if (!profileRows.length || !requested?.length) return [];
+
+  const allowed = new Map(
+    profileRows.map((r) => [normalizeSubjectTitle(r.name).trim().toLowerCase(), r] as const),
+  );
+
+  const out: PlannerSubjectRow[] = [];
+  const seen = new Set<string>();
+  for (const req of requested) {
+    const key = normalizeSubjectTitle(String(req.name ?? '').trim()).toLowerCase();
+    if (!key) continue;
+    const canon = allowed.get(key);
+    if (!canon) continue;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const cg = String(req.currentGrade ?? '').trim() || canon.currentGrade;
+    out.push({ name: canon.name, ...(cg ? { currentGrade: cg } : {}) });
+  }
+  return out;
+}

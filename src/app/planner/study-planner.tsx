@@ -25,29 +25,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/use-auth";
 import { useRouter } from "next/navigation";
 import { ToastAction } from "@/components/ui/toast";
-import { parseProfileSubjectsList, normalizeSubjectTitle } from "@/lib/profile-academic";
-import type { UserProfile } from "@/lib/firebase/services/user";
-
-function subjectRowsFromProfile(profile: UserProfile | null): { name: string; currentGrade?: string }[] {
-    if (!profile?.subjects) return [];
-    const names = parseProfileSubjectsList(profile.subjects);
-    const rawList = profile.subjects as unknown[];
-    return names.map((name) => {
-        const raw = rawList.find((s) => {
-            if (typeof s === "string") return normalizeSubjectTitle(s.trim()) === name;
-            if (s && typeof s === "object" && "name" in s) {
-                return normalizeSubjectTitle(String((s as { name?: string }).name ?? "").trim()) === name;
-            }
-            return false;
-        });
-        let currentGrade: string | undefined;
-        if (raw && typeof raw === "object" && "targetGrade" in (raw as object)) {
-            const g = String((raw as { targetGrade?: string }).targetGrade ?? "").trim();
-            currentGrade = g || undefined;
-        }
-        return { name, currentGrade };
-    });
-}
+import { profilePlannerSubjectRows } from "@/lib/profile-academic";
+import { buildStudyPlanSkeleton } from "@/lib/study-plan-calendar";
 
 interface StudyPlannerProps {
     subjectsByLevel: Record<string, string[]>;
@@ -86,7 +65,7 @@ export default function StudyPlanner({ subjectsByLevel, grades }: StudyPlannerPr
     const router = useRouter();
 
     const profileSubjectRows = useMemo(
-        () => subjectRowsFromProfile(userProfile ?? null),
+        () => profilePlannerSubjectRows(userProfile ?? null),
         [userProfile],
     );
 
@@ -110,6 +89,18 @@ export default function StudyPlanner({ subjectsByLevel, grades }: StudyPlannerPr
         }));
     }, [planScope, singleSubjectName, profileSubjectRows, gradeOverrides]);
 
+    const planHorizonHint = useMemo(() => {
+        if (!examDate) return null;
+        try {
+            const iso = format(examDate, "yyyy-MM-dd");
+            const { planDaysInclusive, planStartDate, examDate: endIso } = buildStudyPlanSkeleton(iso);
+            return `The AI will build exactly ${planDaysInclusive} calendar day${
+                planDaysInclusive === 1 ? "" : "s"
+            } (${planStartDate} through ${endIso})—no extra days after your exam.`;
+        } catch {
+            return null;
+        }
+    }, [examDate]);
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
@@ -270,6 +261,9 @@ export default function StudyPlanner({ subjectsByLevel, grades }: StudyPlannerPr
                                         />
                                     </PopoverContent>
                                 </Popover>
+                                {planHorizonHint ? (
+                                    <p className="text-xs text-muted-foreground">{planHorizonHint}</p>
+                                ) : null}
                             </div>
                             
                             <div className="space-y-2">

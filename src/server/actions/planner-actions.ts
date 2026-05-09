@@ -17,6 +17,11 @@ import { getUserProfileServer } from '../services/user';
 import { runPaidAIFeature } from "../services/run-paid-ai-feature";
 import { savedResourceService } from "../services/resources";
 import { studyPlanErrorForUser } from "../lib/study-plan-errors";
+import {
+  filterPlannerSubjectsToProfile,
+  profilePlannerSubjectRows,
+} from "@/lib/profile-academic";
+import { buildStudyPlanSkeleton } from "@/lib/study-plan-calendar";
 
 const GeneratePlanSchema = z.object({
   subjects: z.array(z.object({
@@ -87,14 +92,72 @@ export async function createStudyPlan(formData: FormData): Promise<{ success: bo
         diagnosticForPlan = parsedDiag.success ? parsedDiag.data : undefined;
     }
 
-    const hasSubjectList = Array.isArray(validatedData.subjects) && validatedData.subjects.length > 0;
-    if (!diagnosticRaw && !hasSubjectList) {
+    const profileSubjectRows = profilePlannerSubjectRows(userProfile);
+
+    let subjectsForPlan = filterPlannerSubjectsToProfile(validatedData.subjects, profileSubjectRows);
+
+    const requestedSubjectCount = Array.isArray(validatedData.subjects)
+      ? validatedData.subjects.length
+      : 0;
+
+    if (profileSubjectRows.length > 0 && subjectsForPlan.length === 0) {
+      if (!requestedSubjectCount && diagnosticRaw) {
+        subjectsForPlan = profileSubjectRows;
+      }
+    }
+
+    if (
+      profileSubjectRows.length > 0 &&
+      requestedSubjectCount > 0 &&
+      subjectsForPlan.length === 0
+    ) {
+      return {
+        success: false,
+        error: "Study plan subjects must match those saved on your profile.",
+        errorCode: "INVALID_SUBJECTS",
+      };
+    }
+
+    if (
+      !profileSubjectRows.length &&
+      requestedSubjectCount > 0 &&
+      !diagnosticRaw
+    ) {
+      return {
+        success: false,
+        error:
+          "Add your subjects in profile setup before creating a study plan—or complete an academic diagnostic.",
+        errorCode: "PROFILE_INCOMPLETE",
+      };
+    }
+
+    const hasSubjectsForInput = subjectsForPlan.length > 0;
+
+    if (!diagnosticRaw && !hasSubjectsForInput) {
       return {
         success: false,
         error:
           "Add your subjects in profile setup or complete an academic diagnostic first—then we can build a study plan.",
-        errorCode: 'PROFILE_INCOMPLETE',
+        errorCode: "PROFILE_INCOMPLETE",
       };
+    }
+
+    let horizonFields: Pick<
+      GenerateStudyPlanInput,
+      "planStartDate" | "planDaysInclusive" | "planSkeleton"
+    > = {};
+    const examRaw = validatedData.examDate?.trim();
+    if (examRaw) {
+      try {
+        const h = buildStudyPlanSkeleton(examRaw);
+        horizonFields = {
+          planStartDate: h.planStartDate,
+          planDaysInclusive: h.planDaysInclusive,
+          planSkeleton: h.planSkeleton,
+        };
+      } catch (e) {
+        console.warn("[createStudyPlan] buildStudyPlanSkeleton failed:", e);
+      }
     }
 
     const studyPlanInput: GenerateStudyPlanInput = {
@@ -102,7 +165,8 @@ export async function createStudyPlan(formData: FormData): Promise<{ success: bo
         examDate: validatedData.examDate,
         availableHoursPerWeek: validatedData.hoursPerWeek,
         examGoal: validatedData.examGoal,
-        subjects: hasSubjectList ? validatedData.subjects : undefined,
+        subjects: hasSubjectsForInput ? subjectsForPlan : undefined,
+        ...horizonFields,
     };
 
     const inputParsed = GenerateStudyPlanInputSchema.safeParse(studyPlanInput);

@@ -23,10 +23,13 @@ export const STUDENT_SUBSCRIPTION_PLANS: CheckoutPlanDefinition[] = [
     priceSuffix: '/ month',
     popular: true,
     features: [
-      'Full AI study toolkit — planner, quizzes, interactive lessons',
-      'Essay, assignment & dissertation reviews',
-      'Exam simulations, grade predictions & mind maps',
-      'Charts, diagrams & visual learning tools',
+      'AI Course Generator — structured courses with modules and quizzes',
+      'AI Essay Plan — thesis, paragraphs and conclusion outline',
+      'Flashcards & quizzes for any topic',
+      'Topic summaries / revision notes',
+      'Formula sheets, mind maps',
+      'Visual tools — diagrams, educational images, charts & graphs',
+      'Plus: planner, interactive lessons, exam simulations & grade predictions (with ACUs)',
     ],
   },
   {

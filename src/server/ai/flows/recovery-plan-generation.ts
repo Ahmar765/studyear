@@ -3,6 +3,22 @@ import { toGoogleAiGenkitModel } from '@/server/ai/genkit-model';
 import {z} from 'zod';
 import { DiagnosticReportSchema } from './diagnostic-report-generation';
 
+const SubjectGradeDetailSchema = z.object({
+  subjectName: z.string(),
+  targetGrade: z.string().optional(),
+  currentGrade: z.string().optional(),
+  diagnosticConfidencePercent: z.number().optional(),
+});
+
+const StudentAcademicContextSchema = z.object({
+  studyLevel: z.string().optional().describe('Stage label from profile, e.g. GCSE, Year 5, Key Stage 3.'),
+  yearGroup: z.string().optional(),
+  overallCurrentGrade: z.string().optional(),
+  overallTargetGrade: z.string().optional(),
+  examBoard: z.string().optional(),
+  subjectGradeDetails: z.array(SubjectGradeDetailSchema).optional(),
+});
+
 const WeeklyTaskSchema = z.object({
   subject: z.string(),
   topic: z.string(),
@@ -29,7 +45,11 @@ export const RecoveryPlanOutputSchema = z.object({
 });
 export type RecoveryPlanOutput = z.infer<typeof RecoveryPlanOutputSchema>;
 
-export const RecoveryPlanInputSchema = DiagnosticReportSchema;
+export const RecoveryPlanInputSchema = DiagnosticReportSchema.extend({
+  studentAcademicContext: StudentAcademicContextSchema.optional().describe(
+    'Student profile snapshot: stage, grades, and per-subject targets—plans must align to these.',
+  ),
+});
 export type RecoveryPlanInput = z.infer<typeof RecoveryPlanInputSchema>;
 
 export async function generateRecoveryPlan(input: RecoveryPlanInput, options?: { model?: string }): Promise<RecoveryPlanOutput> {
@@ -56,8 +76,14 @@ Rules:
 - Include clear weekly structure.
 - Include parent support actions.
 - Include success metrics.
+- Use studentAcademicContext strictly when present:
+  - Calibrate reading age, vocabulary, examples, and task length to studyLevel and/or yearGroup (e.g. primary Year 5 vs GCSE vs sixth form).
+  - Each weekly task "subject" must exactly match one of the subjectName entries in studentAcademicContext.subjectGradeDetails when that list is non-empty; never invent unrelated subjects.
+  - Where subjectGradeDetails includes targetGrade and/or currentGrade for a subject, theme tasks toward progressing from current toward target for that subject.
+  - Use overallCurrentGrade and overallTargetGrade where helpful for framing urgency when subject-specific grades are missing.
+  - If examBoard is set, mention specification-style wording only where appropriate for that stage—not generic university-level demands for younger learners.
 
-Diagnostic Result:
+Full input (diagnostic + student context):
 {{{json input}}}
 `,
 });

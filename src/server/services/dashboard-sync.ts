@@ -13,7 +13,6 @@ export const dashboardSyncService = {
       await dashboardRef.set({
         studentId: studentId,
         progressScore: 75.5,
-        predictedGrade: "B+",
         weakSubjects: [{ name: 'Mathematics', topic: 'Algebra' }],
         strongSubjects: [{ name: 'English', topic: 'Essay Writing' }],
         todayTasks: [],

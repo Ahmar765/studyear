@@ -24,7 +24,7 @@ export async function createAiFlashcards(formData: FormData) {
         const result = await runStudYearAction({
             userId: validatedData.userId,
             studentId: validatedData.userId,
-            featureKey: 'AI_QUIZ_GENERATION', // Assuming flashcards fall under quiz/test prep cost
+            featureKey: 'AI_FLASHCARDS',
             entityType: 'FLASHCARD',
             action: 'generateFlashcards',
             eventType: 'RESOURCE_GENERATED',

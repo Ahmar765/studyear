@@ -14,6 +14,7 @@ export const ACU_FEATURE_COSTS = {
 
   // Practice & Assessment
   AI_QUIZ_GENERATION: 10,
+  AI_FLASHCARDS: 10,
   EXAM_SIMULATION: 20,
   GRADE_PREDICTION: 10,
   
@@ -25,6 +26,7 @@ export const ACU_FEATURE_COSTS = {
 
   // Resource Generation
   AI_COURSE_GENERATOR: 30,
+  AI_ESSAY_PLAN: 12,
   FORMULA_SHEET: 3,
   TOPIC_SUMMARY: 5,
 
@@ -44,3 +46,5 @@ export const ACU_FEATURE_COSTS = {
 } as const;
 
 export type FeatureKey = keyof typeof ACU_FEATURE_COSTS;
+/** Alias used by the AI gateway contracts */
+export type AIFeatureKey = FeatureKey;

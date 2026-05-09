@@ -2,7 +2,13 @@
 'use server';
 
 import { z } from 'zod';
-import { generateRecoveryPlan, RecoveryPlanInput, RecoveryPlanOutput } from '@/server/ai/flows/recovery-plan-generation';
+import { DiagnosticReportSchema } from '@/server/ai/flows/diagnostic-report-generation';
+import {
+  generateRecoveryPlan,
+  RecoveryPlanInput,
+  RecoveryPlanOutput,
+} from '@/server/ai/flows/recovery-plan-generation';
+import { buildRecoveryStudentAcademicContext } from '@/server/lib/recovery-plan-context';
 import { AIGatewayService } from '../services/ai-gateway';
 import { randomUUID } from 'crypto';
 import type { AIRequestContext, AIUserInput } from '../ai/gateway-schema';
@@ -28,26 +34,44 @@ export async function buildPersonalRecoveryPlanAction(
     if (!diagnosticSnap.exists) {
       throw new HttpsError('not-found', 'Diagnostic result not found.');
     }
-    const diagnosticData = diagnosticSnap.data() as RecoveryPlanInput;
+    const diagnosticRaw = diagnosticSnap.data() as Record<string, unknown>;
+    const diagnosticReport = DiagnosticReportSchema.parse(diagnosticRaw);
 
     const userProfile = await getUserProfileServer(userId);
     if (!userProfile) throw new Error("User profile not found.");
+
+    const studentAcademicContext = buildRecoveryStudentAcademicContext(
+      userProfile,
+      diagnosticRaw,
+    );
+
+    const hasAcademicContext =
+      (studentAcademicContext.subjectGradeDetails?.length ?? 0) > 0 ||
+      !!(studentAcademicContext.studyLevel ||
+        studentAcademicContext.yearGroup ||
+        studentAcademicContext.overallCurrentGrade ||
+        studentAcademicContext.overallTargetGrade ||
+        studentAcademicContext.examBoard);
+
+    const recoveryPlanInput: RecoveryPlanInput = hasAcademicContext
+      ? { ...diagnosticReport, studentAcademicContext }
+      : { ...diagnosticReport };
 
     const gateway = new AIGatewayService();
     const context: AIRequestContext = {
       requestId: randomUUID(),
       userId,
-      taskType: 'AI_STUDY_PLAN', // Using study plan cost for this
+      taskType: 'RECOVERY_PLAN',
       featureName: 'recovery-plan-generator',
-      entitlement: 'AI_STUDY_PLAN',
+      entitlement: 'RECOVERY_PLAN',
       role: userProfile.role,
       subscriptionTier: userProfile.subscription || 'free',
       idempotencyKey: randomUUID(),
-      estimatedInputTokens: 500, // Estimate for this type of task
+      estimatedInputTokens: 750,
     };
 
     const gatewayInput: AIUserInput<RecoveryPlanInput> = {
-      promptPayload: diagnosticData,
+      promptPayload: recoveryPlanInput,
     };
 
     const response = await gateway.execute(context, gatewayInput, generateRecoveryPlan);
@@ -59,6 +83,7 @@ export async function buildPersonalRecoveryPlanAction(
         studentId,
         diagnosticId,
         ...recoveryPlan,
+        studentAcademicContext,
         status: "ACTIVE",
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp()

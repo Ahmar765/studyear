@@ -53,7 +53,9 @@ export async function getParentDashboardDataAction(
             return { success: true, data: [] };
         }
 
-        const studentIds = linksSnapshot.docs.map(doc => doc.data().studentId);
+        const studentIds = linksSnapshot.docs
+            .map((linkDoc) => linkDoc.data().studentId)
+            .filter((id): id is string => typeof id === 'string' && id.trim().length > 0);
         if (studentIds.length === 0) {
             return { success: true, data: [] };
         }
@@ -62,12 +64,14 @@ export async function getParentDashboardDataAction(
 
         const dashboardData: StudentData[] = await Promise.all(studentDocs.docs.map(async (doc) => {
             const student = doc.data() as UserData;
+            /** Document ID is the canonical Firebase Auth UID; `users/{id}` docs often omit a `uid` field. */
+            const studentId = doc.id;
             
             const [diagnosticSnapshot, studentProfileSnap, savedResourcesSnapshot, dashboardStateSnap] = await Promise.all([
-                adminDb.collection('diagnostic_results').where('studentId', '==', student.uid).orderBy('createdAt', 'desc').limit(1).get(),
-                adminDb.collection('student_profiles').doc(student.uid).get(),
-                adminDb.collection('users').doc(student.uid).collection('saved_resources').orderBy('createdAt', 'desc').limit(5).get(),
-                adminDb.collection('student_dashboard_states').doc(student.uid).get()
+                adminDb.collection('diagnostic_results').where('studentId', '==', studentId).orderBy('createdAt', 'desc').limit(1).get(),
+                adminDb.collection('student_profiles').doc(studentId).get(),
+                adminDb.collection('users').doc(studentId).collection('saved_resources').orderBy('createdAt', 'desc').limit(5).get(),
+                adminDb.collection('student_dashboard_states').doc(studentId).get()
             ]);
 
             const dashboardState = dashboardStateSnap.exists ? dashboardStateSnap.data() : null;
@@ -83,7 +87,7 @@ export async function getParentDashboardDataAction(
             const consistency = dashboardState?.progressScore > 70 ? "Good" : dashboardState?.progressScore > 40 ? "Fair" : "Poor";
 
             return {
-                id: student.uid,
+                id: studentId,
                 name: student.name || 'Student',
                 avatarSrc: student.profileImageUrl || '',
                 yearGroup: (studentProfileSnap.data() as StudentProfileData)?.yearGroup || 'N/A',

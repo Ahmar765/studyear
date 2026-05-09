@@ -24,7 +24,7 @@ export async function createAiEssayPlan(formData: FormData): Promise<{ success: 
         const result = await runStudYearAction({
             userId: validatedData.userId,
             studentId: validatedData.userId,
-            featureKey: 'AI_STUDY_PLAN', // Re-using study plan cost for essay plans
+            featureKey: 'AI_ESSAY_PLAN',
             entityType: 'ESSAY_PLAN',
             action: 'generateEssayPlan',
             eventType: 'RESOURCE_GENERATED',

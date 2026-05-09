@@ -1,8 +1,8 @@
 
 'use client';
 
-import { useState, useTransition, useMemo } from "react";
-import { useForm, useFieldArray } from 'react-hook-form';
+import { useState, useTransition, useMemo, useEffect, useRef } from "react";
+import { useForm, useFieldArray, useWatch } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Button } from "@/components/ui/button";
@@ -13,21 +13,24 @@ import { useToast } from "@/hooks/use-toast";
 import { useUserProfile } from "@/hooks/use-user-profile";
 import { useAuth } from "@/hooks/use-auth";
 import { generateDiagnosticReportAction } from "@/server/actions/assessment-actions";
+import { buildPersonalRecoveryPlanAction } from "@/server/actions/recovery-plan-actions";
 import type { DiagnosticReport } from "@/server/ai/flows/diagnostic-report-generation";
-import { Loader, Sparkles, AlertTriangle, BookCheck, Target, ArrowRight } from "lucide-react";
+import { Loader, Sparkles, AlertTriangle, BookCheck, Plus, Trash2, ShieldAlert, CalendarCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { parseProfileSubjectsList } from "@/lib/profile-academic";
+import { parseProfileSubjectsList, normalizeSubjectTitle } from "@/lib/profile-academic";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const SubjectConfidenceSchema = z.object({
-  subjectId: z.string(),
+  subjectId: z.string().min(1, 'Subject name required.'),
   confidence: z.number().min(0).max(100),
 });
 
 const DiagnosticFormSchema = z.object({
-  subjects: z.array(SubjectConfidenceSchema),
+  subjects: z.array(SubjectConfidenceSchema).min(1).max(24),
 });
 
 function riskBadgeVariant(risk: DiagnosticReport['riskLevel']): "default" | "secondary" | "destructive" | "outline" {
@@ -42,34 +45,59 @@ function riskBadgeVariant(risk: DiagnosticReport['riskLevel']): "default" | "sec
   }
 }
 
-export default function DiagnosticForm() {
+interface DiagnosticFormProps {
+  catalogSubjects: string[];
+}
+
+export default function DiagnosticForm({ catalogSubjects }: DiagnosticFormProps) {
     const { user } = useAuth();
     const { userProfile, loading } = useUserProfile();
     const [isPending, startTransition] = useTransition();
+    const [isRecoveryPending, startRecoveryTransition] = useTransition();
     const [report, setReport] = useState<DiagnosticReport | null>(null);
+    const [diagnosticId, setDiagnosticId] = useState<string | null>(null);
     const { toast } = useToast();
     const router = useRouter();
-
-    const subjectNames = useMemo(
-        () => parseProfileSubjectsList(userProfile?.subjects),
-        [userProfile?.subjects],
-    );
-
-    const subjectRows = useMemo(
-        () => subjectNames.map((name) => ({ subjectId: name, confidence: 50 })),
-        [subjectNames],
-    );
+    const [catalogPickKey, setCatalogPickKey] = useState(0);
+    const [customSubject, setCustomSubject] = useState('');
+    const seededProfileRef = useRef(false);
 
     const form = useForm<z.infer<typeof DiagnosticFormSchema>>({
         resolver: zodResolver(DiagnosticFormSchema),
         defaultValues: { subjects: [] },
-        values: { subjects: subjectRows },
     });
 
-    const { fields } = useFieldArray({
+    const { fields, append, remove } = useFieldArray({
         control: form.control,
         name: "subjects",
     });
+
+    const watchedSubjects = useWatch({ control: form.control, name: 'subjects' }) ?? [];
+
+    useEffect(() => {
+        if (loading || seededProfileRef.current) return;
+        const names = parseProfileSubjectsList(userProfile?.subjects);
+        if (names.length === 0) return;
+        const current = form.getValues('subjects');
+        if (current.length > 0) {
+            seededProfileRef.current = true;
+            return;
+        }
+        form.reset({
+            subjects: names.map((name) => ({ subjectId: name, confidence: 50 })),
+        });
+        seededProfileRef.current = true;
+    }, [loading, userProfile, form]);
+
+    const takenLower = useMemo(() => {
+        return new Set(
+            watchedSubjects.map((s) => String(s?.subjectId ?? '').trim().toLowerCase()).filter(Boolean),
+        );
+    }, [watchedSubjects]);
+
+    const catalogOptions = useMemo(() => {
+        return catalogSubjects.filter((s) => !takenLower.has(s.trim().toLowerCase()));
+    }, [catalogSubjects, takenLower]);
 
     const onSubmit = (values: z.infer<typeof DiagnosticFormSchema>) => {
         if (!user) {
@@ -80,6 +108,7 @@ export default function DiagnosticForm() {
             const result = await generateDiagnosticReportAction({ userId: user.uid, subjects: values.subjects });
             if (result.success && result.report) {
                 setReport(result.report);
+                setDiagnosticId(result.diagnosticId ?? null);
                  toast({
                     title: "Diagnostic complete",
                     description: "Your academic baseline has been generated.",
@@ -89,6 +118,57 @@ export default function DiagnosticForm() {
                     variant: "destructive",
                     title: "Error generating report",
                     description: result.error,
+                });
+            }
+        });
+    };
+
+    const addFromCatalog = (raw: string) => {
+        if (!raw) return;
+        const name = normalizeSubjectTitle(raw.trim());
+        const key = name.toLowerCase();
+        if (!key || takenLower.has(key)) return;
+        append({ subjectId: name, confidence: 50 });
+        setCatalogPickKey((k) => k + 1);
+    };
+
+    const addCustomSubject = () => {
+        const name = normalizeSubjectTitle(customSubject.trim());
+        const key = name.toLowerCase();
+        if (!key || takenLower.has(key)) {
+            toast({ variant: 'destructive', title: 'Duplicate or empty', description: 'Enter a subject you have not already added.' });
+            return;
+        }
+        append({ subjectId: name, confidence: 50 });
+        setCustomSubject('');
+    };
+
+    const handleBuildRecoveryPlan = () => {
+        if (!user?.uid || !diagnosticId) {
+            toast({
+                variant: "destructive",
+                title: "Can't build recovery plan",
+                description: "Missing diagnostic reference. Generate the report again or open it from Diagnostic results.",
+            });
+            return;
+        }
+        startRecoveryTransition(async () => {
+            const response = await buildPersonalRecoveryPlanAction({
+                userId: user.uid,
+                studentId: user.uid,
+                diagnosticId,
+            });
+            if (response.success && response.recoveryPlanId) {
+                toast({
+                    title: "Recovery plan ready",
+                    description: "Your personal recovery plan has been created.",
+                });
+                router.push(`/recovery-plan/${response.recoveryPlanId}`);
+            } else {
+                toast({
+                    variant: "destructive",
+                    title: "Couldn't build recovery plan",
+                    description: response.error ?? "Please try again in a moment.",
                 });
             }
         });
@@ -214,74 +294,162 @@ export default function DiagnosticForm() {
                 </CardContent>
                 <div className="p-6 border-t space-y-3">
                      <p className="text-sm text-center text-muted-foreground font-medium">{report.nextBestAction}</p>
-                     <Button onClick={() => router.push('/planner')} className="w-full">
-                        <Target className="mr-2 h-4 w-4"/> Build my personal recovery plan
-                    </Button>
+                     <div className="flex flex-col sm:flex-row gap-3">
+                        <Button
+                            type="button"
+                            className="flex-1"
+                            disabled={!diagnosticId || isRecoveryPending}
+                            onClick={handleBuildRecoveryPlan}
+                        >
+                            {isRecoveryPending ? (
+                                <Loader className="mr-2 h-4 w-4 animate-spin" />
+                            ) : (
+                                <ShieldAlert className="mr-2 h-4 w-4" />
+                            )}
+                            Build personal recovery plan
+                        </Button>
+                        <Button type="button" variant="outline" className="flex-1" asChild>
+                            <Link href="/planner">
+                                <CalendarCheck className="mr-2 h-4 w-4" />
+                                Open AI study planner
+                            </Link>
+                        </Button>
+                     </div>
+                     {!diagnosticId ? (
+                        <p className="text-xs text-center text-muted-foreground">
+                            If recovery plan stays unavailable, complete the diagnostic again or use{" "}
+                            <Link href="/diagnostic-results" className="underline">
+                                Past diagnostics
+                            </Link>
+                            .
+                        </p>
+                     ) : null}
                 </div>
             </Card>
         );
     }
 
-    if (!subjectNames.length) {
-        return (
-            <Alert className="max-w-2xl mx-auto">
-                <AlertTitle>Add subjects first</AlertTitle>
-                <AlertDescription className="flex flex-col sm:flex-row sm:items-center gap-2 mt-2">
-                    <span>
-                        The diagnostic needs at least one subject name from your profile. If you already added
-                        subjects, open profile setup and save once so they are stored in the expected format.
-                    </span>
-                    <Button asChild variant="link" className="p-0 h-auto sm:ml-1">
-                        <Link href="/profile-setup">Go to profile setup <ArrowRight className="h-4 w-4 ml-1 inline" /></Link>
-                    </Button>
-                </AlertDescription>
-            </Alert>
-        );
-    }
-
     return (
-        <Card className="max-w-2xl mx-auto" key={subjectNames.join("|")}>
+        <Card className="max-w-2xl mx-auto">
             <CardHeader>
                 <CardTitle className="text-2xl">Academic diagnostic</CardTitle>
                 <CardDescription>
-                    Rate your confidence in each subject to generate your baseline report. Subjects from your profile ({subjectNames.length} subject{subjectNames.length === 1 ? "" : "s"}).
+                    Rate your confidence for each subject you want assessed—your profile subjects appear automatically when available, and you can add any others from the catalog or type a custom name.
                 </CardDescription>
             </CardHeader>
             <Form {...form}>
                 <form onSubmit={form.handleSubmit(onSubmit)}>
                     <CardContent className="space-y-8">
-                        {fields.map((field, index) => (
-                            <FormField
-                                key={field.id}
-                                control={form.control}
-                                name={`subjects.${index}.confidence`}
-                                render={({ field: { value, onChange } }) => (
-                                    <FormItem>
-                                        <div className="flex justify-between items-center mb-2">
-                                            <FormLabel className="text-base">{form.getValues(`subjects.${index}.subjectId`)}</FormLabel>
-                                            <span className="text-sm font-medium text-primary">{value}%</span>
-                                        </div>
-                                        <FormControl>
-                                            <Slider
-                                                value={[value]}
-                                                max={100}
-                                                step={1}
-                                                onValueChange={(vals) => onChange(vals[0])}
-                                                disabled={isPending}
-                                            />
-                                        </FormControl>
-                                        <div className="flex justify-between text-xs text-muted-foreground">
-                                            <span>Not confident</span>
-                                            <span>Very confident</span>
-                                        </div>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-                        ))}
+                        <div className="rounded-lg border p-4 space-y-4 bg-muted/30">
+                            <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
+                                <div className="flex-1 space-y-2">
+                                    <Label>Add from catalog</Label>
+                                    <Select
+                                        key={catalogPickKey}
+                                        onValueChange={(v) => addFromCatalog(v)}
+                                        disabled={isPending || catalogOptions.length === 0 || fields.length >= 24}
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue placeholder={
+                                                catalogOptions.length === 0
+                                                    ? 'All catalog subjects added'
+                                                    : 'Choose a subject to add…'
+                                            } />
+                                        </SelectTrigger>
+                                        <SelectContent className="max-h-72">
+                                            {catalogOptions.map((s) => (
+                                                <SelectItem key={s} value={s}>{s}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="flex-1 space-y-2">
+                                    <Label htmlFor="custom-subject">Or add custom subject</Label>
+                                    <div className="flex gap-2">
+                                        <Input
+                                            id="custom-subject"
+                                            placeholder="e.g. Latin, Astronomy…"
+                                            value={customSubject}
+                                            onChange={(e) => setCustomSubject(e.target.value)}
+                                            disabled={isPending || fields.length >= 24}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') {
+                                                    e.preventDefault();
+                                                    addCustomSubject();
+                                                }
+                                            }}
+                                        />
+                                        <Button
+                                            type="button"
+                                            variant="secondary"
+                                            disabled={isPending || fields.length >= 24 || !customSubject.trim()}
+                                            onClick={addCustomSubject}
+                                        >
+                                            <Plus className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                </div>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                                {fields.length} subject{fields.length === 1 ? '' : 's'} in this run (max 24). Remove rows you do not want assessed.
+                            </p>
+                        </div>
+
+                        {fields.length === 0 ? (
+                            <p className="text-sm text-muted-foreground text-center py-6">
+                                Add at least one subject above to run your diagnostic.
+                            </p>
+                        ) : (
+                            fields.map((field, index) => (
+                                <div key={field.id} className="border rounded-lg p-4 space-y-4">
+                                    <div className="flex justify-between items-start gap-2">
+                                        <p className="text-base font-semibold flex-1 pt-1">
+                                            {form.getValues(`subjects.${index}.subjectId`)}
+                                        </p>
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="icon"
+                                            className="shrink-0 text-muted-foreground hover:text-destructive"
+                                            disabled={isPending}
+                                            onClick={() => remove(index)}
+                                            aria-label="Remove subject"
+                                        >
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                    <FormField
+                                        control={form.control}
+                                        name={`subjects.${index}.confidence`}
+                                        render={({ field: { value, onChange } }) => (
+                                            <FormItem>
+                                                <div className="flex justify-between items-center mb-2">
+                                                    <span className="text-sm text-muted-foreground">Confidence</span>
+                                                    <span className="text-sm font-medium text-primary">{value}%</span>
+                                                </div>
+                                                <FormControl>
+                                                    <Slider
+                                                        value={[value]}
+                                                        max={100}
+                                                        step={1}
+                                                        onValueChange={(vals) => onChange(vals[0])}
+                                                        disabled={isPending}
+                                                    />
+                                                </FormControl>
+                                                <div className="flex justify-between text-xs text-muted-foreground">
+                                                    <span>Not confident</span>
+                                                    <span>Very confident</span>
+                                                </div>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                </div>
+                            ))
+                        )}
                     </CardContent>
                     <div className="p-6 border-t">
-                        <Button type="submit" className="w-full" disabled={isPending || subjectNames.length === 0}>
+                        <Button type="submit" className="w-full" disabled={isPending || fields.length === 0}>
                             {isPending ? <Loader className="animate-spin mr-2" /> : <Sparkles className="mr-2 h-4 w-4" />}
                             {isPending ? "Analyzing…" : "Generate my diagnostic report"}
                         </Button>

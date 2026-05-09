@@ -15,7 +15,10 @@ const SubjectConfidenceSchema = z.object({
 
 const GenerateDiagnosticBodySchema = z.object({
   userId: z.string().min(1, 'User ID is required.'),
-  subjects: z.array(SubjectConfidenceSchema).min(1, 'Add at least one subject in profile setup.'),
+  subjects: z
+    .array(SubjectConfidenceSchema)
+    .min(1, 'Add at least one subject to assess.')
+    .max(24, 'You can assess up to 24 subjects at once.'),
 });
 
 export async function generateDiagnosticReportAction(

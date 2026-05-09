@@ -32,14 +32,34 @@ export default function DashboardPage() {
   const [statsLoading, setStatsLoading] = useState(true);
 
   useEffect(() => {
-    if (user) {
-        getStudentDashboardStatsAction({ userId: user.uid }).then(result => {
-            if (result.stats) {
-                setStats(result.stats);
-            }
-            setStatsLoading(false);
-        });
+    if (!user) {
+      setStatsLoading(false);
+      return;
     }
+
+    let cancelled = false;
+
+    function loadStats(showSkeleton: boolean) {
+      if (showSkeleton) setStatsLoading(true);
+      getStudentDashboardStatsAction({ userId: user.uid }).then((result) => {
+        if (cancelled) return;
+        if (result.stats) {
+          setStats(result.stats);
+        }
+        setStatsLoading(false);
+      });
+    }
+
+    loadStats(true);
+
+    function onFocus() {
+      loadStats(false);
+    }
+    window.addEventListener("focus", onFocus);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", onFocus);
+    };
   }, [user]);
 
   const loading = profileLoading || statsLoading;

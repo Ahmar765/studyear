@@ -13,6 +13,67 @@ import { getStudentProgressAction } from "./progress-actions";
 import { adminDb } from "@/lib/firebase/admin-app";
 import { differenceInCalendarDays } from 'date-fns';
 
+function firestoreCreatedMs(data: admin.firestore.DocumentData): number {
+  const c = data.createdAt;
+  if (c && typeof (c as admin.firestore.Timestamp).toMillis === 'function') {
+    return (c as admin.firestore.Timestamp).toMillis();
+  }
+  return 0;
+}
+
+/**
+ * Prefer the Grade Prediction tool output, then dashboard state, diagnostic baseline, profile current grade.
+ */
+function resolveDashboardPredictedGrade(params: {
+  dashboardState: Record<string, unknown>;
+  predictionDocs: admin.firestore.QueryDocumentSnapshot[];
+  diagnosticDocs: admin.firestore.QueryDocumentSnapshot[];
+  profileData: admin.firestore.DocumentData | undefined;
+}): string {
+  const { dashboardState, predictionDocs, diagnosticDocs, profileData } = params;
+
+  const sortedPred = [...predictionDocs].sort(
+    (a, b) => firestoreCreatedMs(b.data()) - firestoreCreatedMs(a.data()),
+  );
+  const latestPred = sortedPred[0]?.data();
+  if (latestPred && typeof latestPred.predictedGrade === 'string') {
+    const pg = latestPred.predictedGrade.trim();
+    if (pg) {
+      const sub =
+        typeof latestPred.subject === 'string'
+          ? latestPred.subject.trim()
+          : '';
+      return sub ? `${pg} (${sub})` : pg;
+    }
+  }
+
+  const sortedDiag = [...diagnosticDocs].sort(
+    (a, b) => firestoreCreatedMs(b.data()) - firestoreCreatedMs(a.data()),
+  );
+  const latestDiag = sortedDiag[0]?.data();
+  const position = latestDiag?.predictedCurrentPosition;
+  if (typeof position === 'string' && position.trim()) {
+    return position.trim();
+  }
+
+  const dg = dashboardState.predictedGrade;
+  if (typeof dg === 'string' && dg.trim() && dg.trim().toUpperCase() !== 'N/A') {
+    const pg = dg.trim();
+    const sub =
+      typeof dashboardState.predictedGradeSubject === 'string'
+        ? String(dashboardState.predictedGradeSubject).trim()
+        : '';
+    return sub ? `${pg} (${sub})` : pg;
+  }
+
+  const cg = profileData?.currentGrade;
+  if (typeof cg === 'string' && cg.trim()) {
+    return cg.trim();
+  }
+
+  return 'N/A';
+}
+
 // This is the new structure for the recommendation object
 interface Recommendation {
   title: string;
@@ -216,14 +277,40 @@ export async function getStudentDashboardStatsAction(params: {
     const { userId } = parsed.data;
 
     try {
-        const [dashboardStateSnap, lessonsEventsSnap, sessionsSnap] = await Promise.all([
+        const [
+            dashboardStateSnap,
+            lessonsEventsSnap,
+            sessionsSnap,
+            predictionsSnap,
+            diagnosticSnap,
+            profileSnap,
+        ] = await Promise.all([
             adminDb.collection('student_dashboard_states').doc(userId).get(),
             adminDb.collection('learning_events').where('studentId', '==', userId).limit(500).get(),
             adminDb.collection('users').doc(userId).collection('sessions').orderBy('startedAt', 'desc').get(),
+            adminDb
+                .collection('student_profiles')
+                .doc(userId)
+                .collection('predictions')
+                .limit(80)
+                .get(),
+            adminDb
+                .collection('diagnostic_results')
+                .where('studentId', '==', userId)
+                .limit(40)
+                .get(),
+            adminDb.collection('student_profiles').doc(userId).get(),
         ]);
 
-        const dashboardState = dashboardStateSnap.exists ? dashboardStateSnap.data() : {};
+        const dashboardState = dashboardStateSnap.exists ? dashboardStateSnap.data() ?? {} : {};
         const weakestSubject = dashboardState?.weakSubjects?.[0]?.name || 'N/A';
+
+        const predictedGrade = resolveDashboardPredictedGrade({
+          dashboardState,
+          predictionDocs: predictionsSnap.docs,
+          diagnosticDocs: diagnosticSnap.docs,
+          profileData: profileSnap.exists ? profileSnap.data() : undefined,
+        });
         const lessonsCompleted = lessonsEventsSnap.docs.filter(
             (d) => d.data().type === 'LESSON_COMPLETED',
         ).length;
@@ -270,7 +357,7 @@ export async function getStudentDashboardStatsAction(params: {
                 studyStreak,
                 lessonsCompleted,
                 weakestSubject,
-                predictedGrade: dashboardState?.predictedGrade || 'N/A'
+                predictedGrade,
             },
             error: null
         };

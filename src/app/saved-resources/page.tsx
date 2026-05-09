@@ -13,6 +13,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/use-auth";
 import { resourceMetadata, ResourceType } from "@/data/academic";
+import { savedResourceViewHref } from "@/lib/saved-resource-view-href";
 
 export default function SavedResourcesPage() {
   const { user, loading: authLoading } = useAuth();
@@ -107,6 +108,7 @@ export default function SavedResourcesPage() {
                     ? resourceMetadata[resource.typeKey as ResourceType]
                     : { title: resource.typeKey, icon: Bookmark };
                 const Icon = meta.icon;
+                const viewHref = savedResourceViewHref(resource);
                 return (
                   <Card
                     key={resource.id}
@@ -124,8 +126,8 @@ export default function SavedResourcesPage() {
                         Saved on {resource.createdAt}
                       </p>
                     </div>
-                    <Button variant="secondary" size="sm" className="w-full">
-                      View
+                    <Button variant="secondary" size="sm" className="w-full" asChild>
+                      <Link href={viewHref}>View</Link>
                     </Button>
                   </Card>
                 );

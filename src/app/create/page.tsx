@@ -24,7 +24,7 @@ const tools = [
     description: "Generate a structured essay plan with a thesis, body paragraphs, and conclusion.",
     href: "/create/essay-plan",
     icon: FilePen,
-    entitlement: "AI_STUDY_PLAN",
+    entitlement: "AI_ESSAY_PLAN",
     enabled: true,
   },
   {
@@ -48,7 +48,7 @@ const tools = [
     description: "Generate concise summaries or revision notes from a piece of text.",
     href: "/summarizer",
     icon: FileSignature,
-    entitlement: "AI_EXPLANATION",
+    entitlement: "TOPIC_SUMMARY",
     enabled: true,
   },
   {

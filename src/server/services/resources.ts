@@ -114,4 +114,9 @@ export const savedResourceService = {
   },
 };
 
-    
+/** @deprecated Prefer `savedResourceService.save`; kept for existing imports. */
+export function saveStudentResource(
+  input: Parameters<typeof savedResourceService.save>[0],
+) {
+  return savedResourceService.save(input);
+}

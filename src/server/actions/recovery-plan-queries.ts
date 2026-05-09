@@ -4,6 +4,7 @@ import { adminDb } from "@/lib/firebase/admin-app";
 import { verifyIdTokenString } from "@/server/lib/auth";
 import * as admin from "firebase-admin";
 import type { DocumentData } from "firebase-admin/firestore";
+import type { RecoveryStudentAcademicContext } from "@/server/lib/recovery-plan-context";
 
 export type RecoveryPlanListItem = {
   id: string;
@@ -35,6 +36,7 @@ export type RecoveryPlanDetailPayload = {
   urgentFocusAreas: string[];
   dailyNonNegotiables: string[];
   successMetrics: string[];
+  studentAcademicContext?: RecoveryStudentAcademicContext | null;
 };
 
 function createdMs(data: DocumentData): number {
@@ -109,6 +111,12 @@ export async function fetchMyRecoveryPlan(
       ? (data.weeklyRecoveryPlan as RecoveryPlanWeek[])
       : [];
 
+    const rawCtx = data.studentAcademicContext as unknown;
+    const studentAcademicContext =
+      rawCtx && typeof rawCtx === "object"
+        ? (rawCtx as RecoveryStudentAcademicContext)
+        : null;
+
     const plan: RecoveryPlanDetailPayload = {
       id: docSnap.id,
       title: String(data.title ?? ""),
@@ -126,6 +134,7 @@ export async function fetchMyRecoveryPlan(
       successMetrics: Array.isArray(data.successMetrics)
         ? data.successMetrics
         : [],
+      ...(studentAcademicContext ? { studentAcademicContext } : {}),
     };
 
     return { ok: true, plan };

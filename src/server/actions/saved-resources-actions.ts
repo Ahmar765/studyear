@@ -9,6 +9,12 @@ export type SavedResourceListItem = {
   title: string;
   typeKey: string;
   createdAt: string;
+  linkedEntityId?: string | null;
+};
+
+export type SavedResourceDetail = SavedResourceListItem & {
+  content: unknown;
+  sourceInput?: string | null;
 };
 
 export async function fetchMySavedResources(
@@ -42,6 +48,12 @@ export async function fetchMySavedResources(
     const resources: SavedResourceListItem[] = sortedDocs.slice(0, 50).map((doc) => {
       const data = doc.data();
       const ts = data.createdAt as admin.firestore.Timestamp | undefined;
+      const linkedRaw = data.linkedEntityId;
+      const linkedEntityId =
+        linkedRaw != null && String(linkedRaw).trim() !== ""
+          ? String(linkedRaw).trim()
+          : null;
+
       return {
         id: doc.id,
         title: String(data.title ?? "Untitled"),
@@ -49,6 +61,7 @@ export async function fetchMySavedResources(
         createdAt: ts?.toDate()
           ? ts.toDate().toLocaleDateString()
           : "",
+        linkedEntityId,
       };
     });
 
@@ -59,6 +72,62 @@ export async function fetchMySavedResources(
       ok: false,
       error:
         e instanceof Error ? e.message : "Failed to load saved resources.",
+    };
+  }
+}
+
+export async function fetchSavedResourceById(
+  idToken: string,
+  resourceId: string,
+): Promise<
+  | { ok: true; resource: SavedResourceDetail }
+  | { ok: false; error: string }
+> {
+  try {
+    const user = await verifyIdTokenString(idToken);
+    if (!user) return { ok: false, error: "Unauthorized" };
+
+    const docSnap = await adminDb
+      .collection("users")
+      .doc(user.uid)
+      .collection("saved_resources")
+      .doc(resourceId)
+      .get();
+
+    if (!docSnap.exists) {
+      return { ok: false, error: "Not found" };
+    }
+
+    const data = docSnap.data();
+    if (!data) return { ok: false, error: "Not found" };
+
+    const ts = data.createdAt as admin.firestore.Timestamp | undefined;
+    const linkedRaw = data.linkedEntityId;
+    const linkedEntityId =
+      linkedRaw != null && String(linkedRaw).trim() !== ""
+        ? String(linkedRaw).trim()
+        : null;
+
+    const resource: SavedResourceDetail = {
+      id: docSnap.id,
+      title: String(data.title ?? "Untitled"),
+      typeKey: String(data.type ?? "UNKNOWN"),
+      createdAt: ts?.toDate()
+        ? ts.toDate().toLocaleDateString()
+        : "",
+      linkedEntityId,
+      content: data.content ?? null,
+      sourceInput:
+        data.sourceInput != null ? String(data.sourceInput) : null,
+    };
+
+    return { ok: true, resource };
+  } catch (e: unknown) {
+    console.error("fetchSavedResourceById:", e);
+    return {
+      ok: false,
+      error:
+        e instanceof Error ? e.message : "Failed to load resource.",
     };
   }
 }

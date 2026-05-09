@@ -8,13 +8,13 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MessageSquareCheck, Sparkles, Bot, Check, X, BookText, Lock, Award, BookOpen, UserCheck, MessageCircle, BarChartHorizontal } from "lucide-react";
+import { MessageSquareCheck, Sparkles, Bot, Check, X, BookText, Award, BookOpen, UserCheck, MessageCircle, BarChartHorizontal } from "lucide-react";
 import { WrittenFeedbackOutput } from "@/server/ai/flows/written-answer-feedback";
 import { generateAnswerFeedback } from "@/server/actions/feedback-actions";
 import { Separator } from "@/components/ui/separator";
 import { useUserProfile } from "@/hooks/use-user-profile";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAuth } from "@/hooks/use-auth";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
@@ -48,9 +48,6 @@ export default function FeedbackForm({ subjectsByLevel }: FeedbackFormProps) {
   const { toast } = useToast();
   const { userProfile } = useUserProfile();
   const { user } = useAuth();
-  const isPremium = userProfile?.subscription === 'premium';
-
-
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
@@ -83,7 +80,7 @@ export default function FeedbackForm({ subjectsByLevel }: FeedbackFormProps) {
   };
   
   const subjectsForLevel = userProfile?.target?.level ? subjectsByLevel[userProfile.target.level] || [] : [];
-  const formDisabled = isPending || !isPremium || subjectsForLevel.length === 0 || !user;
+  const formDisabled = isPending || subjectsForLevel.length === 0 || !user;
 
   return (
     <div className="grid lg:grid-cols-2 gap-8">
@@ -132,15 +129,6 @@ export default function FeedbackForm({ subjectsByLevel }: FeedbackFormProps) {
               />
             </div>
 
-            {user && !isPremium && (
-                <Alert>
-                    <Lock className="h-4 w-4" />
-                    <AlertTitle>Premium Feature</AlertTitle>
-                    <AlertDescription>
-                        Upgrade to StudYear Pro to get feedback on your answers.
-                    </AlertDescription>
-                </Alert>
-            )}
              {subjectsForLevel.length === 0 && user && (
                 <Alert variant="destructive">
                     <AlertDescription>
@@ -150,12 +138,7 @@ export default function FeedbackForm({ subjectsByLevel }: FeedbackFormProps) {
             )}
 
             <Button type="submit" disabled={formDisabled}>
-                 {user && !isPremium ? (
-                    <>
-                        <Lock className="mr-2 h-4 w-4" />
-                        Upgrade to Use
-                    </>
-                 ) : isPending ? (
+                 {isPending ? (
                     "Getting Feedback..."
                  ) : (
                     <>

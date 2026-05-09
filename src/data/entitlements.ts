@@ -2,44 +2,34 @@ import type { SubscriptionType } from "@/server/schemas";
 import { FeatureKey } from "./acu-costs";
 
 export const PLAN_ENTITLEMENTS: Record<SubscriptionType, FeatureKey[]> = {
-  /** All keys here are ACU-gated in billing; subscription tiers add allowances / bundles, not hard blocks. */
+  /**
+   * Free tier: core tutoring, diagnostics, study planner, and written reviews.
+   * Premium student toolkit (course generator, quizzes, flashcards, summaries, visuals, etc.)
+   * requires STUDENT_PREMIUM or STUDENT_PREMIUM_PLUS.
+   */
   FREE: [
     "AI_EXPLANATION",
     "AI_INTERACTIVE_LESSON",
     "AI_TUTOR_SESSION",
     "AI_STUDY_PLAN",
-    "AI_MIND_MAP",
     "DIAGNOSTIC_REPORT",
     "RECOVERY_PLAN",
-    "AI_QUIZ_GENERATION",
     "EXAM_SIMULATION",
     "GRADE_PREDICTION",
     "AI_FEEDBACK",
     "AI_ASSIGNMENT_REVIEW",
     "AI_ESSAY_REVIEW",
     "AI_DISSERTATION_REVIEW",
-    "AI_COURSE_GENERATOR",
-    "FORMULA_SHEET",
-    "TOPIC_SUMMARY",
-    "VISUAL_DRAWING",
-    "EDUCATIONAL_IMAGE",
-    "BAR_GRAPH",
-    "LINE_GRAPH",
-    "PIE_CHART",
-    "SCATTER_PLOT",
-    "HISTOGRAM",
-    "PICTOGRAPH",
-    "COORDINATE_GRAPH",
-    "GEOMETRY_DIAGRAM",
-    "FUNCTION_GRAPH",
-    "GRAPH_THEORY_DIAGRAM",
   ],
   STUDENT_PREMIUM: [
     "AI_EXPLANATION",
     "AI_QUIZ_GENERATION",
+    "AI_FLASHCARDS",
     "AI_FEEDBACK",
     "AI_STUDY_PLAN",
+    "AI_ESSAY_PLAN",
     "AI_COURSE_GENERATOR",
+    "TOPIC_SUMMARY",
     "AI_MIND_MAP",
     "FORMULA_SHEET",
     "AI_INTERACTIVE_LESSON",
@@ -65,9 +55,12 @@ export const PLAN_ENTITLEMENTS: Record<SubscriptionType, FeatureKey[]> = {
   STUDENT_PREMIUM_PLUS: [
     "AI_EXPLANATION",
     "AI_QUIZ_GENERATION",
+    "AI_FLASHCARDS",
     "AI_FEEDBACK",
     "AI_STUDY_PLAN",
+    "AI_ESSAY_PLAN",
     "AI_COURSE_GENERATOR",
+    "TOPIC_SUMMARY",
     "AI_MIND_MAP",
     "FORMULA_SHEET",
     "AI_INTERACTIVE_LESSON",
@@ -101,9 +94,12 @@ export const PLAN_ENTITLEMENTS: Record<SubscriptionType, FeatureKey[]> = {
   ADMIN: [ // Admins get all entitlements
     "AI_EXPLANATION",
     "AI_QUIZ_GENERATION",
+    "AI_FLASHCARDS",
     "AI_FEEDBACK",
     "AI_STUDY_PLAN",
+    "AI_ESSAY_PLAN",
     "AI_COURSE_GENERATOR",
+    "TOPIC_SUMMARY",
     "AI_MIND_MAP",
     "FORMULA_SHEET",
     "AI_INTERACTIVE_LESSON",

@@ -99,6 +99,19 @@ export default function RecoveryPlanDetailPage() {
   }
 
   const plan = payload.plan;
+  const academicCtx = plan.studentAcademicContext;
+  const stageLabel = academicCtx
+    ? [academicCtx.studyLevel, academicCtx.yearGroup].filter(Boolean).join(" · ")
+    : "";
+  const showAcademicBanner =
+    !!academicCtx &&
+    !!(
+      stageLabel ||
+      academicCtx.overallCurrentGrade ||
+      academicCtx.overallTargetGrade ||
+      academicCtx.examBoard ||
+      (academicCtx.subjectGradeDetails?.length ?? 0) > 0
+    );
 
   return (
     <div className="flex-1 space-y-8 p-4 md:p-8">
@@ -109,6 +122,57 @@ export default function RecoveryPlanDetailPage() {
           {new Date(plan.createdAt).toLocaleDateString()}. Let&apos;s get you back on track.
         </p>
       </div>
+
+      {showAcademicBanner ? (
+        <Card className="border-dashed bg-muted/30">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">
+              Tailored to your stage and subjects
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm text-muted-foreground">
+            {stageLabel ? (
+              <p>
+                <span className="font-medium text-foreground">Stage: </span>
+                {stageLabel}
+              </p>
+            ) : null}
+            {academicCtx.overallCurrentGrade || academicCtx.overallTargetGrade ? (
+              <p>
+                <span className="font-medium text-foreground">Overall grades: </span>
+                {academicCtx.overallCurrentGrade ?? "—"}
+                {" → "}
+                {academicCtx.overallTargetGrade ?? "—"}
+              </p>
+            ) : null}
+            {academicCtx.examBoard ? (
+              <p>
+                <span className="font-medium text-foreground">Exam board: </span>
+                {academicCtx.examBoard}
+              </p>
+            ) : null}
+            {academicCtx.subjectGradeDetails?.length ? (
+              <div className="space-y-1">
+                <p className="font-medium text-foreground">Subjects in this plan</p>
+                <ul className="list-disc pl-5 space-y-1">
+                  {academicCtx.subjectGradeDetails.map((s) => (
+                    <li key={s.subjectName}>
+                      <span className="text-foreground">{s.subjectName}</span>
+                      {(s.currentGrade || s.targetGrade) && (
+                        <span>
+                          {" "}
+                          ({s.currentGrade ?? "?"}
+                          {s.targetGrade ? ` → ${s.targetGrade}` : ""})
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
 
       <div className="grid lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-8">

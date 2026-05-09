@@ -136,11 +136,30 @@ export async function generateGradePredictionAction(input: z.infer<typeof Action
 
         const result = await gateway.execute(context, gatewayInput, generateExamPrediction);
         
-        const predictionRef = adminDb.collection('student_profiles').doc(input.userId).collection('predictions').doc();
+        const predictionRef = adminDb
+            .collection('student_profiles')
+            .doc(input.userId)
+            .collection('predictions')
+            .doc();
         await predictionRef.set({
             ...result.output,
+            subject: input.subject,
+            targetGrade: input.targetGrade,
+            progressAtPrediction: input.progress,
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
         });
+
+        await adminDb.collection('student_dashboard_states').doc(input.userId).set(
+            {
+                studentId: input.userId,
+                predictedGrade: result.output.predictedGrade,
+                predictedGradeSubject: input.subject,
+                predictedGradeTarget: input.targetGrade,
+                predictedGradeUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            },
+            { merge: true },
+        );
 
         return { success: true, prediction: result.output };
 
