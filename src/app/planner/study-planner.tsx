@@ -18,7 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarIcon } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -49,6 +49,13 @@ const getCellTextColor = (subject: string) => {
     }
     const h = hash % 360;
     return `hsl(${h}, 80%, 25%)`;
+};
+
+function sessionBadgeVariant(priority: string): "destructive" | "secondary" | "outline" {
+    const p = priority.toUpperCase();
+    if (p === "HIGH") return "destructive";
+    if (p === "MEDIUM") return "secondary";
+    return "outline";
 }
 
 
@@ -57,6 +64,7 @@ export default function StudyPlanner({ subjectsByLevel, grades }: StudyPlannerPr
     const { userProfile, loading: profileLoading } = useUserProfile();
     const [planScope, setPlanScope] = useState<"all" | "single">("all");
     const [singleSubjectName, setSingleSubjectName] = useState("");
+    const [scopeInitialized, setScopeInitialized] = useState(false);
     const [gradeOverrides, setGradeOverrides] = useState<Record<string, string>>({});
     const [examDate, setExamDate] = useState<Date>();
     const [generatedPlan, setGeneratedPlan] = useState<GenerateStudyPlanOutput | null>(null);
@@ -69,11 +77,28 @@ export default function StudyPlanner({ subjectsByLevel, grades }: StudyPlannerPr
         [userProfile],
     );
 
+    /** Prefer single-subject plans when the profile lists multiple courses (e.g. Construction-only exam prep). */
+    useEffect(() => {
+        if (profileLoading || scopeInitialized) return;
+        if (profileSubjectRows.length > 1) {
+            setPlanScope("single");
+            const construction = profileSubjectRows.find((r) =>
+                /construction/i.test(r.name),
+            );
+            const pick = construction ?? profileSubjectRows[0];
+            if (pick) setSingleSubjectName(pick.name);
+        }
+        setScopeInitialized(true);
+    }, [profileLoading, profileSubjectRows, scopeInitialized]);
+
     useEffect(() => {
         if (planScope !== "single") return;
         if (singleSubjectName) return;
-        const first = profileSubjectRows[0]?.name;
-        if (first) setSingleSubjectName(first);
+        const construction = profileSubjectRows.find((r) =>
+            /construction/i.test(r.name),
+        );
+        const pick = construction ?? profileSubjectRows[0];
+        if (pick) setSingleSubjectName(pick.name);
     }, [planScope, singleSubjectName, profileSubjectRows]);
 
     const subjectDetails = useMemo(() => {
@@ -93,14 +118,33 @@ export default function StudyPlanner({ subjectsByLevel, grades }: StudyPlannerPr
         if (!examDate) return null;
         try {
             const iso = format(examDate, "yyyy-MM-dd");
-            const { planDaysInclusive, planStartDate, examDate: endIso } = buildStudyPlanSkeleton(iso);
-            return `The AI will build exactly ${planDaysInclusive} calendar day${
+            const {
+                planDaysInclusive,
+                planStartDate,
+                planLastStudyDate,
+                examDate: examIso,
+            } = buildStudyPlanSkeleton(iso);
+            if (planLastStudyDate === examIso) {
+                return `The AI will schedule ${planDaysInclusive} calendar day${
+                    planDaysInclusive === 1 ? "" : "s"
+                } (${planStartDate}); your exam is also on ${examIso}.`;
+            }
+            return `Exactly ${planDaysInclusive} study day${
                 planDaysInclusive === 1 ? "" : "s"
-            } (${planStartDate} through ${endIso})—no extra days after your exam.`;
+            }: ${planStartDate} through ${planLastStudyDate}. Exam (${examIso}) is not filled as revision—the plan stops the day before.`;
         } catch {
             return null;
         }
     }, [examDate]);
+
+    const timelineDays = useMemo(() => {
+        if (!generatedPlan) return null;
+        const rows = generatedPlan.weeklyPlans.flatMap((w) => w.dailyPlans);
+        if (!rows.length || rows.some((r) => !r.calendarDate)) return null;
+        return [...rows].sort((a, b) =>
+            (a.calendarDate ?? "").localeCompare(b.calendarDate ?? ""),
+        );
+    }, [generatedPlan]);
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
@@ -317,7 +361,9 @@ export default function StudyPlanner({ subjectsByLevel, grades }: StudyPlannerPr
                 <Card className="min-h-full">
                     <CardHeader>
                         <CardTitle>Your AI-Generated Study Plan</CardTitle>
-                        <CardDescription>Your personalized schedule will appear here. Click on any session to find relevant resources.</CardDescription>
+                        <CardDescription>
+                            Your personalized schedule appears below by date. Tap a session to search matching resources.
+                        </CardDescription>
                     </CardHeader>
                     <CardContent>
                         {isPending ? (
@@ -332,10 +378,95 @@ export default function StudyPlanner({ subjectsByLevel, grades }: StudyPlannerPr
                                     </CardHeader>
                                     <CardContent>
                                         <p className="text-sm text-muted-foreground">{generatedPlan.planSummary}</p>
+                                        {generatedPlan.weeklyPlans[0]?.weeklyGoal ? (
+                                            <p className="text-sm font-medium mt-3">
+                                                {generatedPlan.weeklyPlans[0].weeklyGoal}
+                                            </p>
+                                        ) : null}
                                     </CardContent>
                                 </Card>
 
-                                {generatedPlan.weeklyPlans.map(week => (
+                                {timelineDays ? (
+                                    <div className="space-y-4">
+                                        {timelineDays.map((dp) => (
+                                            <div
+                                                key={dp.calendarDate}
+                                                className="border rounded-lg overflow-hidden bg-card"
+                                            >
+                                                <div className="bg-muted/50 px-4 py-2 border-b">
+                                                    <p className="font-semibold">
+                                                        {format(
+                                                            parseISO(dp.calendarDate!),
+                                                            "EEEE, d MMMM yyyy",
+                                                        )}
+                                                    </p>
+                                                    <p className="text-xs text-muted-foreground">{dp.day}</p>
+                                                </div>
+                                                <div className="p-3 grid gap-3 sm:grid-cols-3">
+                                                    {timeSlots.map((slot) => {
+                                                        const session = dp.sessions.find((s) => s.time === slot);
+                                                        return (
+                                                            <div key={slot} className="min-h-[100px]">
+                                                                <p className="text-xs font-medium text-muted-foreground mb-1">
+                                                                    {slot}
+                                                                </p>
+                                                                {session && session.subject !== "Free" ? (
+                                                                    <Link
+                                                                        href={`/search?subject=${encodeURIComponent(session.subject)}&query=${encodeURIComponent(session.topic || "")}`}
+                                                                    >
+                                                                        <div
+                                                                            className="p-2 rounded-md h-full flex flex-col justify-between hover:ring-2 hover:ring-primary transition-all min-h-[92px]"
+                                                                            style={{
+                                                                                backgroundColor: getCellColor(
+                                                                                    session.subject,
+                                                                                ),
+                                                                                color: getCellTextColor(
+                                                                                    session.subject,
+                                                                                ),
+                                                                            }}
+                                                                        >
+                                                                            <div>
+                                                                                <div className="flex justify-between items-start gap-1">
+                                                                                    <p className="font-semibold text-sm leading-tight">
+                                                                                        {session.subject}
+                                                                                    </p>
+                                                                                    <Badge
+                                                                                        variant={sessionBadgeVariant(
+                                                                                            session.priority,
+                                                                                        )}
+                                                                                        className="text-xs shrink-0"
+                                                                                    >
+                                                                                        {session.priority}
+                                                                                    </Badge>
+                                                                                </div>
+                                                                                <p className="text-xs mt-1">
+                                                                                    {session.topic}
+                                                                                </p>
+                                                                            </div>
+                                                                            <p className="text-xs font-medium mt-2 flex items-center gap-1 opacity-80">
+                                                                                <Wand2 className="h-3 w-3 shrink-0" />
+                                                                                {session.revisionMethod}
+                                                                            </p>
+                                                                        </div>
+                                                                    </Link>
+                                                                ) : session ? (
+                                                                    <div className="p-2 rounded-md h-full flex items-center justify-center bg-muted/40 min-h-[92px]">
+                                                                        <p className="font-semibold text-sm text-muted-foreground">
+                                                                            {session.subject}
+                                                                        </p>
+                                                                    </div>
+                                                                ) : (
+                                                                    <div className="rounded-md border border-dashed min-h-[92px] bg-muted/20" />
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                generatedPlan.weeklyPlans.map((week) => (
                                     <div key={week.week}>
                                         <h3 className="text-2xl font-bold mb-2">Week {week.week}</h3>
                                         <p className="text-muted-foreground mb-4 font-semibold">{week.weeklyGoal}</p>
@@ -365,7 +496,7 @@ export default function StudyPlanner({ subjectsByLevel, grades }: StudyPlannerPr
                                                                                 <div>
                                                                                     <div className="flex justify-between items-center">
                                                                                         <p className="font-semibold text-sm">{session.subject}</p>
-                                                                                        <Badge variant={session.priority === 'High' ? 'destructive' : session.priority === 'Medium' ? 'secondary' : 'outline'} className="text-xs">{session.priority}</Badge>
+                                                                                        <Badge variant={sessionBadgeVariant(session.priority)} className="text-xs">{session.priority}</Badge>
                                                                                     </div>
                                                                                     <p className="text-xs mt-1">{session.topic}</p>
                                                                                 </div>
@@ -386,7 +517,8 @@ export default function StudyPlanner({ subjectsByLevel, grades }: StudyPlannerPr
                                             </Table>
                                         </div>
                                     </div>
-                                ))}
+                                ))
+                                )}
                             </div>
                         ) : (
                             <div className="text-center text-muted-foreground py-16">

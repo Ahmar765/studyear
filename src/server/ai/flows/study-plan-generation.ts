@@ -21,6 +21,10 @@ const DailySessionSchema = z.object({
 
 const DailyPlanSchema = z.object({
   day: z.string(),
+  calendarDate: z
+    .string()
+    .optional()
+    .describe("Calendar date YYYY-MM-DD for this row when aligned to planSkeleton."),
   sessions: z.array(DailySessionSchema),
 });
 
@@ -62,7 +66,9 @@ export const GenerateStudyPlanInputSchema = z
       .min(1)
       .max(366)
       .optional()
-      .describe("Exact number of calendar days from planStartDate through examDate inclusive."),
+      .describe(
+        "Exact count of study calendar days from planStartDate through last revision day (exam day excluded unless same-day).",
+      ),
     planSkeleton: z
       .array(PlanWeekSkeletonSchema)
       .optional()
@@ -104,6 +110,165 @@ export const GenerateStudyPlanOutputSchema = z.object({
 });
 export type GenerateStudyPlanOutput = z.infer<typeof GenerateStudyPlanOutputSchema>;
 
+type DailyPlanRow = GenerateStudyPlanOutput["weeklyPlans"][number]["dailyPlans"][number];
+
+function defaultSession(subject: string): DailyPlanRow["sessions"][number] {
+  return {
+    time: "Evening",
+    subject,
+    topic: "Structured revision and practice",
+    revisionMethod: "Review notes, recall, and exam-style questions",
+    priority: "MEDIUM",
+  };
+}
+
+function dailyPlansWithSessions(
+  rows: DailyPlanRow[],
+  subjectFallback: string,
+): DailyPlanRow[] {
+  return rows.map((dp) =>
+    dp.sessions.length > 0
+      ? dp
+      : { ...dp, sessions: [defaultSession(subjectFallback)] },
+  );
+}
+
+/**
+ * Model outputs often use the wrong number of weeks/days. Flatten AI days in order,
+ * truncate or pad to match the skeleton day count, then rebuild weeklyPlans so the
+ * calendar always matches planSkeleton.
+ */
+function reshapePlanToSkeleton(
+  plan: GenerateStudyPlanOutput,
+  sk: NonNullable<GenerateStudyPlanInput["planSkeleton"]>,
+  expectedTotal: number,
+  subjectFallback: string,
+): GenerateStudyPlanOutput {
+  let flat = dailyPlansWithSessions(
+    plan.weeklyPlans.flatMap((w) => w.dailyPlans),
+    subjectFallback,
+  );
+
+  if (flat.length > expectedTotal) {
+    flat = flat.slice(0, expectedTotal);
+  }
+  while (flat.length < expectedTotal) {
+    flat.push({
+      day: "Monday",
+      sessions: [defaultSession(subjectFallback)],
+    });
+  }
+
+  const aiWeeks = plan.weeklyPlans;
+  const newWeekly: GenerateStudyPlanOutput["weeklyPlans"] = [];
+  let cursor = 0;
+  for (let i = 0; i < sk.length; i++) {
+    const row = sk[i];
+    const chunk = flat.slice(cursor, cursor + row.days.length);
+    cursor += row.days.length;
+    const weeklyGoal =
+      aiWeeks[i]?.weeklyGoal ??
+      aiWeeks[aiWeeks.length - 1]?.weeklyGoal ??
+      "Keep momentum toward your exam goals.";
+    newWeekly.push({
+      week: row.week,
+      weeklyGoal,
+      dailyPlans: chunk.map((dp, j) => ({
+        ...dp,
+        day: row.days[j].weekday,
+        calendarDate: row.days[j].calendarDate,
+      })),
+    });
+  }
+
+  return { ...plan, weeklyPlans: newWeekly };
+}
+
+/**
+ * When counts already match the skeleton, only patch authoritative labels.
+ * Otherwise reshape deterministically (truncate/pad flattened AI days).
+ */
+function alignPlanToSkeleton(
+  plan: GenerateStudyPlanOutput,
+  skeleton: GenerateStudyPlanInput["planSkeleton"],
+  planDaysInclusive: number | undefined,
+  subjectFallback: string,
+): GenerateStudyPlanOutput {
+  const sk = skeleton;
+  if (!sk?.length) return plan;
+
+  const expectedTotal =
+    planDaysInclusive ?? sk.reduce((n, w) => n + w.days.length, 0);
+
+  const strictOk =
+    plan.weeklyPlans.length === sk.length &&
+    plan.weeklyPlans.every((wk, i) => wk.dailyPlans.length === sk[i].days.length);
+
+  if (strictOk) {
+    const alignedWeekly = plan.weeklyPlans.map((wk, i) => ({
+      ...wk,
+      week: sk[i].week,
+      dailyPlans: wk.dailyPlans.map((dp, j) => ({
+        ...dp,
+        day: sk[i].days[j].weekday,
+        calendarDate: sk[i].days[j].calendarDate,
+      })),
+    }));
+    return { ...plan, weeklyPlans: alignedWeekly };
+  }
+
+  return reshapePlanToSkeleton(plan, sk, expectedTotal, subjectFallback);
+}
+
+/**
+ * Forces every session.subject onto the planner allowlist so wrong labels from the model
+ * (e.g. Maths when only Construction was requested) never reach the UI or Firestore.
+ */
+function coercePlanToSubjectAllowlist(
+  plan: GenerateStudyPlanOutput,
+  subjects: GenerateStudyPlanInput["subjects"],
+): GenerateStudyPlanOutput {
+  if (!subjects?.length) return plan;
+
+  const canonNames = subjects
+    .map((s) => String(s.name ?? "").trim())
+    .filter(Boolean);
+  if (!canonNames.length) return plan;
+
+  const lowerToCanon = new Map(
+    canonNames.map((n) => [n.toLowerCase(), n] as const),
+  );
+
+  const resolveSubject = (raw: string): string => {
+    const t = raw.trim();
+    if (!t || t === "Free") return t;
+    const hit = lowerToCanon.get(t.toLowerCase());
+    if (hit) return hit;
+    if (canonNames.length === 1) return canonNames[0];
+    const tl = t.toLowerCase();
+    for (const n of canonNames) {
+      const nl = n.toLowerCase();
+      if (tl.includes(nl) || nl.includes(tl)) return n;
+    }
+    return canonNames[0];
+  };
+
+  return {
+    ...plan,
+    weeklyPlans: plan.weeklyPlans.map((w) => ({
+      ...w,
+      dailyPlans: w.dailyPlans.map((dp) => ({
+        ...dp,
+        sessions: dp.sessions.map((sess) =>
+          !sess.subject || sess.subject === "Free"
+            ? sess
+            : { ...sess, subject: resolveSubject(sess.subject) },
+        ),
+      })),
+    })),
+  };
+}
+
 
 const prompt = ai.definePrompt({
   name: 'studyPlanGenerationPrompt',
@@ -119,13 +284,14 @@ Take the stress out of homework and exams by giving the student a clear, structu
 Return JSON only.
 
 Rules:
-- When "planSkeleton" is present in the input JSON: you MUST NOT schedule beyond that horizon. The output weeklyPlans array must have exactly the same length as planSkeleton. For each index i, weeklyPlans[i].week must equal planSkeleton[i].week, and weeklyPlans[i].dailyPlans must have exactly planSkeleton[i].days.length entries in the same order. For each day index j, dailyPlans[j].day must exactly equal planSkeleton[i].days[j].weekday (English full name). Use planSkeleton[i].days[j].calendarDate only as reference for topics—the weekday field is what must match in dailyPlans[j].day.
-- When planSkeleton is present, the total count of dailyPlans objects across all weeklyPlans must equal planDaysInclusive exactly. Do not add extra weeks or days after the final exam date.
+- When "planSkeleton" is present in the input JSON: you MUST NOT schedule beyond that horizon. The output weeklyPlans array must have exactly the same length as planSkeleton (often a single block covering many calendar dates). For each index i, weeklyPlans[i].week must equal planSkeleton[i].week, and weeklyPlans[i].dailyPlans must have exactly planSkeleton[i].days.length entries in the same order. For each day index j, dailyPlans[j].day must exactly equal planSkeleton[i].days[j].weekday (English full name). Use planSkeleton[i].days[j].calendarDate to tune topics for that specific date.
+- When planSkeleton is present, the total count of dailyPlans objects across all weeklyPlans must equal planDaysInclusive exactly.
+- When "subjects" has exactly one entry, schedule ONLY that subject—no Mathematics, English, Science, or other subjects unless that exact name appears in subjects[].name (e.g. "Construction" means Construction-only).
 - When planSkeleton is absent, keep a reasonable multi-week structure as before.
 - Build a full exam preparation plan, not a list of topics.
 - When the JSON includes a "subjects" array, treat those entries as the **only** subjects this student is studying for this plan. Do **not** add, schedule, name, or discuss any other subject anywhere (including planSummary, weeklyGoal, titles, or session.subject values). Use each session.subject string exactly as one of the allowed subject names (same spelling as in "subjects[].name").
 - If a diagnostic report is present but conflicts with that allowlist (e.g. mentions other subjects), still **only** build the timetable and narrative around the allowed "subjects" list; you may map diagnostic themes onto allowed subjects where relevant, otherwise ignore those mentions for scheduling.
-- Use diagnostic weaknesses when a diagnostic is present; otherwise rely on the listed "subjects" array and goals in the JSON.
+- Use diagnostic weaknesses when a diagnostic is present in the input; when there is no diagnostic field, rely entirely on the listed "subjects" array and goals in the JSON.
 - If the subjects array has exactly one entry, dedicate **all** scheduled sessions to that subject (vary topics, skills, and revision methods). Do not allocate time to other subjects.
 - If the subjects array has multiple entries, balance time across **only** those subjects according to urgency and exam date.
 - Use target grade and exam date if provided.
@@ -148,60 +314,46 @@ export async function generateStudyPlan(
   input: GenerateStudyPlanInput,
   options?: { model?: string },
 ): Promise<GenerateStudyPlanOutput> {
-  const parsedInput = GenerateStudyPlanInputSchema.parse(input);
-  const response = await prompt(parsedInput, {
-    model: toGoogleAiGenkitModel(options?.model),
-  });
+  const planBase = GenerateStudyPlanInputSchema.parse(input);
+  const subjectFallback = planBase.subjects?.[0]?.name ?? "Study";
+  const maxAttempts = 3;
 
-  let structured: unknown;
-  try {
-    structured = response.output;
-  } catch (e) {
-    throw new Error(
-      `Failed to read study plan model output: ${e instanceof Error ? e.message : String(e)}`,
-    );
-  }
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const response = await prompt(planBase, {
+      model: toGoogleAiGenkitModel(options?.model),
+    });
 
-  if (structured == null) {
-    throw new Error(
-      `Study plan generation returned empty output (finish: ${String(response.finishReason ?? "unknown")}).`,
-    );
-  }
-
-  const plan = GenerateStudyPlanOutputSchema.parse(structured);
-
-  const sk = parsedInput.planSkeleton;
-  if (sk?.length) {
-    if (plan.weeklyPlans.length !== sk.length) {
+    let structured: unknown;
+    try {
+      structured = response.output;
+    } catch (e) {
       throw new Error(
-        `Study plan week count mismatch: expected ${sk.length}, got ${plan.weeklyPlans.length}.`,
+        `Failed to read study plan model output: ${e instanceof Error ? e.message : String(e)}`,
       );
     }
-    for (let i = 0; i < sk.length; i++) {
-      const wk = plan.weeklyPlans[i];
-      const row = sk[i];
-      if (wk.week !== row.week) {
-        throw new Error(`Study plan week label mismatch at block ${i + 1}.`);
-      }
-      if (wk.dailyPlans.length !== row.days.length) {
-        throw new Error(
-          `Study plan day count mismatch in week ${row.week}: expected ${row.days.length}, got ${wk.dailyPlans.length}.`,
-        );
-      }
-      for (let j = 0; j < row.days.length; j++) {
-        if (wk.dailyPlans[j].day !== row.days[j].weekday) {
-          throw new Error(
-            `Study plan weekday mismatch in week ${row.week}: expected ${row.days[j].weekday}, got ${wk.dailyPlans[j].day}.`,
-          );
-        }
-      }
+
+    if (structured == null) {
+      throw new Error(
+        `Study plan generation returned empty output (finish: ${String(response.finishReason ?? "unknown")}).`,
+      );
     }
-    const expectedDays = parsedInput.planDaysInclusive ?? sk.reduce((n, w) => n + w.days.length, 0);
-    const actualDays = plan.weeklyPlans.reduce((n, w) => n + w.dailyPlans.length, 0);
-    if (expectedDays !== actualDays) {
-      throw new Error(`Study plan length mismatch: expected ${expectedDays} days, got ${actualDays}.`);
+
+    let plan: GenerateStudyPlanOutput;
+    try {
+      plan = GenerateStudyPlanOutputSchema.parse(structured);
+    } catch (zerr) {
+      if (attempt >= maxAttempts - 1) throw zerr;
+      continue;
     }
+
+    const aligned = alignPlanToSkeleton(
+      plan,
+      planBase.planSkeleton,
+      planBase.planDaysInclusive,
+      subjectFallback,
+    );
+    return coercePlanToSubjectAllowlist(aligned, planBase.subjects);
   }
 
-  return plan;
+  throw new Error("Study plan generation exhausted retries.");
 }

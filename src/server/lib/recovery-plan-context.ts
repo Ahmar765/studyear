@@ -34,9 +34,12 @@ function gradesForProfileSubject(
   for (const row of subs) {
     const n = row?.name != null ? matchSubjectKey(String(row.name)) : "";
     if (n === key) {
-      const targetGrade = String(row.targetGrade ?? "").trim() || undefined;
-      const currentGrade = String(row.currentGrade ?? "").trim() || undefined;
-      return { targetGrade, currentGrade };
+      const out: { targetGrade?: string; currentGrade?: string } = {};
+      const tg = String(row.targetGrade ?? "").trim();
+      const cg = String(row.currentGrade ?? "").trim();
+      if (tg) out.targetGrade = tg;
+      if (cg) out.currentGrade = cg;
+      return out;
     }
   }
   return {};
@@ -50,15 +53,15 @@ export function buildRecoveryStudentAcademicContext(
   profile: UserProfile | null | undefined,
   diagnosticDoc: Record<string, unknown>,
 ): RecoveryStudentAcademicContext {
-  const studyLevel = String(profile?.studyLevel ?? "").trim() || undefined;
-  const yearGroup = String(profile?.yearGroup ?? "").trim() || undefined;
-  const overallCurrentGrade = String(profile?.currentGrade ?? "").trim() || undefined;
-  const overallTargetGrade = String(profile?.targetGrade ?? "").trim() || undefined;
+  const studyLevel = String(profile?.studyLevel ?? "").trim();
+  const yearGroup = String(profile?.yearGroup ?? "").trim();
+  const overallCurrentGrade = String(profile?.currentGrade ?? "").trim();
+  const overallTargetGrade = String(profile?.targetGrade ?? "").trim();
   const examBoardRaw = profile?.examBoard;
   const examBoard =
     examBoardRaw != null && String(examBoardRaw).trim() !== ""
       ? String(examBoardRaw).trim()
-      : undefined;
+      : "";
 
   const rawSubjects = diagnosticDoc.subjects;
   const diagRows = Array.isArray(rawSubjects) ? rawSubjects : [];
@@ -75,11 +78,11 @@ export function buildRecoveryStudentAcademicContext(
       const canon = normalizeSubjectTitle(subjectId);
       const grades = profile ? gradesForProfileSubject(profile, canon) : {};
       const conf = typeof r.confidence === "number" ? r.confidence : undefined;
-      subjectGradeDetails.push({
-        subjectName: canon,
-        ...grades,
-        ...(conf !== undefined ? { diagnosticConfidencePercent: conf } : {}),
-      });
+      const detail: RecoverySubjectGradeDetail = { subjectName: canon };
+      if (grades.targetGrade) detail.targetGrade = grades.targetGrade;
+      if (grades.currentGrade) detail.currentGrade = grades.currentGrade;
+      if (conf !== undefined) detail.diagnosticConfidencePercent = conf;
+      subjectGradeDetails.push(detail);
     }
   } else if (profile?.subjects?.length) {
     const subs = profile.subjects as { name?: string; targetGrade?: string; currentGrade?: string }[];
@@ -87,23 +90,26 @@ export function buildRecoveryStudentAcademicContext(
       .map((s) => {
         const name = String(s?.name ?? "").trim();
         if (!name) return null;
-        return {
+        const detail: RecoverySubjectGradeDetail = {
           subjectName: normalizeSubjectTitle(name),
-          targetGrade: String(s.targetGrade ?? "").trim() || undefined,
-          currentGrade: String(s.currentGrade ?? "").trim() || undefined,
-        } satisfies RecoverySubjectGradeDetail;
+        };
+        const tg = String(s.targetGrade ?? "").trim();
+        const cg = String(s.currentGrade ?? "").trim();
+        if (tg) detail.targetGrade = tg;
+        if (cg) detail.currentGrade = cg;
+        return detail;
       })
       .filter((x): x is RecoverySubjectGradeDetail => x != null);
   } else {
     subjectGradeDetails = [];
   }
 
-  return {
-    studyLevel: studyLevel || undefined,
-    yearGroup: yearGroup || undefined,
-    overallCurrentGrade,
-    overallTargetGrade,
-    examBoard,
-    subjectGradeDetails: subjectGradeDetails.length ? subjectGradeDetails : undefined,
-  };
+  const ctx: RecoveryStudentAcademicContext = {};
+  if (studyLevel) ctx.studyLevel = studyLevel;
+  if (yearGroup) ctx.yearGroup = yearGroup;
+  if (overallCurrentGrade) ctx.overallCurrentGrade = overallCurrentGrade;
+  if (overallTargetGrade) ctx.overallTargetGrade = overallTargetGrade;
+  if (examBoard) ctx.examBoard = examBoard;
+  if (subjectGradeDetails.length) ctx.subjectGradeDetails = subjectGradeDetails;
+  return ctx;
 }

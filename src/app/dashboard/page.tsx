@@ -8,7 +8,6 @@ import { BookOpen, Clock, Activity, Flag, Target, ArrowRight, Bell, GraduationCa
 import IntelligenceBriefing from './intelligence-briefing';
 import { useEffect, useMemo, useState } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useRouter } from 'next/navigation';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -26,8 +25,6 @@ interface DashboardStats {
 export default function DashboardPage() {
   const { user } = useAuth();
   const { userProfile, loading: profileLoading } = useUserProfile();
-  const router = useRouter();
-
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
 
@@ -141,6 +138,7 @@ export default function DashboardPage() {
                 </Card>
             ))}
         </div>
+
         <div className="grid gap-8 md:grid-cols-3">
             <div className="md:col-span-2 space-y-8">
               <UpcomingTasks />

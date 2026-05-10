@@ -18,6 +18,36 @@ import { HttpsError } from '../lib/errors';
 import { saveStudentResource } from '../services/resources';
 import { getUserProfileServer } from '../services/user';
 
+/** Firestore rejects nested `undefined`; AI payloads may omit optional keys inconsistently. */
+function omitUndefinedDeep(input: unknown): unknown {
+  if (input === undefined) return undefined;
+  if (input === null) return null;
+  if (input instanceof Date) return input;
+  if (typeof input !== 'object') return input;
+  if (Array.isArray(input)) {
+    return input.map((item) => omitUndefinedDeep(item));
+  }
+  const ctorName =
+    typeof (input as { constructor?: { name?: string } }).constructor?.name === 'string'
+      ? String((input as { constructor: { name: string } }).constructor.name)
+      : '';
+  if (
+    ctorName.includes('FieldValue') ||
+    ctorName === 'Timestamp' ||
+    ctorName === 'GeoPoint'
+  ) {
+    return input;
+  }
+  const o = input as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(o)) {
+    if (v === undefined) continue;
+    const nv = omitUndefinedDeep(v);
+    if (nv !== undefined) out[k] = nv;
+  }
+  return out;
+}
+
 const BuildRecoveryPlanSchema = z.object({
   userId: z.string().min(1),
   studentId: z.string().min(1),
@@ -78,23 +108,30 @@ export async function buildPersonalRecoveryPlanAction(
     const recoveryPlan = response.output;
     
     const recoveryRef = adminDb.collection('recovery_plans').doc();
+    const ctxPlain = omitUndefinedDeep(studentAcademicContext) as Record<
+      string,
+      unknown
+    >;
+    const planPlain = omitUndefinedDeep(recoveryPlan) as Record<string, unknown>;
     await recoveryRef.set({
-        userId,
-        studentId,
-        diagnosticId,
-        ...recoveryPlan,
-        studentAcademicContext,
-        status: "ACTIVE",
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      userId,
+      studentId,
+      diagnosticId,
+      ...planPlain,
+      ...(Object.keys(ctxPlain).length > 0
+        ? { studentAcademicContext: ctxPlain }
+        : {}),
+      status: "ACTIVE",
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
     await saveStudentResource({
-        studentId,
-        type: 'RECOVERY_PLAN',
-        title: recoveryPlan.title,
-        content: recoveryPlan,
-        linkedEntityId: recoveryRef.id,
+      studentId,
+      type: "RECOVERY_PLAN",
+      title: recoveryPlan.title,
+      content: planPlain,
+      linkedEntityId: recoveryRef.id,
     });
     
     return { success: true, recoveryPlanId: recoveryRef.id, recoveryPlan };

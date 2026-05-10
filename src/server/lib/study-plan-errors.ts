@@ -51,6 +51,9 @@ export function studyPlanErrorForUser(error: unknown): string {
     if (/INSUFFICIENT_ACU|resource-exhausted/i.test(m)) {
       return "You don't have enough ACUs for this. Add ACUs or choose another action.";
     }
+    if (/ACU_WALLET_LOCKED/i.test(m)) {
+      return "Your ACU wallet is locked. Contact support or complete billing setup, then try again.";
+    }
     if (/FEATURE_NOT_INCLUDED|failed-precondition.*plan/i.test(m)) {
       return "Your subscription doesn't include this AI feature. Upgrade or contact support.";
     }
@@ -62,6 +65,20 @@ export function studyPlanErrorForUser(error: unknown): string {
     }
     if (/Schema validation failed|Invalid JSON/i.test(m)) {
       return "The reply didn't match the format we need. Please try generating the plan again.";
+    }
+    if (/Study plan (week count|week label|day count|weekday|length) mismatch/i.test(m)) {
+      return (
+        "The AI's timetable didn't line up with your exam dates. Tap Generate again—if it keeps happening, pick a different exam date or contact support."
+      );
+    }
+    if (/Failed to read study plan model output/i.test(m)) {
+      return "We couldn't read the assistant's reply. Please try again in a moment.";
+    }
+    if (/API key|401|403|permission denied|PERMISSION_DENIED|UNAUTHENTICATED/i.test(m)) {
+      return "The AI service couldn't authorize this request. Try again shortly; if it keeps failing, confirm the deployment's AI credentials (see server logs).";
+    }
+    if (/429|RESOURCE_EXHAUSTED|quota/i.test(m)) {
+      return "The AI service is busy or rate-limited. Wait a minute and try again.";
     }
 
     return "We couldn't create your study plan. Please try again in a moment.";

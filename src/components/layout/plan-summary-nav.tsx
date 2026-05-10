@@ -37,7 +37,7 @@ export default function PlanSummaryNav() {
           <span>{balance.toLocaleString()} ACUs</span>
         </div>
         <Button asChild size="sm">
-          <Link href="/checkout">
+          <Link href="/top-up">
             <PlusCircle className="mr-2 h-4 w-4" />
             Top up
           </Link>

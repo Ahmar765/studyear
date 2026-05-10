@@ -10,6 +10,7 @@ import { getStripe } from '@/lib/stripe';
 import { createCheckoutSession } from '@/server/actions/billing-actions';
 import { useAuth } from '@/hooks/use-auth';
 import { useUserProfile } from '@/hooks/use-user-profile';
+import { useEffectiveRole } from '@/hooks/use-effective-role';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import {
@@ -26,11 +27,17 @@ function isStudentLikeRole(role: string | undefined): boolean {
 function AcuPackageCard({
   gbp,
   acus,
+  baseAcus,
+  bonusAcus,
+  packLabel,
   popular,
   productCode,
 }: {
   gbp: string;
   acus: number;
+  baseAcus: number;
+  bonusAcus: number;
+  packLabel: string;
   popular: boolean;
   productCode: string;
 }) {
@@ -61,11 +68,28 @@ function AcuPackageCard({
     <Card className={popular ? 'border-primary' : ''}>
       <CardHeader className="text-center">
         {popular && <p className="font-semibold text-primary mb-2">Most popular</p>}
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">
+          {packLabel} pack
+        </p>
         <CardTitle className="text-4xl font-bold">
           {acus.toLocaleString()}{' '}
           <span className="text-2xl font-medium text-muted-foreground">ACUs</span>
         </CardTitle>
-        <CardDescription>For £{gbp}.00 GBP</CardDescription>
+        <CardDescription className="space-y-1 pt-1">
+          <span className="block text-base font-medium text-foreground">
+            £{gbp}.00 one-time
+          </span>
+          {bonusAcus > 0 ? (
+            <span className="block text-sm">
+              {baseAcus.toLocaleString()} included +{' '}
+              <span className="font-semibold text-primary">
+                {bonusAcus.toLocaleString()} bonus
+              </span>
+            </span>
+          ) : (
+            <span className="block text-sm">{baseAcus.toLocaleString()} ACUs</span>
+          )}
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <Button className="w-full" onClick={handlePurchase} disabled={isPending || !user}>
@@ -145,8 +169,22 @@ function SubscriptionCard({
   );
 }
 
+function buildAcuPackageCards() {
+  return Object.values(ACU_PACKAGES).map((pkg) => ({
+    gbp: (pkg.pricePence / 100).toString(),
+    acus: pkg.totalACUs,
+    baseAcus: pkg.baseACUs,
+    bonusAcus: pkg.bonusACUs,
+    packLabel: pkg.label,
+    popular: pkg.code === 'GROWTH',
+    productCode: pkg.code,
+  }));
+}
+
 export default function CheckoutPage() {
-  const { userProfile, loading } = useUserProfile();
+  const { loading: profileLoading } = useUserProfile();
+  const { role, tokenRoleResolved } = useEffectiveRole();
+  const loading = profileLoading || !tokenRoleResolved;
 
   if (loading) {
     return (
@@ -162,8 +200,8 @@ export default function CheckoutPage() {
     );
   }
 
-  const isParent = userProfile?.role === 'PARENT';
-  const studentLike = isStudentLikeRole(userProfile?.role);
+  const isParent = role === 'PARENT';
+  const studentLike = isStudentLikeRole(role);
 
   if (isParent) {
     return (
@@ -184,34 +222,31 @@ export default function CheckoutPage() {
     );
   }
 
-  if (studentLike) {
-    const acuPackages = Object.values(ACU_PACKAGES).map((pkg) => ({
-      gbp: (pkg.pricePence / 100).toString(),
-      acus: pkg.totalACUs,
-      popular: pkg.code === 'GROWTH',
-      productCode: pkg.code,
-    }));
+  const acuPackages = buildAcuPackageCards();
 
-    return (
-      <div className="flex-1 space-y-10 p-4 md:p-8">
-        <div className="text-center">
-          <h1 className="text-4xl font-bold tracking-tight">Top up your ACU wallet</h1>
-          <p className="mt-2 text-lg text-muted-foreground max-w-2xl mx-auto">
-            Student accounts use AI Credit Units (ACUs) for AI tutor, diagnostics, courses, and more.
-            Buy a pack below — your balance updates after payment.
-          </p>
-        </div>
+  return (
+    <div className="flex-1 space-y-10 p-4 md:p-8">
+      <div className="text-center">
+        <h1 className="text-4xl font-bold tracking-tight">Top up your ACU wallet</h1>
+        <p className="mt-2 text-lg text-muted-foreground max-w-2xl mx-auto">
+          Buy AI Credit Units (ACUs) in packs — power the AI tutor, diagnostics, courses, study planner,
+          and more. Your balance updates after payment.
+        </p>
+      </div>
 
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-8 max-w-4xl mx-auto">
-          {acuPackages.map((pkg) => (
-            <AcuPackageCard key={pkg.productCode} {...pkg} />
-          ))}
-        </div>
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-8 max-w-4xl mx-auto">
+        {acuPackages.map((pkg) => (
+          <AcuPackageCard key={pkg.productCode} {...pkg} />
+        ))}
+      </div>
 
+      {studentLike ? (
         <div className="max-w-3xl mx-auto space-y-6">
           <Separator />
           <div className="text-center space-y-2">
-            <h2 className="text-2xl font-semibold tracking-tight">Optional: Premium monthly</h2>
+            <h2 className="text-2xl font-semibold tracking-tight">
+              Optional: Premium monthly
+            </h2>
             <p className="text-muted-foreground text-sm max-w-xl mx-auto">
               Unlock the full premium toolkit without paying ACUs per feature on included tools.
               Most students only need ACU top-ups above.
@@ -223,26 +258,26 @@ export default function CheckoutPage() {
             ))}
           </div>
         </div>
+      ) : (
+        <div className="max-w-3xl mx-auto space-y-6">
+          <Separator />
+          <div className="text-center space-y-2">
+            <h2 className="text-2xl font-semibold tracking-tight">
+              Organisation subscriptions
+            </h2>
+            <p className="text-muted-foreground text-sm max-w-2xl mx-auto">
+              Plans for school and staff accounts. ACU packs above work for prepaid AI usage when your role uses a wallet.
+            </p>
+          </div>
+          <div className="grid sm:grid-cols-1 md:grid-cols-2 gap-8 max-w-3xl mx-auto">
+            {STUDENT_SUBSCRIPTION_PLANS.map((plan) => (
+              <SubscriptionCard key={plan.productCode} {...plan} />
+            ))}
+          </div>
+        </div>
+      )}
 
-        <FooterNote subscriptions optionalAcu />
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex-1 space-y-8 p-4 md:p-8">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold tracking-tight">Billing</h1>
-        <p className="mt-2 text-lg text-muted-foreground max-w-2xl mx-auto">
-          Choose a subscription plan for your organisation account.
-        </p>
-      </div>
-      <div className="grid sm:grid-cols-1 md:grid-cols-2 gap-8 max-w-3xl mx-auto">
-        {STUDENT_SUBSCRIPTION_PLANS.map((plan) => (
-          <SubscriptionCard key={plan.productCode} {...plan} />
-        ))}
-      </div>
-      <FooterNote subscriptions />
+      <FooterNote subscriptions optionalAcu />
     </div>
   );
 }

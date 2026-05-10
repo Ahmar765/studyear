@@ -22,6 +22,7 @@ import {
   profilePlannerSubjectRows,
 } from "@/lib/profile-academic";
 import { buildStudyPlanSkeleton } from "@/lib/study-plan-calendar";
+import { saveStudyPlanTasks } from "@/server/services/planner";
 
 const GeneratePlanSchema = z.object({
   subjects: z.array(z.object({
@@ -100,6 +101,9 @@ export async function createStudyPlan(formData: FormData): Promise<{ success: bo
       ? validatedData.subjects.length
       : 0;
 
+    /** Student chose subjects on the planner form; omit diagnostic from LLM input so old reports can't override that choice. */
+    const explicitSubjectsRequested = requestedSubjectCount > 0;
+
     if (profileSubjectRows.length > 0 && subjectsForPlan.length === 0) {
       if (!requestedSubjectCount && diagnosticRaw) {
         subjectsForPlan = profileSubjectRows;
@@ -161,7 +165,10 @@ export async function createStudyPlan(formData: FormData): Promise<{ success: bo
     }
 
     const studyPlanInput: GenerateStudyPlanInput = {
-        diagnostic: diagnosticForPlan,
+        diagnostic:
+          explicitSubjectsRequested && hasSubjectsForInput
+            ? undefined
+            : diagnosticForPlan,
         examDate: validatedData.examDate,
         availableHoursPerWeek: validatedData.hoursPerWeek,
         examGoal: validatedData.examGoal,
@@ -200,6 +207,8 @@ export async function createStudyPlan(formData: FormData): Promise<{ success: bo
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
+
+    await saveStudyPlanTasks(validatedData.userId, studyPlanRef.id, planOutput);
 
     await savedResourceService.save({
         studentId: validatedData.userId,
@@ -266,4 +275,46 @@ export async function getUpcomingTasksAction(params: {
         console.error("Error fetching upcoming tasks:", error);
         return { tasks: [], error: error.message };
     }
+}
+
+const ClearCalendarSchema = z.object({
+  userId: z.string().min(1, "User ID is required."),
+});
+
+/** Removes all pending study tasks for the student (dashboard Study Calendar). */
+export async function clearPendingStudyTasksAction(input: {
+  userId: string;
+}): Promise<{ success: boolean; cleared?: number; error?: string }> {
+  const parsed = ClearCalendarSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      success: false,
+      error: parsed.error.flatten().formErrors.join(", "),
+    };
+  }
+
+  const { userId } = parsed.data;
+
+  try {
+    const snapshot = await adminDb
+      .collection("study_tasks")
+      .where("userId", "==", userId)
+      .where("status", "==", "pending")
+      .get();
+
+    const docs = snapshot.docs;
+    const chunkSize = 400;
+    for (let i = 0; i < docs.length; i += chunkSize) {
+      const slice = docs.slice(i, i + chunkSize);
+      const batch = adminDb.batch();
+      slice.forEach((d) => batch.delete(d.ref));
+      await batch.commit();
+    }
+
+    return { success: true, cleared: docs.length };
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : "Could not clear calendar.";
+    console.error("[clearPendingStudyTasksAction]", message);
+    return { success: false, error: message };
+  }
 }

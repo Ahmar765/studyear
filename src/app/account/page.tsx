@@ -221,7 +221,7 @@ export default function AccountPage() {
                 </CardContent>
                 <CardFooter>
                   <Button asChild>
-                    <Link href="/checkout">
+                    <Link href="/top-up">
                       <PlusCircle className="mr-2 h-4 w-4" /> Top up ACUs
                     </Link>
                   </Button>
@@ -246,7 +246,7 @@ export default function AccountPage() {
                     </p>
                 </CardContent>
                 <CardFooter>
-                    <Button asChild><Link href="/checkout"><PlusCircle className="mr-2 h-4 w-4"/> {isStudentLike ? 'Plans & top-up' : 'View plans'}</Link></Button>
+                    <Button asChild><Link href="/top-up"><PlusCircle className="mr-2 h-4 w-4"/> {isStudentLike ? 'Plans & top-up' : 'View plans'}</Link></Button>
                 </CardFooter>
             </Card>
         </div>
