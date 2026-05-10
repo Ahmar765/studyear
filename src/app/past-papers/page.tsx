@@ -179,7 +179,7 @@ export default function PastPapersPage() {
              <Card className="bg-muted/30 sticky top-20">
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2"><FileCheck2 />Contribute a Resource</CardTitle>
-                    <CardDescription>Help the community by uploading a past paper or video. Once approved, it becomes a shared platform asset.</CardDescription>
+                    <CardDescription>Help the community by sharing a link to a past paper or video. Once approved, it becomes a shared platform asset.</CardDescription>
                 </CardHeader>
                 <CardContent>
                     {isFetchingFilters ? (

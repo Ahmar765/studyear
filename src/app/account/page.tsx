@@ -31,6 +31,10 @@ import { getFirebaseAuth, getFirestoreDb } from '@/lib/firebase/client-app';
 import placeholderImages from '@/lib/placeholder-images.json';
 import SystemVisual from '@/components/system-visual';
 import Image from 'next/image';
+import {
+  finalizeAcuCheckoutSessionAction,
+  finalizeSubscriptionCheckoutSessionAction,
+} from '@/server/actions/billing-actions';
 
 
 export default function AccountPage() {
@@ -49,15 +53,91 @@ export default function AccountPage() {
   const loading = profileLoading || (!!userProfile && isStudentLike && walletLoading);
 
   useEffect(() => {
-    if (searchParams.get('purchase') === 'success') {
-      toast({
-        title: 'Purchase successful',
-        description:
-          'Your ACU balance or subscription will update shortly. Refresh the page if you do not see changes.',
-      });
-      // Clean the URL
-      router.replace('/account', { scroll: false });
-    }
+    if (searchParams.get('purchase') !== 'success') return;
+
+    let cancelled = false;
+
+    void (async () => {
+      const sessionId = searchParams.get('session_id');
+
+      if (sessionId) {
+        try {
+          const authUser = getFirebaseAuth().currentUser;
+          const token = authUser ? await authUser.getIdToken() : null;
+          const subResult =
+            await finalizeSubscriptionCheckoutSessionAction(token, sessionId);
+          const acuResult = await finalizeAcuCheckoutSessionAction(token, sessionId);
+          if (cancelled) return;
+
+          if (subResult.ok && subResult.activated) {
+            toast({
+              title: 'Subscription active',
+              description:
+                'Premium features should unlock immediately. Refresh once if something still looks locked.',
+            });
+          } else if (!subResult.ok) {
+            toast({
+              variant: 'destructive',
+              title: 'Could not confirm subscription',
+              description: subResult.error,
+            });
+          }
+
+          if (acuResult.ok && !acuResult.skipped) {
+            toast({
+              title: acuResult.duplicate ? 'Payment already recorded' : 'Top-up complete',
+              description: acuResult.duplicate
+                ? 'Your ACU balance is already up to date.'
+                : 'Your ACU balance has been updated.',
+            });
+          } else if (!acuResult.ok) {
+            toast({
+              variant: 'destructive',
+              title: 'Could not confirm ACU top-up',
+              description:
+                acuResult.error ??
+                'If you were charged but do not see ACUs, refresh shortly or contact support with your Stripe receipt.',
+            });
+          }
+
+          if (
+            subResult.ok &&
+            subResult.skipped &&
+            acuResult.ok &&
+            acuResult.skipped
+          ) {
+            toast({
+              title: 'Purchase successful',
+              description:
+                'If nothing updated yet, wait a minute for Stripe webhooks or confirm your price IDs in .env.',
+            });
+          }
+        } catch {
+          if (!cancelled) {
+            toast({
+              variant: 'destructive',
+              title: 'Could not confirm checkout',
+              description:
+                'Refresh the page. If ACUs are still missing, contact support with your Stripe receipt.',
+            });
+          }
+        }
+      } else if (!cancelled) {
+        toast({
+          title: 'Purchase successful',
+          description:
+            'Your ACU balance or subscription will update shortly. Refresh the page if you do not see changes.',
+        });
+      }
+
+      if (!cancelled) {
+        router.replace('/account', { scroll: false });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [searchParams, toast, router]);
 
 
@@ -233,7 +313,7 @@ export default function AccountPage() {
                     <CardTitle className="flex items-center gap-2"><Crown /> Subscription</CardTitle>
                     <CardDescription>
                       {isStudentLike
-                        ? 'Optional Premium monthly plan — broader toolkit without per-feature ACU usage on included tools.'
+                        ? 'Premium (£10/mo) unlocks creator tools; many AI features still spend ACUs. Premium Plus includes a monthly ACU bundle on each paid renewal.'
                         : 'Your current StudYear plan. Manage upgrades via Stripe checkout.'}
                     </CardDescription>
                 </CardHeader>
@@ -241,7 +321,7 @@ export default function AccountPage() {
                     <p className="text-3xl font-bold">{subscriptionTypeDisplayName(userProfile.subscription)}</p>
                     <p className="text-sm text-muted-foreground mt-1">
                       {isStudentLike
-                        ? 'Most students use ACUs only; Premium is optional.'
+                        ? 'Top up ACUs anytime from Plans & top-up — Premium Plus adds ACUs automatically when Stripe bills successfully.'
                         : 'Premium features unlock automatically when payment completes.'}
                     </p>
                 </CardContent>

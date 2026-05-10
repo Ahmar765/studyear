@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { BookOpen, Bot, Loader, Sparkles } from 'lucide-react';
-import { createLesson, getNextStep, createQuiz } from '@/server/actions/interactive-lesson-actions';
+import { createLesson, getNextStep, createLessonFollowUpQuiz } from '@/server/actions/interactive-lesson-actions';
 import { GenerateInteractiveLessonOutput } from '@/server/ai/flows/ai-lesson-generation';
 import LessonDisplay from './lesson-display';
 import QuizDisplay from './quiz-display';
@@ -73,10 +73,10 @@ export default function InteractiveLessonPage() {
   }
 
   const handleStartQuiz = async () => {
-      if (!lesson) return;
+      if (!lesson || !user) return;
       setLessonState('generating_quiz');
       startTransition(async () => {
-          const result = await createQuiz(lesson.lessonTitle, "A-Level"); // Assuming a level for now
+          const result = await createLessonFollowUpQuiz(lesson.lessonTitle, user.uid);
           if (result.success && result.quiz) {
               setQuiz(result.quiz);
               setLessonState('in_quiz');

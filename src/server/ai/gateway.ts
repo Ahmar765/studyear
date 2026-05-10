@@ -8,6 +8,7 @@ import { canUsePremiumFeature } from '@/data/entitlements';
 import type { SubscriptionType } from '../schemas';
 import { runPaidAIFeature, PaidAIFeatureResult } from '../services/run-paid-ai-feature';
 import { FeatureKey } from '@/data/acu-costs';
+import { buildAiUsagePricingFields } from '@/server/lib/ai-provider-cost-estimate';
 
 async function routeByTaskType(taskType: AITaskType): Promise<{ provider: AIProvider; model: string; fallbackChain: { provider: AIProvider; model: string }[] }> {
     const settings = await getSystemSettings();
@@ -107,6 +108,14 @@ export class AIGatewayService {
     const latencyMs = Date.now() - startTime;
     const outputTokens = Math.ceil(JSON.stringify(output).length / 4);
 
+    const pricing = buildAiUsagePricingFields(
+      finalProvider,
+      finalModel,
+      ctx.estimatedInputTokens,
+      outputTokens,
+      acu.chargedACUs,
+    );
+
     await logAiUsage({
         requestId: ctx.requestId,
         userId: ctx.userId,
@@ -119,10 +128,10 @@ export class AIGatewayService {
         latencyMs,
         inputTokens: ctx.estimatedInputTokens,
         outputTokens: outputTokens,
-        realCost: 0, // Placeholder
-        customerChargeEquivalent: 0, // Placeholder
+        realCost: pricing.realCostUsd,
+        customerChargeEquivalent: pricing.customerChargeEquivalentGbp,
         chargedAcus: acu.chargedACUs,
-        pricingPolicyId: 'default', // Placeholder
+        pricingPolicyId: 'default',
     });
     
     return {

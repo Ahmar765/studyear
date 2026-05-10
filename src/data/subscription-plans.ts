@@ -1,10 +1,12 @@
 import type { SubscriptionType } from '@/server/schemas';
+import { STUDENT_PREMIUM_PLUS_MONTHLY_ACUS } from '@/data/acu-packages';
 
 /**
  * Marketing copy for checkout. `productCode` must match `SubscriptionType` — Stripe webhook
  * and `checkout.session.completed` pass this through session metadata as `productCode`.
  *
- * Configure your Stripe Prices with metadata key `productCode` set to the same string (e.g. STUDENT_PREMIUM).
+ * Configure recurring Stripe Prices to match displayed GBP (£10 Premium, £15 Premium Plus as shown)
+ * with metadata key `productCode` set to the same string (e.g. STUDENT_PREMIUM).
  */
 export type CheckoutPlanDefinition = {
   productCode: SubscriptionType;
@@ -19,29 +21,25 @@ export const STUDENT_SUBSCRIPTION_PLANS: CheckoutPlanDefinition[] = [
   {
     productCode: 'STUDENT_PREMIUM',
     name: 'Premium',
-    price: '7.99',
+    price: '10.00',
     priceSuffix: '/ month',
     popular: true,
     features: [
-      'AI Course Generator — structured courses with modules and quizzes',
-      'AI Essay Plan — thesis, paragraphs and conclusion outline',
-      'Flashcards & quizzes for any topic',
-      'Topic summaries / revision notes',
-      'Formula sheets, mind maps',
-      'Visual tools — diagrams, educational images, charts & graphs',
-      'Plus: planner, interactive lessons, exam simulations & grade predictions (with ACUs)',
+      '£10/month — unlocks the full premium toolkit (courses, essay plans, flashcards, summaries, visuals, AI assignment review, and more)',
+      'Metered AI features (planner, tutor, diagnostics, predictions, interactive lessons, etc.) still spend ACUs — buy £5 / £10 / £15 packs above',
+      'Best if you already top up ACUs and want every premium creator included in your plan',
     ],
   },
   {
     productCode: 'STUDENT_PREMIUM_PLUS',
     name: 'Premium Plus',
-    price: '14.99',
+    price: '15.00',
     priceSuffix: '/ month',
     popular: false,
     features: [
       'Everything in Premium',
-      'Higher allowances for daily AI use',
-      'Best for intensive revision seasons',
+      `Includes ${STUDENT_PREMIUM_PLUS_MONTHLY_ACUS.toLocaleString('en-GB')} ACUs added automatically on each successful monthly payment`,
+      'Built for intensive terms — bundled allowance matches the £15 one-off Scale pack size',
     ],
   },
 ];

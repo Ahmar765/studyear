@@ -1,9 +1,10 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
-import { Users, DollarSign, BrainCircuit, BookCopy, Settings, BarChart, ShieldAlert, UserSearch, Building, Activity, Award, UserCheck } from "lucide-react";
+import { Users, DollarSign, BrainCircuit, BookCopy, Settings, BarChart, ShieldAlert, UserSearch, Building, Activity, Award, UserCheck, Newspaper, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { getAdminDashboardStatsAction } from "@/server/actions/admin-actions";
+import { getAdminDashboardStatsAction, getPlatformEconomicsOverviewAction } from "@/server/actions/admin-actions";
+import { PlatformEconomicsSummary } from "@/app/admin/_components/platform-economics-summary";
 
 
 const adminSections = [
@@ -11,23 +12,41 @@ const adminSections = [
     { title: "Tutor Management", description: "Review tutor applications and manage tutor profiles.", icon: UserCheck, href: "/admin/tutors" },
     { title: "School Management", description: "Review and approve new school partner accounts.", icon: Building, href: "/admin/schools" },
     { title: "Support Tools", description: "Access support features like 'View as User' to assist customers.", icon: UserSearch, href: "/admin/support" },
+    { title: "Blog", description: "Create posts, publish to the public site, and view read counts.", icon: Newspaper, href: "/admin/blog" },
     { title: "Content Management", description: "Manage subjects, topics, and moderate generated content.", icon: BookCopy, href: "/admin/content" },
-    { title: "Billing & Subscriptions", description: "Edit subscription plans and view revenue metrics.", icon: DollarSign, href: "/admin/billing" },
+    { title: "Revenue & billing", description: "Stripe gross, payments, discount codes, and ACU ledger.", icon: DollarSign, href: "/admin/billing" },
     { title: "Analytics & Reporting", description: "View generation volumes and student engagement metrics.", icon: BarChart, href: "/admin/analytics" },
     { title: "System & AI Settings", description: "Control AI rate limits, feature flags, and other global settings.", icon: Settings, href: "/admin/settings" },
     { title: "Fraud Monitoring", description: "Review accounts flagged for suspicious activity.", icon: ShieldAlert, href: "/admin/fraud" },
 ];
 
 export default async function AdminDashboardPage() {
-  const { stats, error } = await getAdminDashboardStatsAction();
-  
+  const [{ stats, error }, { overview: economicsOverview, error: economicsError }] = await Promise.all([
+    getAdminDashboardStatsAction(),
+    getPlatformEconomicsOverviewAction(),
+  ]);
+
+  const aiSpendGbp = economicsOverview?.aiEstSpendGbpLast30d;
+  const rev30 = economicsOverview?.stripeGrossGbpLast30d;
+
   const kpiData = [
     { title: "Total Students", value: stats.totalStudents.toLocaleString(), icon: Users, href: "/admin/users" },
     { title: "Active Users", value: stats.activeUsers.toLocaleString(), icon: Activity, href: "/admin/users" },
     { title: "High-Risk Students", value: stats.highRiskStudents.toLocaleString(), icon: ShieldAlert, href: "/admin/fraud" },
     { title: "Sponsored Students", value: stats.sponsoredStudents.toLocaleString(), icon: Award, href: "/admin/billing" },
     { title: "School Partners", value: stats.schoolCount.toLocaleString(), icon: Building, href: "/admin/users" },
-    { title: "AI Usage", value: "View Costs", icon: BrainCircuit, href: "/admin/ai-usage" },
+    {
+      title: "Est. AI spend (30d)",
+      value: aiSpendGbp != null ? `£${aiSpendGbp.toFixed(2)}` : "—",
+      icon: BrainCircuit,
+      href: "/admin/ai-usage",
+    },
+    {
+      title: "Stripe gross (30d)",
+      value: rev30 != null ? `£${rev30.toFixed(2)}` : "—",
+      icon: TrendingUp,
+      href: "/admin/billing",
+    },
   ];
 
   return (
@@ -39,7 +58,7 @@ export default async function AdminDashboardPage() {
             </p>
         </div>
          {error && <p className="text-destructive">Error loading stats: {error}</p>}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {kpiData.map(kpi => (
                 <Link href={kpi.href} key={kpi.title}>
                     <Card className="hover:bg-muted/50 transition-colors">
@@ -54,6 +73,16 @@ export default async function AdminDashboardPage() {
                 </Link>
             ))}
         </div>
+
+        <div className="space-y-2">
+          <h3 className="text-lg font-semibold tracking-tight">Platform economics</h3>
+          <PlatformEconomicsSummary
+            overview={economicsOverview}
+            error={economicsError}
+            compact
+          />
+        </div>
+
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
              {adminSections.map(section => (
                  <Card key={section.title} className="flex flex-col">

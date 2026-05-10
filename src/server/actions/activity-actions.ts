@@ -2,7 +2,7 @@
 'use server';
 
 import { adminDb } from '@/lib/firebase/admin-app';
-import { getCurrentUser } from '../lib/auth';
+import { getVerifiedUser } from '../lib/auth';
 import * as admin from 'firebase-admin';
 
 export interface ActivityFeedItem {
@@ -28,8 +28,10 @@ const eventTypeToDescriptionMap: Record<string, (payload: any) => string> = {
     default: (p) => ``,
 };
 
-export async function getActivityFeedAction(): Promise<{ activities: ActivityFeedItem[], error?: string }> {
-    const user = await getCurrentUser();
+export async function getActivityFeedAction(
+    idToken?: string | null,
+): Promise<{ activities: ActivityFeedItem[]; error?: string }> {
+    const user = await getVerifiedUser(idToken);
     if (!user) {
         return { activities: [], error: 'User not authenticated' };
     }
@@ -59,12 +61,18 @@ export async function getActivityFeedAction(): Promise<{ activities: ActivityFee
             const titleFn = eventTypeToTitleMap[eventType] || eventTypeToTitleMap.default;
             const descriptionFn = eventTypeToDescriptionMap[eventType] || eventTypeToDescriptionMap.default;
             
+            const createdAt = data.createdAt as admin.firestore.Timestamp | undefined;
+            const timestamp =
+                createdAt && typeof createdAt.toDate === 'function'
+                    ? createdAt.toDate().toISOString()
+                    : new Date(0).toISOString();
+
             return {
                 id: doc.id,
                 type: eventType,
                 title: titleFn(payload),
                 description: descriptionFn(payload),
-                timestamp: (data.createdAt as admin.firestore.Timestamp).toDate().toISOString(),
+                timestamp,
             } as ActivityFeedItem;
         });
         

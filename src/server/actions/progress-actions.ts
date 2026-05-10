@@ -1,12 +1,28 @@
 
 'use server';
 
-import { generateProgressReport, GenerateProgressReportInput } from "@/server/ai/flows/progress-report-generation";
+import {
+  generateProgressReport,
+  GenerateProgressReportInput,
+  GenerateProgressReportOutputSchema,
+  type GenerateProgressReportOutput,
+} from "@/server/ai/flows/progress-report-generation";
 import { adminDb } from '@/lib/firebase/admin-app';
 import { getUserProfileServer } from "@/server/services/user";
 import { AIGatewayService } from "../services/ai-gateway";
 import { randomUUID } from "crypto";
 import { AIRequestContext, AIUserInput } from "../ai/gateway-schema";
+import { getVerifiedUser } from '@/server/lib/auth';
+import * as admin from 'firebase-admin';
+
+function coerceScorePercent(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const n = parseFloat(value);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
 
 export async function getStudentProgressAction(userId: string) {
     try {
@@ -22,8 +38,8 @@ export async function getStudentProgressAction(userId: string) {
         attemptsSnapshot.forEach(doc => {
             const data = doc.data();
             const subject = data.subjectId;
-            const score = data.scorePercent;
-            if (subject && typeof score === 'number') {
+            const score = coerceScorePercent(data.scorePercent);
+            if (subject && score !== null) {
                 allSubjects.add(subject);
                 if (!progressBySubject[subject]) {
                     progressBySubject[subject] = { totalScore: 0, count: 0 };
@@ -65,16 +81,24 @@ export async function getStudentProgressAction(userId: string) {
 }
 
 
-export async function generateProgressReportAction(input: GenerateProgressReportInput) {
+export async function generateProgressReportAction(
+    input: GenerateProgressReportInput,
+    idToken?: string | null,
+) {
+    const authUser = await getVerifiedUser(idToken);
+    if (!authUser || authUser.uid !== input.studentName) {
+        return { success: false as const, error: 'Not authenticated.' };
+    }
+
     try {
         const gateway = new AIGatewayService();
         const context: AIRequestContext = {
             requestId: randomUUID(),
-            userId: input.studentName, // Assuming studentName is userId for now
+            userId: input.studentName,
             taskType: 'AI_STUDY_PLAN', // Re-using this for cost
             featureName: 'ai-grade-improvement-plan',
             entitlement: 'AI_STUDY_PLAN',
-            role: 'STUDENT',
+            role: 'student',
             subscriptionTier: 'free', // Assume free for now, can be enhanced later
             idempotencyKey: randomUUID(),
             estimatedInputTokens: Math.ceil((JSON.stringify(input).length) / 4),
@@ -83,10 +107,47 @@ export async function generateProgressReportAction(input: GenerateProgressReport
         const gatewayInput: AIUserInput<GenerateProgressReportInput> = { promptPayload: input };
 
         const result = await gateway.execute(context, gatewayInput, generateProgressReport);
-        return { success: true, report: result.output };
+        const report = result.output;
+
+        await adminDb
+            .collection('grade_improvement_plans')
+            .doc(authUser.uid)
+            .set(
+                {
+                    report,
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                },
+                { merge: true },
+            );
+
+        return { success: true as const, report };
     } catch (error) {
         console.error(error);
         const errorMessage = error instanceof Error ? error.message : "Failed to generate progress report.";
-        return { success: false, error: errorMessage };
+        return { success: false as const, error: errorMessage };
+    }
+}
+
+export async function getSavedGradeImprovementPlanAction(
+    idToken?: string | null,
+): Promise<{ report: GenerateProgressReportOutput | null; error?: string }> {
+    const user = await getVerifiedUser(idToken);
+    if (!user) {
+        return { report: null, error: 'Not authenticated.' };
+    }
+
+    try {
+        const snap = await adminDb.collection('grade_improvement_plans').doc(user.uid).get();
+
+        if (!snap.exists) {
+            return { report: null };
+        }
+
+        const raw = snap.data()?.report;
+        const parsed = GenerateProgressReportOutputSchema.safeParse(raw);
+        return { report: parsed.success ? parsed.data : null };
+    } catch (error) {
+        console.error('getSavedGradeImprovementPlanAction:', error);
+        return { report: null, error: error instanceof Error ? error.message : 'Failed to load saved plan.' };
     }
 }

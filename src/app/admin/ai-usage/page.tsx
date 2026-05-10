@@ -1,41 +1,35 @@
-
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { BrainCircuit, Bot, DollarSign, FileClock } from "lucide-react";
-import { getAiUsageLogsAction } from "@/server/actions/admin-actions";
-import { adminDb } from "@/lib/firebase/admin-app";
+import { getAiUsageLogsAction, getPlatformEconomicsOverviewAction } from "@/server/actions/admin-actions";
+import { fetchUserLabelsByIds } from "@/server/lib/admin-user-labels";
+import { PlatformEconomicsSummary } from "@/app/admin/_components/platform-economics-summary";
+import { USD_TO_GBP_ASSUMED } from "@/server/lib/ai-provider-cost-estimate";
 
 export default async function AdminAiUsagePage() {
-  const { logs, error } = await getAiUsageLogsAction();
+  const [{ logs, error }, { overview: economicsOverview, error: economicsError }] = await Promise.all([
+    getAiUsageLogsAction(100),
+    getPlatformEconomicsOverviewAction(),
+  ]);
 
-  let userMap: { [key: string]: { displayName: string, email: string } } = {};
-  if (logs.length > 0) {
-    const userIds = [...new Set(logs.map(log => log.userId))];
-     if (userIds.length > 0) {
-        const userDocs = await adminDb.collection('users').where('__name__', 'in', userIds).get();
-        userDocs.forEach(doc => {
-            userMap[doc.id] = {
-                displayName: doc.data().name || 'N/A',
-                email: doc.data().email,
-            }
-        });
-    }
-  }
+  const userMap =
+    logs.length > 0 ? await fetchUserLabelsByIds([...new Set(logs.map((log) => log.userId))]) : {};
 
   return (
     <div className="flex-1 space-y-8 p-4 md:p-8">
         <div className="flex flex-col space-y-2">
-            <h2 className="text-3xl font-bold tracking-tight">AI Usage & Costs</h2>
+            <h2 className="text-3xl font-bold tracking-tight">AI usage & API costs</h2>
             <p className="text-muted-foreground">
-                Monitor AI model performance, costs, and consumption across the platform.
+                Estimated API spend is shown in GBP (USD list-price hint × {USD_TO_GBP_ASSUMED} FX). ACU £ uses the Entry-pack rule (£5 / 500 ACU). Confirm against real vendor invoices.
             </p>
         </div>
 
+        <PlatformEconomicsSummary overview={economicsOverview} error={economicsError} />
+
         <Card>
             <CardHeader>
-                <CardTitle>Recent AI Generations</CardTitle>
-                <CardDescription>A log of the most recent AI generation requests.</CardDescription>
+                <CardTitle>Recent AI requests</CardTitle>
+                <CardDescription>Latest rows from Firestore <code className="text-xs">aiUsageLogs</code>.</CardDescription>
             </CardHeader>
             <CardContent>
                 {error && <p className="text-destructive">{error}</p>}
@@ -46,6 +40,8 @@ export default async function AdminAiUsagePage() {
                             <TableHead>Feature</TableHead>
                             <TableHead>Model</TableHead>
                             <TableHead>ACUs</TableHead>
+                            <TableHead>Est. API (£)</TableHead>
+                            <TableHead>ACU value (£)</TableHead>
                             <TableHead>Status</TableHead>
                             <TableHead>Latency</TableHead>
                             <TableHead>Date</TableHead>
@@ -59,21 +55,37 @@ export default async function AdminAiUsagePage() {
                                     <div className="text-sm text-muted-foreground">{userMap[log.userId]?.email}</div>
                                 </TableCell>
                                 <TableCell><Badge variant="outline">{log.featureKey}</Badge></TableCell>
-                                <TableCell>{log.model}</TableCell>
                                 <TableCell>
-                                    <div className="font-medium text-destructive">{log.chargedAcus.toLocaleString()}</div>
-                                    <div className="text-xs text-muted-foreground">(${log.customerChargeEquivalent.toFixed(4)})</div>
+                                  <div>{log.model}</div>
+                                  <div className="text-xs text-muted-foreground">{log.provider}</div>
+                                </TableCell>
+                                <TableCell>
+                                    <div className="font-medium text-destructive">{(log.chargedAcus ?? 0).toLocaleString()}</div>
+                                </TableCell>
+                                <TableCell className="tabular-nums">
+                                    £
+                                    {(Number(log.realCost ?? 0) * USD_TO_GBP_ASSUMED).toFixed(4)}
+                                    <span className="block text-[10px] text-muted-foreground font-normal">
+                                      (${Number(log.realCost ?? 0).toFixed(4)} USD hint)
+                                    </span>
+                                </TableCell>
+                                <TableCell className="tabular-nums">
+                                    £{Number(log.customerChargeEquivalent ?? 0).toFixed(2)}
                                 </TableCell>
                                 <TableCell>
                                     <Badge variant={log.status === 'success' ? 'secondary' : 'destructive'}>{log.status}</Badge>
                                 </TableCell>
                                 <TableCell>{log.latencyMs}ms</TableCell>
-                                <TableCell>{new Date(log.createdAt as any).toLocaleString()}</TableCell>
+                                <TableCell>
+                                  {log.createdAt
+                                    ? log.createdAt.toLocaleString('en-GB')
+                                    : '—'}
+                                </TableCell>
                             </TableRow>
                         ))}
                          {logs.length === 0 && !error && (
                             <TableRow>
-                                <TableCell colSpan={7} className="h-24 text-center">No usage logs found.</TableCell>
+                                <TableCell colSpan={9} className="h-24 text-center">No usage logs found.</TableCell>
                             </TableRow>
                         )}
                     </TableBody>

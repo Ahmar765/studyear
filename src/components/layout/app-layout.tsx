@@ -42,6 +42,7 @@ import {
   TrendingUp,
   PlayCircle,
   Wand2,
+  Newspaper,
 } from "lucide-react";
 import Logo from "../logo";
 import { Button } from "../ui/button";
@@ -86,9 +87,10 @@ const studentNavItems = [
 const adminNavItems = [
     { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/admin/users", label: "Users", icon: Users },
+    { href: "/admin/blog", label: "Blog", icon: Newspaper },
     { href: "/admin/content", label: "Content", icon: FileText },
-    { href: "/admin/billing", label: "Billing", icon: UserCog },
-    { href: "/admin/ai-usage", label: "AI Usage", icon: Bot },
+    { href: "/admin/billing", label: "Revenue & billing", icon: UserCog },
+    { href: "/admin/ai-usage", label: "AI costs", icon: Bot },
     { href: "/admin/analytics", label: "Analytics", icon: LineChart },
     { href: "/admin/fraud", label: "Fraud", icon: UserCog },
     { href: "/admin/support", label: "Support", icon: MessageSquareText },
@@ -189,9 +191,16 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    if (user && userProfile && effectiveRole === 'STUDENT' && !onboardingComplete && pathname !== '/profile-setup') {
-        router.replace('/profile-setup');
-        return;
+    if (
+      user &&
+      userProfile &&
+      effectiveRole === 'STUDENT' &&
+      !onboardingComplete &&
+      pathname !== '/profile-setup' &&
+      !pathname.startsWith('/account')
+    ) {
+      router.replace('/profile-setup');
+      return;
     }
 
     // Route staff/parent dashboards using effective role (JWT claims + Firestore).
@@ -206,7 +215,15 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         const parentAllowedOutsideParentRoutes =
           pathname.startsWith('/checkout') || pathname === '/account';
 
-        if (role === 'ADMIN' && !isAdminDashboard) router.replace('/admin/dashboard');
+        const adminAllowedOutsideAdmin =
+          pathname.startsWith('/blog') ||
+          pathname.startsWith('/create') ||
+          pathname.startsWith('/checkout') ||
+          pathname.startsWith('/account');
+
+        if (role === 'ADMIN' && !isAdminDashboard && !adminAllowedOutsideAdmin) {
+          router.replace('/admin/dashboard');
+        }
         else if (role === 'SCHOOL_ADMIN' && !isSchoolDashboard) router.replace('/school/dashboard');
         else if (role === 'SCHOOL_TUTOR' && !isTeacherDashboard) router.replace('/teacher/dashboard');
         else if (role === 'PARENT' && !isParentDashboard && !parentAllowedOutsideParentRoutes) {
@@ -343,11 +360,17 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                         </span>
                       </DropdownMenuLabel>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem asChild>
-                        <Link href="/account">My Account</Link>
+                      <DropdownMenuItem
+                        className="cursor-pointer"
+                        onSelect={() => router.push('/account')}
+                      >
+                        My Account
                       </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                         <Link href="/profile-setup">Edit Profile</Link>
+                      <DropdownMenuItem
+                        className="cursor-pointer"
+                        onSelect={() => router.push('/profile-setup')}
+                      >
+                        Edit Profile
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem onClick={handleLogout}>Log out</DropdownMenuItem>

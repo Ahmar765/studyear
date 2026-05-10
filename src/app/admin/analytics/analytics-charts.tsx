@@ -28,7 +28,7 @@ export default function AnalyticsCharts({ newUsersData }: { newUsersData: any[] 
                 </CardHeader>
                  <CardContent className="pl-2 h-[300px]">
                     {newUsersData.length > 0 ? (
-                        <ChartContainer config={chartConfig}>
+                        <ChartContainer config={chartConfig} className="h-[260px] w-full">
                             <BarChart accessibilityLayer data={newUsersData}>
                                 <CartesianGrid vertical={false} />
                                 <XAxis
@@ -59,7 +59,7 @@ export default function AnalyticsCharts({ newUsersData }: { newUsersData: any[] 
                 </CardHeader>
                  <CardContent className="pl-2 h-[300px]">
                      {studyTimeData.length > 0 ? (
-                         <ChartContainer config={chartConfig}>
+                         <ChartContainer config={chartConfig} className="h-[260px] w-full">
                             <LineChart
                                 accessibilityLayer
                                 data={studyTimeData}

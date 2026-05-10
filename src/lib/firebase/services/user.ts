@@ -98,7 +98,13 @@ export function getUserProfile(
   const combineAndCallback = () => {
     if (userData) {
       const needsExtended = profileDocPathForRole(userData.role) !== null;
-      if (needsExtended && !extendedProfileReady) {
+      const subscriptionTier = subscriptionData?.type ?? 'FREE';
+      const hasPaidSubscriptionDoc =
+        subscriptionData &&
+        typeof subscriptionTier === 'string' &&
+        subscriptionTier !== 'FREE';
+      /* Avoid blocking premium entitlement until student/parent profile snapshots arrive */
+      if (needsExtended && !extendedProfileReady && !hasPaidSubscriptionDoc) {
         return;
       }
       /** `student_profiles` must win over `parent_profiles` on overlapping keys (e.g. `userId`). */
@@ -106,7 +112,7 @@ export function getUserProfile(
         ...userData,
         ...(parentProfileData || {}),
         ...(studentProfileData || {}),
-        subscription: subscriptionData?.type || 'FREE',
+        subscription: subscriptionTier as SubscriptionData['type'],
       };
       callback(combinedProfile);
     } else {
@@ -127,7 +133,9 @@ export function getUserProfile(
       if (which === 'student_profiles') {
           unsubProfile = onSnapshot(doc(db, 'student_profiles', uid), (profileDoc) => {
               extendedProfileReady = true;
-              studentProfileData = profileDoc.exists ? profileDoc.data() as StudentProfileData : null;
+              studentProfileData = profileDoc.exists()
+                ? (profileDoc.data() as StudentProfileData)
+                : null;
               combineAndCallback();
           }, (error) => {
               console.error("Error listening to student profile:", error);
@@ -138,7 +146,9 @@ export function getUserProfile(
       } else if (which === 'parent_profiles') {
           unsubProfile = onSnapshot(doc(db, 'parent_profiles', uid), (profileDoc) => {
               extendedProfileReady = true;
-              parentProfileData = profileDoc.exists ? profileDoc.data() as ParentProfileData : null;
+              parentProfileData = profileDoc.exists()
+                ? (profileDoc.data() as ParentProfileData)
+                : null;
               combineAndCallback();
           }, (error) => {
               console.error("Error listening to parent profile:", error);
@@ -153,7 +163,9 @@ export function getUserProfile(
   }
 
   unsubSubscription = onSnapshot(doc(db, 'subscriptions', uid), (subDoc) => {
-      subscriptionData = subDoc.exists ? subDoc.data() as SubscriptionData : null;
+      subscriptionData = subDoc.exists()
+        ? (subDoc.data() as SubscriptionData)
+        : null;
       combineAndCallback();
   }, (error) => {
       console.error(`Error listening to subscription for uid: ${uid}`, error);
@@ -163,7 +175,7 @@ export function getUserProfile(
 
 
   unsubUser = onSnapshot(doc(db, 'users', uid), (userDoc) => {
-    if (userDoc.exists) {
+    if (userDoc.exists()) {
       const newUserData = { uid: userDoc.id, ...userDoc.data() } as UserData;
       const newRole = newUserData.role;
       

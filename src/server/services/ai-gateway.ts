@@ -10,6 +10,7 @@ import { canUsePremiumFeature } from '@/data/entitlements';
 import type { SubscriptionType } from '../schemas';
 import type { SystemSettings } from '@/server/schemas/system-settings';
 import { toGoogleAiGenkitModel } from '@/server/ai/genkit-model';
+import { buildAiUsagePricingFields } from '@/server/lib/ai-provider-cost-estimate';
 
 /** If Firestore/config omits a model id, Genkit throws "Must supply a `model` to `generate()`". */
 const MODEL_FALLBACK: Record<AIProvider, { costEffective: string; performance: string }> = {
@@ -94,7 +95,7 @@ export class AIGatewayService {
         }
     }
     
-    let debitResult;
+    let debitResult: { chargedACUs: number };
     if (ctx.entitlement) {
         debitResult = await ACUService.enforceAndDebit({
             userId: ctx.userId,
@@ -102,7 +103,7 @@ export class AIGatewayService {
             metadata: { requestId: ctx.requestId }
         });
     } else {
-        debitResult = { acuCharged: 0 };
+        debitResult = { chargedACUs: 0 };
     }
     
     const route = await routeByTaskType(ctx.taskType);
@@ -139,14 +140,21 @@ export class AIGatewayService {
     const latencyMs = Date.now() - startTime;
     
     if (!output) {
+      const pricing = buildAiUsagePricingFields(
+        finalProvider,
+        finalModel,
+        ctx.estimatedInputTokens,
+        0,
+        debitResult.chargedACUs,
+      );
       await logAiUsage({
           requestId: ctx.requestId, userId: ctx.userId,
           taskType: ctx.taskType, provider: finalProvider, model: finalModel,
           status: 'failed', fallbackUsed: true, latencyMs,
           inputTokens: ctx.estimatedInputTokens, outputTokens: 0,
-          realCost: 0,
-          customerChargeEquivalent: 0,
-          chargedAcus: debitResult.acuCharged,
+          realCost: pricing.realCostUsd,
+          customerChargeEquivalent: pricing.customerChargeEquivalentGbp,
+          chargedAcus: debitResult.chargedACUs,
           pricingPolicyId: 'default-refunded-on-fail',
       });
       throw new HttpsError("internal", `The AI failed to process your request for ${ctx.featureName}. Error: ${(lastError as Error)?.message}`);
@@ -154,14 +162,22 @@ export class AIGatewayService {
 
     const outputTokens = Math.ceil(JSON.stringify(output).length / 4);
 
+    const pricing = buildAiUsagePricingFields(
+      finalProvider,
+      finalModel,
+      ctx.estimatedInputTokens,
+      outputTokens,
+      debitResult.chargedACUs,
+    );
+
      await logAiUsage({
         requestId: ctx.requestId, userId: ctx.userId,
         taskType: ctx.taskType, provider: finalProvider, model: finalModel,
         status: 'success', fallbackUsed, latencyMs,
         inputTokens: ctx.estimatedInputTokens, outputTokens: outputTokens,
-        realCost: 0,
-        customerChargeEquivalent: 0,
-        chargedAcus: debitResult.acuCharged,
+        realCost: pricing.realCostUsd,
+        customerChargeEquivalent: pricing.customerChargeEquivalentGbp,
+        chargedAcus: debitResult.chargedACUs,
         pricingPolicyId: 'default',
     });
 
@@ -175,7 +191,7 @@ export class AIGatewayService {
       usage: {
         inputTokens: ctx.estimatedInputTokens,
         outputTokens: outputTokens,
-        estimatedCost: debitResult.acuCharged,
+        estimatedCost: debitResult.chargedACUs,
       },
       latencyMs,
       fallbackUsed,

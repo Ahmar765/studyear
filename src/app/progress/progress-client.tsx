@@ -1,7 +1,7 @@
 
 'use client'
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { useUserProfile } from "@/hooks/use-user-profile";
@@ -12,7 +12,10 @@ import { BrainCircuit, Loader, Sparkles, BookOpen, Target, GraduationCap, ArrowR
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/use-auth";
-import { generateProgressReportAction } from "@/server/actions/progress-actions";
+import {
+    generateProgressReportAction,
+    getSavedGradeImprovementPlanAction,
+} from "@/server/actions/progress-actions";
 import { GenerateProgressReportOutput } from "@/server/ai/flows/progress-report-generation";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
@@ -53,6 +56,25 @@ export default function ProgressClientPage({ initialChartData }: ProgressClientP
   const [report, setReport] = useState<GenerateProgressReportOutput | null>(null);
   const [isPending, startTransition] = useTransition();
 
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const idToken = await user.getIdToken();
+        const { report: saved } = await getSavedGradeImprovementPlanAction(idToken);
+        if (!cancelled && saved) {
+          setReport(saved);
+        }
+      } catch {
+        /* ignore load errors; user can regenerate */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
   const handleGenerateReport = () => {
     if (!userProfile || !user || !userProfile.subjects) return;
     
@@ -70,12 +92,16 @@ export default function ProgressClientPage({ initialChartData }: ProgressClientP
             const studentActivity = `The student has completed ${initialChartData.length} quizzes with an average score calculated from their attempts.`;
             const overallTarget = userProfile.subjects?.find(s => s.targetGrade)?.targetGrade || "Not set";
 
-            const result = await generateProgressReportAction({
-                studentName: user.uid, // Pass UID, action will get name
-                subjects: subjectsWithProgress,
-                overallTargetGrade: overallTarget,
-                activity: studentActivity,
-            });
+            const idToken = await user.getIdToken();
+            const result = await generateProgressReportAction(
+                {
+                    studentName: user.uid,
+                    subjects: subjectsWithProgress,
+                    overallTargetGrade: overallTarget,
+                    activity: studentActivity,
+                },
+                idToken,
+            );
 
             if (result.success && result.report) {
                 setReport(result.report);
@@ -114,12 +140,12 @@ export default function ProgressClientPage({ initialChartData }: ProgressClientP
                 <CardHeader>
                 <CardTitle>Subject Progress Chart</CardTitle>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="h-[320px] pl-2">
                 {loading ? (
                      <Skeleton className="h-[300px] w-full" />
                 ) : hasProgressData ? (
-                    <ChartContainer config={chartConfig} className="min-h-[300px] w-full">
-                        <BarChart accessibilityLayer data={initialChartData}>
+                    <ChartContainer config={chartConfig} className="h-[300px] w-full">
+                        <BarChart accessibilityLayer data={initialChartData} margin={{ top: 8, right: 8, left: 0, bottom: 4 }}>
                         <CartesianGrid vertical={false} />
                         <XAxis dataKey="name" tickLine={false} tickMargin={10} axisLine={false} />
                         <YAxis />
@@ -179,7 +205,7 @@ export default function ProgressClientPage({ initialChartData }: ProgressClientP
                             </Card>
                             
                             <Accordion type="multiple" className="w-full">
-                            {report.improvementPlans.map((plan, index) => (
+                            {(report.improvementPlans ?? []).map((plan, index) => (
                                 <AccordionItem value={`item-${index}`} key={index}>
                                     <AccordionTrigger>
                                         <span className="flex items-center gap-3 text-xl font-semibold">

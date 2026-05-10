@@ -1,9 +1,99 @@
 import { adminDb } from '@/lib/firebase/admin-app';
 import * as admin from 'firebase-admin';
+import type Stripe from 'stripe';
 import { HttpsError } from './errors';
 import { ACUService } from '../services/acu-service';
 import type { SubscriptionType } from '../schemas';
-import { ACU_PACKAGES } from '@/data/acu-packages';
+import { ACU_PACKAGES, STUDENT_PREMIUM_PLUS_MONTHLY_ACUS } from '@/data/acu-packages';
+
+/**
+ * Idempotently credit ACUs and write `payments` for a paid Checkout session (mode=payment + ACU pack metadata).
+ * Safe for concurrent webhook + browser finalize calls.
+ */
+export async function recordAcuTopUpFromCheckoutSession(
+  session: Stripe.Checkout.Session,
+): Promise<
+  | { ok: true; duplicate: boolean }
+  | { ok: false; reason: string }
+> {
+  const userId = session.metadata?.userId;
+  const productCode = session.metadata?.productCode;
+
+  if (!userId || !productCode) {
+    return { ok: false, reason: 'missing_metadata' };
+  }
+
+  if (session.mode !== 'payment') {
+    return { ok: false, reason: 'wrong_mode' };
+  }
+
+  if (!ACU_PACKAGES[productCode as keyof typeof ACU_PACKAGES]) {
+    return { ok: false, reason: 'invalid_product' };
+  }
+
+  if (session.payment_status !== 'paid') {
+    return { ok: false, reason: 'not_paid' };
+  }
+
+  const existingPayment = await adminDb
+    .collection('payments')
+    .where('stripeCheckoutId', '==', session.id)
+    .limit(1)
+    .get();
+
+  if (!existingPayment.empty) {
+    return { ok: true, duplicate: true };
+  }
+
+  const settlementRef = adminDb.collection('stripe_acu_checkout_settlements').doc(session.id);
+
+  const claim = await adminDb.runTransaction(async (transaction) => {
+    const snap = await transaction.get(settlementRef);
+    if (snap.exists) {
+      return 'duplicate' as const;
+    }
+    transaction.set(settlementRef, {
+      userId,
+      productCode,
+      amountTotal: session.amount_total ?? null,
+      currency: session.currency ?? 'gbp',
+      settledAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    return 'claimed' as const;
+  });
+
+  if (claim === 'duplicate') {
+    return { ok: true, duplicate: true };
+  }
+
+  const dupAfter = await adminDb
+    .collection('payments')
+    .where('stripeCheckoutId', '==', session.id)
+    .limit(1)
+    .get();
+
+  if (!dupAfter.empty) {
+    return { ok: true, duplicate: true };
+  }
+
+  const balanceResult = await updateUserAcuBalance(userId, productCode);
+  if (!balanceResult.success) {
+    await settlementRef.delete().catch(() => {});
+    return { ok: false, reason: balanceResult.error ?? 'acu_credit_failed' };
+  }
+
+  await adminDb.collection('payments').add({
+    userId,
+    amount: session.amount_total,
+    currency: session.currency,
+    productCode,
+    stripeCheckoutId: session.id,
+    status: session.payment_status,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  return { ok: true, duplicate: false };
+}
 
 export async function updateUserAcuBalance(userId: string, productCode: string) {
     const pack = ACU_PACKAGES[productCode as keyof typeof ACU_PACKAGES];
@@ -41,6 +131,68 @@ export async function updateUserAcuBalance(userId: string, productCode: string) 
 
 type SubscriptionStatus = "ACTIVE" | "INACTIVE" | "CANCELLED" | "EXPIRED" | "PENDING_PAYMENT";
 
+/**
+ * Premium Plus: grant bundled ACUs once per paid Stripe invoice (initial + renewals). Idempotent per `invoiceId`.
+ */
+export async function grantPremiumPlusMonthlyAcusForInvoice(params: {
+  userId: string;
+  invoiceId: string;
+  amountPaidPence: number;
+  productCode: SubscriptionType;
+}): Promise<{ granted: boolean; skipReason?: string }> {
+  if (params.productCode !== 'STUDENT_PREMIUM_PLUS') {
+    return { granted: false, skipReason: 'not_premium_plus' };
+  }
+  if (!params.invoiceId) {
+    return { granted: false, skipReason: 'missing_invoice_id' };
+  }
+  if (params.amountPaidPence <= 0) {
+    return { granted: false, skipReason: 'zero_or_negative_payment' };
+  }
+
+  const grantRef = adminDb.collection('stripe_premium_plus_acu_grants').doc(params.invoiceId);
+
+  const shouldCredit = await adminDb.runTransaction(async (transaction) => {
+    const snap = await transaction.get(grantRef);
+    if (snap.exists) {
+      return false;
+    }
+    transaction.set(grantRef, {
+      userId: params.userId,
+      acus: STUDENT_PREMIUM_PLUS_MONTHLY_ACUS,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    return true;
+  });
+
+  if (!shouldCredit) {
+    return { granted: false, skipReason: 'already_credited_for_invoice' };
+  }
+
+  try {
+    await ACUService.creditACUs({
+      userId: params.userId,
+      amount: STUDENT_PREMIUM_PLUS_MONTHLY_ACUS,
+      type: 'BONUS',
+      description: `Premium Plus — ${STUDENT_PREMIUM_PLUS_MONTHLY_ACUS.toLocaleString('en-GB')} ACUs (subscription invoice)`,
+      metadata: {
+        source: 'stripe_invoice',
+        stripeInvoiceId: params.invoiceId,
+        productCode: 'STUDENT_PREMIUM_PLUS',
+      },
+    });
+  } catch (error) {
+    await grantRef.delete().catch(() => {});
+    console.error('grantPremiumPlusMonthlyAcusForInvoice: credit failed', error);
+    throw error;
+  }
+
+  console.log(
+    `Premium Plus ACUs (${STUDENT_PREMIUM_PLUS_MONTHLY_ACUS}) credited to ${params.userId} for invoice ${params.invoiceId}`,
+  );
+  return { granted: true };
+}
+
 export async function manageSubscriptionStatusChange(
   subscriptionId: string,
   customerId: string,
@@ -48,13 +200,16 @@ export async function manageSubscriptionStatusChange(
   subscriptionType: SubscriptionType,
   status: SubscriptionStatus
 ) {
+  const planType = String(subscriptionType ?? '')
+    .trim()
+    .toUpperCase() as SubscriptionType;
   const subscriptionRef = adminDb.collection('subscriptions').doc(userId);
   
   try {
     await adminDb.runTransaction(async (transaction) => {
       // Set the subscription data
       transaction.set(subscriptionRef, { 
-        type: subscriptionType,
+        type: planType,
         status: status,
         stripeSubscriptionId: subscriptionId,
         stripeCustomerId: customerId,
@@ -71,7 +226,7 @@ export async function manageSubscriptionStatusChange(
           }, { merge: true });
       }
     });
-    console.log(`Subscription updated for user ${userId}: type=${subscriptionType}, status=${status}.`);
+    console.log(`Subscription updated for user ${userId}: type=${planType}, status=${status}.`);
   } catch (error) {
     console.error(`Failed to update subscription status for user ${userId}:`, error);
     // Don't rethrow to avoid webhook retry loops on persistent errors.

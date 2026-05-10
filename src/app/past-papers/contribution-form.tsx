@@ -10,8 +10,9 @@ import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/use-auth';
 import { Loader, Upload } from 'lucide-react';
 import { contributeResourceAction } from '@/server/actions/resource-actions';
 
@@ -34,6 +35,7 @@ interface ContributionFormProps {
 export default function ContributionForm({ subjects, examBoards, levels }: ContributionFormProps) {
     const [isPending, startTransition] = useTransition();
     const { toast } = useToast();
+    const { user } = useAuth();
     const [activeTab, setActiveTab] = useState<'PAST_PAPER' | 'VIDEO'>('PAST_PAPER');
 
     const form = useForm<z.infer<typeof formSchema>>({
@@ -57,11 +59,17 @@ export default function ContributionForm({ subjects, examBoards, levels }: Contr
 
     const onSubmit = (values: z.infer<typeof formSchema>) => {
         startTransition(async () => {
+            if (!user) {
+                toast({ variant: 'destructive', title: 'Sign in required', description: 'You must be logged in to contribute.' });
+                return;
+            }
+
             const formData = new FormData();
             Object.entries(values).forEach(([key, value]) => {
-                if (value) formData.append(key, value);
+                if (value) formData.append(key, value as string);
             });
-            
+            formData.append('idToken', await user.getIdToken());
+
             const result = await contributeResourceAction(formData);
 
             if (result.success) {
@@ -69,7 +77,15 @@ export default function ContributionForm({ subjects, examBoards, levels }: Contr
                     title: 'Contribution Submitted!',
                     description: 'Thank you! Your resource is now pending review by our team.',
                 });
-                form.reset();
+                form.reset({
+                    title: '',
+                    description: '',
+                    url: '',
+                    subjectId: '',
+                    examBoard: '',
+                    level: '',
+                    type: activeTab,
+                });
             } else {
                 toast({
                     variant: 'destructive',
@@ -95,7 +111,13 @@ export default function ContributionForm({ subjects, examBoards, levels }: Contr
                         <FormItem><FormLabel>Description (Optional)</FormLabel><FormControl><Textarea placeholder="Any extra details about this resource..." {...field} /></FormControl><FormMessage /></FormItem>
                     )} />
                     <FormField control={form.control} name="url" render={({ field }) => (
-                        <FormItem><FormLabel>URL</FormLabel><FormControl><Input placeholder="https://example.com/resource.pdf" {...field} /></FormControl><FormMessage /></FormItem>
+                        <FormItem>
+                          <FormLabel>{activeTab === 'PAST_PAPER' ? 'Link to past paper (PDF or page)' : 'Video URL'}</FormLabel>
+                          <FormControl>
+                            <Input type="url" placeholder="https://example.com/resource.pdf" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
                     )} />
                     <FormField control={form.control} name="level" render={({ field }) => (
                         <FormItem><FormLabel>Level</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Select..."/></SelectTrigger></FormControl><SelectContent>{levels.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>

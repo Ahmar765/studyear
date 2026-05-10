@@ -58,6 +58,8 @@ Topic: {{{topic}}}
 Academic Level: {{{level}}}
 Number of Questions: {{{numberOfQuestions}}}
 
+Strictly match difficulty, vocabulary, and assumed prior knowledge to Academic Level. For example, if the level is GCSE (or anything below sixth form), do not write questions as if for A-Level — avoid A-Level-only expectations, exam formats, or topics typically taught only post-16.
+
 Generate the quiz now.
 `,
 });

@@ -73,6 +73,11 @@ service cloud.firestore {
       allow write: if false; // Admin SDK only
     }
 
+    match /grade_improvement_plans/{studentId} {
+      allow read: if isOwner(studentId) || isParentOf(studentId) || isPlatformAdmin();
+      allow write: if false; // Admin SDK only
+    }
+
     // =====================================================================
     //  PROFILE & STATE COLLECTIONS
     // =====================================================================
@@ -91,6 +96,7 @@ service cloud.firestore {
         allow create: if isOwner(studentId) || isPlatformAdmin();
         allow write: if false; // Immutable
       }
+
     }
     
     match /parent_profiles/{parentId} {
@@ -217,8 +223,13 @@ service cloud.firestore {
     }
 
     match /autosave_events/{eventId} {
-        allow read: if isPlatformAdmin();
-        allow write: if false;
+      allow read: if isPlatformAdmin();
+      allow write: if false;
+    }
+
+    match /blog_posts/{postId} {
+      allow read: if resource.data.published == true;
+      allow write: if false;
     }
     
     // Default deny all other collections

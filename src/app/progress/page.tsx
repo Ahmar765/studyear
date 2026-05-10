@@ -1,7 +1,7 @@
 'use client';
 
 import { useAuth } from '@/hooks/use-auth';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { getStudentProgressAction } from '@/server/actions/progress-actions';
 import ProgressClientPage from './progress-client';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -23,6 +23,7 @@ function ProgressLoading() {
 
 export default function ProgressPage() {
   const { user, loading: authLoading } = useAuth();
+  const lastFetchedUidRef = useRef<string | null>(null);
   const [chartData, setChartData] = useState<
     { name: string; progress: number; targetGrade: string }[]
   >([]);
@@ -31,13 +32,25 @@ export default function ProgressPage() {
   useEffect(() => {
     if (authLoading) return;
     if (!user) {
+      lastFetchedUidRef.current = null;
       setChartData([]);
       setProgressFetchDone(true);
       return;
     }
+
+    const uid = user.uid;
+    const uidChanged = lastFetchedUidRef.current !== uid;
+    lastFetchedUidRef.current = uid;
+
+    // Only block the whole page on first load or account switch. Re-fetching for the same uid
+    // (e.g. Firebase auth object refresh) must not unmount ProgressClientPage — that wiped AI plan state.
+    if (uidChanged) {
+      setChartData([]);
+      setProgressFetchDone(false);
+    }
+
     let cancelled = false;
-    setProgressFetchDone(false);
-    getStudentProgressAction(user.uid)
+    getStudentProgressAction(uid)
       .then((data) => {
         if (!cancelled) setChartData(data);
       })

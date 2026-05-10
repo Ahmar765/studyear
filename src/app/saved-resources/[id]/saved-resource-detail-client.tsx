@@ -3,7 +3,13 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/use-auth";
 import {
@@ -545,14 +551,30 @@ function RecoveryPlanKidFriendlyView({
   );
 }
 
+/** Saved from global library: `resources` doc stored wholesale — quiz payload lives in `.content`. */
+function unwrapSavedLibraryPayload(typeKey: string, content: unknown): unknown {
+  if (!isRecord(content)) return content;
+  const inner = content.content;
+  if (
+    inner !== undefined &&
+    isRecord(inner) &&
+    typeof content.type === "string" &&
+    content.type === typeKey
+  ) {
+    return inner;
+  }
+  return content;
+}
+
 function RenderSavedBody({
   resource,
 }: {
   resource: SavedResourceDetail;
 }) {
   const { typeKey, content, sourceInput } = resource;
+  const body = unwrapSavedLibraryPayload(typeKey, content);
 
-  if (content === null || content === undefined) {
+  if (body === null || body === undefined) {
     return (
       <p className="text-sm text-muted-foreground">
         No snapshot content was stored for this resource.
@@ -560,10 +582,10 @@ function RenderSavedBody({
     );
   }
 
-  if (typeKey === "QUIZ" && isRecord(content)) {
+  if (typeKey === "QUIZ" && isRecord(body)) {
     const title =
-      typeof content.quizTitle === "string" ? content.quizTitle : resource.title;
-    const questions = Array.isArray(content.questions) ? content.questions : [];
+      typeof body.quizTitle === "string" ? body.quizTitle : resource.title;
+    const questions = Array.isArray(body.questions) ? body.questions : [];
     return (
       <div className="space-y-6">
         <h3 className="text-xl font-semibold">{title}</h3>
@@ -607,8 +629,8 @@ function RenderSavedBody({
     );
   }
 
-  if (typeKey === "FLASHCARD" && isRecord(content)) {
-    const cards = Array.isArray(content.flashcards) ? content.flashcards : [];
+  if (typeKey === "FLASHCARD" && isRecord(body)) {
+    const cards = Array.isArray(body.flashcards) ? body.flashcards : [];
     return (
       <div className="grid gap-4 sm:grid-cols-2">
         {cards.map((c, i) => {
@@ -653,32 +675,32 @@ function RenderSavedBody({
     );
   }
 
-  if (typeKey === "ESSAY_PLAN" && isRecord(content)) {
-    const bodyParagraphs = Array.isArray(content.bodyParagraphs)
-      ? content.bodyParagraphs
+  if (typeKey === "ESSAY_PLAN" && isRecord(body)) {
+    const bodyParagraphs = Array.isArray(body.bodyParagraphs)
+      ? body.bodyParagraphs
       : [];
     return (
       <div className="space-y-4 text-sm">
-        {typeof content.title === "string" ? (
-          <h3 className="text-xl font-semibold">{content.title}</h3>
+        {typeof body.title === "string" ? (
+          <h3 className="text-xl font-semibold">{body.title}</h3>
         ) : null}
-        {typeof content.thesisStatement === "string" ? (
+        {typeof body.thesisStatement === "string" ? (
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Thesis</CardTitle>
             </CardHeader>
             <CardContent className="whitespace-pre-wrap">
-              {content.thesisStatement}
+              {body.thesisStatement}
             </CardContent>
           </Card>
         ) : null}
-        {typeof content.introduction === "string" ? (
+        {typeof body.introduction === "string" ? (
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Introduction</CardTitle>
             </CardHeader>
             <CardContent className="whitespace-pre-wrap">
-              {content.introduction}
+              {body.introduction}
             </CardContent>
           </Card>
         ) : null}
@@ -712,13 +734,13 @@ function RenderSavedBody({
             </Card>
           );
         })}
-        {typeof content.conclusion === "string" ? (
+        {typeof body.conclusion === "string" ? (
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Conclusion</CardTitle>
             </CardHeader>
             <CardContent className="whitespace-pre-wrap">
-              {content.conclusion}
+              {body.conclusion}
             </CardContent>
           </Card>
         ) : null}
@@ -726,9 +748,9 @@ function RenderSavedBody({
     );
   }
 
-  if (typeKey === "TOPIC_SUMMARY" && isRecord(content)) {
+  if (typeKey === "TOPIC_SUMMARY" && isRecord(body)) {
     const summary =
-      typeof content.summary === "string" ? content.summary : null;
+      typeof body.summary === "string" ? body.summary : null;
     if (summary) {
       return (
         <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap">
@@ -738,10 +760,10 @@ function RenderSavedBody({
     }
   }
 
-  if (typeKey === "MIND_MAP" && isRecord(content)) {
-    const root = content.rootNode;
+  if (typeKey === "MIND_MAP" && isRecord(body)) {
+    const root = body.rootNode;
     const centralTitle =
-      typeof content.title === "string" ? content.title : resource.title;
+      typeof body.title === "string" ? body.title : resource.title;
     return (
       <div className="space-y-3">
         <h3 className="text-lg font-semibold">{centralTitle}</h3>
@@ -803,10 +825,10 @@ function RenderSavedBody({
     "FUNCTION_GRAPH",
     "GRAPH_THEORY_DIAGRAM",
   ]);
-  if (visualTypes.has(typeKey) && isRecord(content)) {
+  if (visualTypes.has(typeKey) && isRecord(body)) {
     const imageUrl =
-      typeof content.imageUrl === "string" ? content.imageUrl : null;
-    const svg = typeof content.svg === "string" ? content.svg : null;
+      typeof body.imageUrl === "string" ? body.imageUrl : null;
+    const svg = typeof body.svg === "string" ? body.svg : null;
     return (
       <div className="space-y-4">
         {imageUrl ? (
@@ -825,19 +847,160 @@ function RenderSavedBody({
         ) : null}
         {!imageUrl && !svg ? (
           <pre className="max-h-[480px] overflow-auto rounded-md bg-muted p-4 text-xs whitespace-pre-wrap">
-            {JSON.stringify(content, null, 2)}
+            {JSON.stringify(body, null, 2)}
           </pre>
         ) : null}
       </div>
     );
   }
 
-  if (typeKey === "STUDY_PLAN" && isRecord(content)) {
-    return <StudyPlanKidFriendlyView content={content} />;
+  if (typeKey === "AI_COURSE" && isRecord(body)) {
+    const courseTitle =
+      typeof body.courseTitle === "string" ? body.courseTitle : resource.title;
+    const courseObjective =
+      typeof body.courseObjective === "string" ? body.courseObjective : "";
+    const levelLabel = typeof body.level === "string" ? body.level : "";
+    const estimatedDuration =
+      typeof body.estimatedDuration === "string" ? body.estimatedDuration : "";
+    const modules = Array.isArray(body.modules) ? body.modules : [];
+
+    return (
+      <div className="space-y-8">
+        <div className="rounded-xl border bg-muted/40 p-6 space-y-3">
+          <h3 className="text-2xl font-bold">{courseTitle}</h3>
+          <div className="flex flex-wrap gap-2">
+            {levelLabel ? (
+              <Badge variant="secondary">{levelLabel}</Badge>
+            ) : null}
+            {estimatedDuration ? (
+              <Badge variant="outline">{estimatedDuration}</Badge>
+            ) : null}
+          </div>
+          {courseObjective ? (
+            <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">
+              {courseObjective}
+            </p>
+          ) : null}
+        </div>
+
+        {modules.map((mod, mi) => {
+          if (!isRecord(mod)) return null;
+          const moduleTitle =
+            typeof mod.moduleTitle === "string"
+              ? mod.moduleTitle
+              : `Module ${mi + 1}`;
+          const moduleObjective =
+            typeof mod.moduleObjective === "string"
+              ? mod.moduleObjective
+              : "";
+          const lessons = Array.isArray(mod.lessons) ? mod.lessons : [];
+
+          return (
+            <Card key={mi}>
+              <CardHeader>
+                <CardTitle className="text-lg">{moduleTitle}</CardTitle>
+                {moduleObjective ? (
+                  <CardDescription>{moduleObjective}</CardDescription>
+                ) : null}
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {lessons.map((lesson, li) => {
+                  if (!isRecord(lesson)) return null;
+                  const lessonTitle =
+                    typeof lesson.lessonTitle === "string"
+                      ? lesson.lessonTitle
+                      : `Lesson ${li + 1}`;
+                  const lessonContent =
+                    typeof lesson.lessonContent === "string"
+                      ? lesson.lessonContent
+                      : "";
+                  const workedExample =
+                    typeof lesson.workedExample === "string"
+                      ? lesson.workedExample
+                      : "";
+                  const practiceQuestions = Array.isArray(
+                    lesson.practiceQuestions,
+                  )
+                    ? lesson.practiceQuestions
+                    : [];
+                  const miniQuiz = Array.isArray(lesson.miniQuiz)
+                    ? lesson.miniQuiz
+                    : [];
+
+                  return (
+                    <div
+                      key={li}
+                      className="rounded-lg border bg-background p-4 space-y-4"
+                    >
+                      <div className="flex items-center gap-2 font-semibold">
+                        <BookOpen className="h-4 w-4 shrink-0 text-primary" />
+                        {lessonTitle}
+                      </div>
+                      {lessonContent ? (
+                        <div className="text-sm whitespace-pre-wrap leading-relaxed">
+                          {lessonContent}
+                        </div>
+                      ) : null}
+                      {workedExample ? (
+                        <Card className="bg-muted/30 border-dashed">
+                          <CardHeader className="py-3 pb-1">
+                            <CardTitle className="text-sm">Worked example</CardTitle>
+                          </CardHeader>
+                          <CardContent className="pt-1 text-sm whitespace-pre-wrap">
+                            {workedExample}
+                          </CardContent>
+                        </Card>
+                      ) : null}
+                      {practiceQuestions.length > 0 ? (
+                        <div className="text-sm">
+                          <p className="font-medium mb-2">Practice questions</p>
+                          <ul className="list-decimal pl-5 space-y-1">
+                            {practiceQuestions.map((pq, i) => (
+                              <li key={i}>{String(pq)}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+                      {miniQuiz.length > 0 ? (
+                        <div className="text-sm space-y-2">
+                          <p className="font-medium">Mini quiz</p>
+                          {miniQuiz.map((qz, qi) => {
+                            if (!isRecord(qz)) return null;
+                            const qq =
+                              typeof qz.question === "string"
+                                ? qz.question
+                                : "";
+                            const qa =
+                              typeof qz.answer === "string" ? qz.answer : "";
+                            return (
+                              <div
+                                key={qi}
+                                className="rounded-md border bg-muted/20 p-3 space-y-1"
+                              >
+                                <p className="font-medium">{qq}</p>
+                                <p className="text-muted-foreground">{qa}</p>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+    );
   }
 
-  if (typeKey === "RECOVERY_PLAN" && isRecord(content)) {
-    return <RecoveryPlanKidFriendlyView content={content} />;
+  if (typeKey === "STUDY_PLAN" && isRecord(body)) {
+    return <StudyPlanKidFriendlyView content={body} />;
+  }
+
+  if (typeKey === "RECOVERY_PLAN" && isRecord(body)) {
+    return <RecoveryPlanKidFriendlyView content={body} />;
   }
 
   return (
@@ -855,9 +1018,9 @@ function RenderSavedBody({
         </Card>
       ) : null}
       <pre className="max-h-[560px] overflow-auto rounded-md bg-muted p-4 text-xs whitespace-pre-wrap">
-        {typeof content === "string"
-          ? content
-          : JSON.stringify(content, null, 2)}
+        {typeof body === "string"
+          ? body
+          : JSON.stringify(body, null, 2)}
       </pre>
     </div>
   );

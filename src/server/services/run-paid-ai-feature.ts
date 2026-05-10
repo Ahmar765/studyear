@@ -26,22 +26,26 @@ export async function runPaidAIFeature<T>(input: {
     throw new HttpsError("not-found", "USER_NOT_FOUND");
   }
 
-  // Admins bypass checks
+  // Admins bypass subscription checks
   if (user.role !== 'ADMIN') {
     if (!canUsePremiumFeature(user.subscription as SubscriptionType, input.featureKey)) {
       throw new HttpsError("failed-precondition", `FEATURE_NOT_INCLUDED_IN_PLAN: ${input.featureKey}`);
     }
   }
-  
+
   if (!(input.featureKey in ACU_FEATURE_COSTS)) {
       throw new HttpsError("invalid-argument", `Feature key '${input.featureKey}' not found in ACU costs.`);
   }
 
-  const debit = await ACUService.enforceAndDebit({
-    userId: input.userId,
-    featureKey: input.featureKey,
-    metadata: input.metadata
-  });
+  /** Platform admins run internal tools (e.g. blog generator) without debiting a possibly empty wallet. */
+  const debit =
+    user.role === 'ADMIN'
+      ? { chargedACUs: 0 }
+      : await ACUService.enforceAndDebit({
+          userId: input.userId,
+          featureKey: input.featureKey,
+          metadata: input.metadata,
+        });
 
   const result = await input.action();
 

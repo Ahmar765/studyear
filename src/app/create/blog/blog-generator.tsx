@@ -1,50 +1,31 @@
-
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Bot, Sparkles, Newspaper } from "lucide-react";
+import { Sparkles, Newspaper, Save } from "lucide-react";
 import { GenerateBlogPostOutput } from "@/server/ai/flows/blog-post-generation";
 import { createAiBlogPost } from "@/server/actions/blog-actions";
-import { Badge } from "@/components/ui/badge";
-import { z } from "zod";
+import { saveBlogPostAction } from "@/server/actions/blog-post-actions";
 import { useAuth } from "@/hooks/use-auth";
-
-// A simple markdown renderer
-const SimpleMarkdown: React.FC<{ content: string }> = ({ content }) => {
-    const lines = content.split('\n');
-    return (
-        <div className="prose prose-stone dark:prose-invert max-w-none">
-            {lines.map((line, index) => {
-                if (line.startsWith('## ')) {
-                    return <h2 key={index} className="text-2xl font-bold mt-6 mb-3">{line.substring(3)}</h2>;
-                }
-                if (line.startsWith('* ')) {
-                    return <li key={index} className="ml-5 list-disc">{line.substring(2)}</li>
-                }
-                 if (line.startsWith('1. ')) {
-                    return <li key={index} className="ml-5 list-decimal">{line.substring(3)}</li>
-                }
-                if(line.trim() === '') {
-                    return <br key={index} />;
-                }
-                return <p key={index}>{line}</p>;
-            })}
-        </div>
-    );
-};
+import { useUserProfile } from "@/hooks/use-user-profile";
+import { SimpleMarkdown } from "@/components/blog/simple-markdown";
 
 
 export default function BlogGenerator() {
   const [generatedPost, setGeneratedPost] = useState<GenerateBlogPostOutput | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [saveDraftPending, startSaveDraft] = useTransition();
   const { toast } = useToast();
+  const router = useRouter();
   const { user } = useAuth();
+  const { userProfile } = useUserProfile();
+  const isAdmin = userProfile?.role === "ADMIN";
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -68,6 +49,31 @@ export default function BlogGenerator() {
           description: result.error,
         });
       }
+    });
+  };
+
+  const handleSaveDraft = () => {
+    if (!user || !generatedPost) return;
+    startSaveDraft(async () => {
+      const result = await saveBlogPostAction({
+        title: generatedPost.title,
+        metaDescription: generatedPost.metaDescription,
+        content: generatedPost.content,
+        authorId: user.uid,
+      });
+      if (!result.success || !result.id) {
+        toast({
+          variant: "destructive",
+          title: "Could not save draft",
+          description: result.error,
+        });
+        return;
+      }
+      toast({
+        title: "Draft saved",
+        description: "Opening the editor so you can publish when ready.",
+      });
+      router.push(`/admin/blog/${result.id}/edit`);
     });
   };
 
@@ -128,7 +134,21 @@ export default function BlogGenerator() {
                 </div>
             ) : generatedPost ? (
                 <article className="space-y-4">
-                    <h1 className="text-3xl font-extrabold tracking-tight lg:text-4xl">{generatedPost.title}</h1>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <h1 className="text-3xl font-extrabold tracking-tight lg:text-4xl">{generatedPost.title}</h1>
+                      {isAdmin ? (
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          disabled={saveDraftPending}
+                          onClick={handleSaveDraft}
+                        >
+                          <Save className="mr-2 h-4 w-4" />
+                          {saveDraftPending ? "Saving…" : "Save draft"}
+                        </Button>
+                      ) : null}
+                    </div>
                      <div>
                         <p className="text-sm text-muted-foreground">Meta Description:</p>
                         <p className="text-sm p-2 bg-muted rounded-md italic">{generatedPost.metaDescription}</p>

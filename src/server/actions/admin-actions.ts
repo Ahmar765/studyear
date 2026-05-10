@@ -8,7 +8,10 @@ import { adminDb, adminAuth } from '@/lib/firebase/admin-app';
 import { UserProfile } from '@/lib/firebase/services/user';
 import { AIRequestLog } from '@/server/services/activity';
 import { AcuTransaction, SubscriptionType, UserRole } from '@/server/schemas';
-import { Timestamp }from 'firebase-admin/firestore';
+import { Timestamp, type QuerySnapshot } from 'firebase-admin/firestore';
+import { USD_TO_GBP_ASSUMED } from '@/server/lib/ai-provider-cost-estimate';
+import { GBP_PER_ACU_ENTRY_RATE } from '@/data/acu-economics';
+import { AI_USAGE_AGG_ROW_CAP } from '@/server/lib/platform-economics-constants';
 import * as admin from 'firebase-admin';
 
 /** Firestore types are not JSON-serializable; RSC → client props must be plain objects. */
@@ -211,9 +214,84 @@ export async function getUsersAction(): Promise<{ users: UserProfile[], error: s
 }
 
 
-export async function getAiUsageLogsAction(): Promise<{ logs: AIRequestLog[], error: string | null }> {
+export type PlatformEconomicsOverview = {
+    stripeGrossGbpLast30d: number;
+    stripeGrossGbpLast90d: number;
+    stripePaymentCountLast30d: number;
+    stripePaymentCountLast90d: number;
+    aiEstSpendUsdLast30d: number;
+    aiEstSpendGbpLast30d: number;
+    aiAcusDebitedLast30d: number;
+    aiAcuValueGbpLast30d: number;
+    aiSuccessfulRequestsLast30d: number;
+    /** True when at least `AI_USAGE_AGG_ROW_CAP` AI log docs matched the last-30d filter (totals may be understated). */
+    aiLogsHitCap: boolean;
+};
+
+function sumStripePaymentPence(snap: QuerySnapshot): number {
+    let pence = 0;
+    snap.forEach((doc) => {
+        const a = doc.data().amount;
+        if (typeof a === 'number') pence += a;
+    });
+    return pence;
+}
+
+export async function getPlatformEconomicsOverviewAction(): Promise<{
+    overview: PlatformEconomicsOverview | null;
+    error: string | null;
+}> {
     try {
-        const logsSnapshot = await adminDb.collection('aiUsageLogs').orderBy('createdAt', 'desc').limit(20).get();
+        const thirtyTs = Timestamp.fromMillis(Date.now() - 30 * 86400000);
+        const ninetyTs = Timestamp.fromMillis(Date.now() - 90 * 86400000);
+
+        const [pay30, pay90, ai30] = await Promise.all([
+            adminDb.collection('payments').where('createdAt', '>=', thirtyTs).get(),
+            adminDb.collection('payments').where('createdAt', '>=', ninetyTs).get(),
+            adminDb
+                .collection('aiUsageLogs')
+                .where('createdAt', '>=', thirtyTs)
+                .limit(AI_USAGE_AGG_ROW_CAP)
+                .get(),
+        ]);
+
+        const p30 = sumStripePaymentPence(pay30);
+        const p90 = sumStripePaymentPence(pay90);
+
+        let aiUsd = 0;
+        let aiAcus = 0;
+        let aiSuccessfulRequestsLast30d = 0;
+        ai30.forEach((doc) => {
+            const d = doc.data();
+            if (typeof d.realCost === 'number') aiUsd += d.realCost;
+            if (typeof d.chargedAcus === 'number') aiAcus += d.chargedAcus;
+            if (d.status === 'success') aiSuccessfulRequestsLast30d++;
+        });
+
+        const overview: PlatformEconomicsOverview = {
+            stripeGrossGbpLast30d: p30 / 100,
+            stripeGrossGbpLast90d: p90 / 100,
+            stripePaymentCountLast30d: pay30.size,
+            stripePaymentCountLast90d: pay90.size,
+            aiEstSpendUsdLast30d: Math.round(aiUsd * 10000) / 10000,
+            aiEstSpendGbpLast30d: Math.round(aiUsd * USD_TO_GBP_ASSUMED * 100) / 100,
+            aiAcusDebitedLast30d: aiAcus,
+            aiAcuValueGbpLast30d: Math.round(aiAcus * GBP_PER_ACU_ENTRY_RATE * 100) / 100,
+            aiSuccessfulRequestsLast30d,
+            aiLogsHitCap: ai30.size >= AI_USAGE_AGG_ROW_CAP,
+        };
+
+        return { overview, error: null };
+    } catch (error: any) {
+        console.error('getPlatformEconomicsOverviewAction:', error);
+        return { overview: null, error: error.message };
+    }
+}
+
+export async function getAiUsageLogsAction(limit = 80): Promise<{ logs: AIRequestLog[], error: string | null }> {
+    try {
+        const capped = Math.min(Math.max(limit, 10), 200);
+        const logsSnapshot = await adminDb.collection('aiUsageLogs').orderBy('createdAt', 'desc').limit(capped).get();
         const logs = logsSnapshot.docs.map(doc => {
             const data = doc.data();
             return {
@@ -294,7 +372,8 @@ export async function getAdminDashboardStatsAction(): Promise<{
 
 const ResourceUploadSchema = z.object({
   title: z.string().min(1, 'Title is required.'),
-  url: z.string().url('Must be a valid URL.'),
+  /** Final HTTPS URL (direct link or Cloudinary URL after PDF upload). Validated in action. */
+  url: z.string().optional(),
   type: z.enum(Object.keys(resourceMetadata) as [ResourceType, ...ResourceType[]]),
   subject: z.string().min(1, 'Subject is required.'),
   topic: z.string().min(1, 'Topic is required.'),
@@ -305,11 +384,26 @@ const ResourceUploadSchema = z.object({
 
 export async function addResourceUploadAction(values: z.infer<typeof ResourceUploadSchema>): Promise<{ success: boolean; error?: string }> {
     try {
+        const urlTrim = (values.url ?? '').trim();
+        if (!urlTrim) {
+            return { success: false, error: 'Provide a URL or upload a PDF for past papers.' };
+        }
+        let parsedUrl: URL;
+        try {
+            parsedUrl = new URL(urlTrim);
+        } catch {
+            return { success: false, error: 'Invalid URL.' };
+        }
+        if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+            return { success: false, error: 'URL must use http:// or https://.' };
+        }
+
         const uploadRef = adminDb.collection('resource_uploads').doc();
         await uploadRef.set({
             ...values,
-            videoUrl: values.type === 'VIDEO' ? values.url : null,
-            fileUrl: values.type !== 'VIDEO' ? values.url : null,
+            url: urlTrim,
+            videoUrl: values.type === 'VIDEO' ? urlTrim : null,
+            fileUrl: values.type !== 'VIDEO' ? urlTrim : null,
             uploadedById: 'admin', // Placeholder for current admin user
             approvalStatus: 'PENDING',
             createdAt: Timestamp.now(),
@@ -649,33 +743,177 @@ export async function dismissUserFlagAction(userId: string): Promise<{ success: 
 }
 
 
-export async function getAnalyticsDataAction(): Promise<{ newUsersData: any[], error: string | null }> {
+export type AnalyticsKpi = {
+    totalUsers: number;
+    /** Users with `lastLoginAt` in the last 30 days (missing field excluded). */
+    returningApprox30d: number;
+    /** Users with `createdAt` in the last 30 days. */
+    newSignups30d: number;
+    /** Rows in `aiUsageLogs` with `createdAt` in the last 30 days. */
+    aiRequestsLogged30d: number;
+};
+
+function parseFirestoreDate(raw: unknown): Date | null {
+    if (raw == null) return null;
+    if (raw instanceof Timestamp) {
+        try {
+            const d = raw.toDate();
+            return Number.isNaN(d.getTime()) ? null : d;
+        } catch {
+            return null;
+        }
+    }
+    const maybe = raw as { toDate?: () => Date };
+    if (typeof maybe.toDate === 'function') {
+        try {
+            const d = maybe.toDate();
+            return Number.isNaN(d.getTime()) ? null : d;
+        } catch {
+            return null;
+        }
+    }
+    if (raw instanceof Date) {
+        return Number.isNaN(raw.getTime()) ? null : raw;
+    }
+    if (typeof raw === 'number') {
+        const d = new Date(raw);
+        return Number.isNaN(d.getTime()) ? null : d;
+    }
+    if (typeof raw === 'string') {
+        const d = new Date(raw);
+        return Number.isNaN(d.getTime()) ? null : d;
+    }
+    return null;
+}
+
+function ymBucketKey(d: Date): string {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function labelForYmKey(ym: string): string {
+    const [y, m] = ym.split('-').map(Number);
+    if (!y || !m) return ym;
+    return new Date(y, m - 1, 15).toLocaleString('en-GB', { month: 'short', year: 'numeric' });
+}
+
+export async function getAnalyticsDataAction(): Promise<{
+    newUsersData: { month: string; users: number }[];
+    kpi: AnalyticsKpi;
+    kpiWarnings: string[];
+    error: string | null;
+}> {
+    const defaultKpi: AnalyticsKpi = {
+        totalUsers: 0,
+        returningApprox30d: 0,
+        newSignups30d: 0,
+        aiRequestsLogged30d: 0,
+    };
+    const kpiWarnings: string[] = [];
+
     try {
         const now = new Date();
         const oneYearAgo = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
-        const snapshot = await adminDb.collection('users').where('createdAt', '>=', oneYearAgo).get();
+        const thirtyAgo = new Date(now.getTime() - 30 * 86400000);
+        const oneYearTs = Timestamp.fromDate(oneYearAgo);
+        const thirtyTs = Timestamp.fromDate(thirtyAgo);
 
-        const monthlyCounts: Record<string, number> = {};
-        for (let i = 0; i < 12; i++) {
-            const month = new Date(now.getFullYear(), now.getMonth() - i, 1);
-            const monthKey = month.toLocaleString('default', { month: 'short' });
-            monthlyCounts[monthKey] = 0;
+        const bucketKeys: string[] = [];
+        for (let i = 11; i >= 0; i--) {
+            const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+            bucketKeys.push(ymBucketKey(d));
+        }
+        const counts: Record<string, number> = {};
+        for (const k of bucketKeys) counts[k] = 0;
+
+        const [
+            seriesResult,
+            totalUsersResult,
+            returningResult,
+            signupsResult,
+            aiLogsResult,
+        ] = await Promise.allSettled([
+            adminDb.collection('users').where('createdAt', '>=', oneYearTs).get(),
+            adminDb.collection('users').count().get(),
+            adminDb.collection('users').where('lastLoginAt', '>=', thirtyTs).count().get(),
+            adminDb.collection('users').where('createdAt', '>=', thirtyTs).count().get(),
+            adminDb.collection('aiUsageLogs').where('createdAt', '>=', thirtyTs).count().get(),
+        ]);
+
+        if (seriesResult.status === 'fulfilled') {
+            seriesResult.value.forEach((doc) => {
+                const createdAt = parseFirestoreDate(doc.data()?.createdAt);
+                if (!createdAt) return;
+                const key = ymBucketKey(createdAt);
+                if (Object.prototype.hasOwnProperty.call(counts, key)) {
+                    counts[key]++;
+                }
+            });
+        } else {
+            kpiWarnings.push(
+                `New-user chart query failed: ${seriesResult.reason instanceof Error ? seriesResult.reason.message : String(seriesResult.reason)}`,
+            );
         }
 
-        snapshot.forEach(doc => {
-            const createdAt = (doc.data().createdAt as Timestamp).toDate();
-            const monthKey = createdAt.toLocaleString('default', { month: 'short' });
-            if (monthlyCounts.hasOwnProperty(monthKey)) {
-                monthlyCounts[monthKey]++;
-            }
-        });
+        let totalUsers = 0;
+        if (totalUsersResult.status === 'fulfilled') {
+            totalUsers = totalUsersResult.value.data().count;
+        } else {
+            kpiWarnings.push(
+                `Total users count failed: ${totalUsersResult.reason instanceof Error ? totalUsersResult.reason.message : String(totalUsersResult.reason)}`,
+            );
+        }
 
-        const newUsersData = Object.entries(monthlyCounts).map(([month, users]) => ({ month, users })).reverse();
-        
-        return { newUsersData, error: null };
+        let returningApprox30d = 0;
+        if (returningResult.status === 'fulfilled') {
+            returningApprox30d = returningResult.value.data().count;
+        } else {
+            kpiWarnings.push(
+                `Returning users (lastLoginAt) count failed — add Firestore index if requested: ${returningResult.reason instanceof Error ? returningResult.reason.message : String(returningResult.reason)}`,
+            );
+        }
+
+        let newSignups30d = 0;
+        if (signupsResult.status === 'fulfilled') {
+            newSignups30d = signupsResult.value.data().count;
+        } else {
+            kpiWarnings.push(
+                `New sign-ups count failed: ${signupsResult.reason instanceof Error ? signupsResult.reason.message : String(signupsResult.reason)}`,
+            );
+        }
+
+        let aiRequestsLogged30d = 0;
+        if (aiLogsResult.status === 'fulfilled') {
+            aiRequestsLogged30d = aiLogsResult.value.data().count;
+        } else {
+            kpiWarnings.push(
+                `AI usage log count failed — check composite index on aiUsageLogs.createdAt: ${aiLogsResult.reason instanceof Error ? aiLogsResult.reason.message : String(aiLogsResult.reason)}`,
+            );
+        }
+
+        const newUsersData = bucketKeys.map((ym) => ({
+            month: labelForYmKey(ym),
+            users: counts[ym] ?? 0,
+        }));
+
+        return {
+            newUsersData,
+            kpi: {
+                totalUsers,
+                returningApprox30d,
+                newSignups30d,
+                aiRequestsLogged30d,
+            },
+            kpiWarnings,
+            error: null,
+        };
     } catch (error: any) {
-        console.error("Error fetching analytics data:", error);
-        return { newUsersData: [], error: error.message };
+        console.error('Error fetching analytics data:', error);
+        return {
+            newUsersData: [],
+            kpi: defaultKpi,
+            kpiWarnings,
+            error: error.message,
+        };
     }
 }
 
@@ -688,7 +926,8 @@ export async function getRecentPaymentsAction(): Promise<{ payments: any[], erro
             return {
                 id: doc.id,
                 ...data,
-                amount: data.amount / 100, // Convert cents to pounds/dollars
+                /** Stripe minor units (e.g. pence); display as `(amount / 100).toFixed(2)` */
+                amount: typeof data.amount === 'number' ? data.amount : 0,
                 createdAt: (data.createdAt as Timestamp).toDate().toISOString()
             };
         });

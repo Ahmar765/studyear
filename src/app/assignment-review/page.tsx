@@ -11,7 +11,7 @@ export default async function AssignmentReviewPage() {
             <div className="flex flex-col items-start space-y-2">
                 <h2 className="text-3xl font-bold tracking-tight">AI Assignment Review</h2>
                 <p className="text-muted-foreground max-w-2xl">
-                   Upload your written work to receive a comprehensive review, including feedback, comments, and a predicted grade from our AI examiner.
+                   Paste your written work for a comprehensive AI review, predicted grades, and actionable feedback. Included with StudYear Premium and Premium Plus (ACUs apply per review).
                 </p>
             </div>
             <AssignmentReviewForm subjectsByLevel={subjectsByLevelData} levels={levels} />

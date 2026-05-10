@@ -3,8 +3,8 @@ import { FeatureKey } from "./acu-costs";
 
 export const PLAN_ENTITLEMENTS: Record<SubscriptionType, FeatureKey[]> = {
   /**
-   * Free tier: core tutoring, diagnostics, study planner, and written reviews.
-   * Premium student toolkit (course generator, quizzes, flashcards, summaries, visuals, etc.)
+   * Free tier: core tutoring, diagnostics, study planner, etc.
+   * Premium toolkit (courses, quizzes, flashcards, summaries, visuals, AI assignment review, …)
    * requires STUDENT_PREMIUM or STUDENT_PREMIUM_PLUS.
    */
   FREE: [
@@ -17,9 +17,6 @@ export const PLAN_ENTITLEMENTS: Record<SubscriptionType, FeatureKey[]> = {
     "EXAM_SIMULATION",
     "GRADE_PREDICTION",
     "AI_FEEDBACK",
-    "AI_ASSIGNMENT_REVIEW",
-    "AI_ESSAY_REVIEW",
-    "AI_DISSERTATION_REVIEW",
   ],
   STUDENT_PREMIUM: [
     "AI_EXPLANATION",

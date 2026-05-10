@@ -1,9 +1,8 @@
 
 "use server";
 
-import { generateBlogPost, GenerateBlogPostInput, GenerateBlogPostOutput } from "@/server/ai/flows/blog-post-generation";
+import { generateBlogPost, GenerateBlogPostOutput } from "@/server/ai/flows/blog-post-generation";
 import { z } from "zod";
-import { randomUUID } from "crypto";
 import { runStudYearAction } from "../services/pipeline";
 
 const GenerateBlogPostSchema = z.object({
@@ -11,11 +10,17 @@ const GenerateBlogPostSchema = z.object({
   userId: z.string().min(1, "User ID is required."),
 });
 
+function formText(fd: FormData, key: string): string {
+  const v = fd.get(key);
+  if (typeof v === "string") return v;
+  return "";
+}
+
 export async function createAiBlogPost(formData: FormData): Promise<{ success: boolean, blogPost?: GenerateBlogPostOutput, error?: string }> {
     try {
         const validatedData = GenerateBlogPostSchema.parse({
-            topic: formData.get("topic"),
-            userId: formData.get("userId"),
+            topic: formText(formData, "topic"),
+            userId: formText(formData, "userId"),
         });
 
         const result = await runStudYearAction({
@@ -32,12 +37,18 @@ export async function createAiBlogPost(formData: FormData): Promise<{ success: b
 
         return { success: true, blogPost: result.result };
 
-    } catch (error) {
-        console.error(error);
+    } catch (error: unknown) {
+        /** Genkit / SDK errors can break Next dev overlay when passed raw into `console.error`. */
         if (error instanceof z.ZodError) {
-            return { success: false, error: error.errors.map(e => e.message).join(', ') };
+            const msg = error.issues.map((e) => e.message).join(", ");
+            console.error("[createAiBlogPost] validation:", msg);
+            return { success: false, error: msg };
         }
-        const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred.";
+        const errorMessage =
+            error instanceof Error && typeof error.message === "string"
+                ? error.message
+                : "An unexpected error occurred.";
+        console.error("[createAiBlogPost]", errorMessage);
         return { success: false, error: errorMessage };
     }
 }

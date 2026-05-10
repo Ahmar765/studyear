@@ -7,10 +7,12 @@
  *   npm run stripe:seed-subscription-prices:missing       → keeps recurring price_ IDs from .env;
  *                                                          replaces missing OR one-time IDs with new monthly prices
  *
+ * ACU one-time packs (different script): `npm run stripe:seed-acu-packs` → STRIPE_PRICE_TOPUP_* vars.
+ * Webhook signing secret (dashboard-free): `npm run stripe:register-webhook` (needs STRIPE_WEBHOOK_URL) or Stripe CLI `stripe listen`.
+ *
  * Env vars used by the app (see billing-actions.ts):
  *   STRIPE_PRICE_STUDENT_PREMIUM, STRIPE_PRICE_STUDENT_PREMIUM_PLUS,
  *   STRIPE_PRICE_PARENT_PRO, STRIPE_PRICE_PARENT_PRO_PLUS,
- *   STRIPE_PRICE_TOPUP_STARTER, TOPUP_GROWTH, TOPUP_SCALE (legacy ACU one-time packs)
  */
 
 import Stripe from 'stripe';
@@ -24,8 +26,8 @@ const onlyMissing = process.argv.includes('--only-missing');
 
 /** GBP amounts — edit if you change pricing on the marketing site */
 const PLANS = [
-  { code: 'STUDENT_PREMIUM', name: 'StudYear — Student Premium', amountPence: 799 },
-  { code: 'STUDENT_PREMIUM_PLUS', name: 'StudYear — Student Premium Plus', amountPence: 1499 },
+  { code: 'STUDENT_PREMIUM', name: 'StudYear — Student Premium', amountPence: 1000 },
+  { code: 'STUDENT_PREMIUM_PLUS', name: 'StudYear — Student Premium Plus', amountPence: 1500 },
   { code: 'PARENT_PRO', name: 'StudYear — Parent Pro', amountPence: 999 },
   { code: 'PARENT_PRO_PLUS', name: 'StudYear — Parent Pro Plus', amountPence: 1999 },
 ];

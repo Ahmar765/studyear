@@ -2,36 +2,35 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { getAcuTransactionsAction, getRecentPaymentsAction } from "@/server/actions/admin-actions";
-import { adminDb } from "@/lib/firebase/admin-app";
+import { getAcuTransactionsAction, getRecentPaymentsAction, getPlatformEconomicsOverviewAction } from "@/server/actions/admin-actions";
 import DiscountCodesSection from "@/app/admin/billing/discount-codes-section";
+import { fetchUserLabelsByIds } from "@/server/lib/admin-user-labels";
+import { PlatformEconomicsSummary } from "@/app/admin/_components/platform-economics-summary";
 
 export default async function AdminBillingPage() {
-  const [{ transactions, error: acuError }, { payments, error: paymentsError }] = await Promise.all([
+  const [
+    { transactions, error: acuError },
+    { payments, error: paymentsError },
+    { overview: economicsOverview, error: economicsError },
+  ] = await Promise.all([
     getAcuTransactionsAction(),
-    getRecentPaymentsAction()
+    getRecentPaymentsAction(),
+    getPlatformEconomicsOverviewAction(),
   ]);
 
   const userIds = [...new Set([...transactions.map(t => t.userId), ...payments.map(p => p.userId)])];
-  let userMap: { [key: string]: { displayName: string, email: string } } = {};
-  if (userIds.length > 0) {
-    const userDocs = await adminDb.collection('users').where('__name__', 'in', userIds).get();
-    userDocs.forEach(doc => {
-        userMap[doc.id] = {
-            displayName: doc.data().name || 'N/A',
-            email: doc.data().email,
-        }
-    });
-  }
+  const userMap = userIds.length > 0 ? await fetchUserLabelsByIds(userIds) : {};
 
   return (
     <div className="flex-1 space-y-8 p-4 md:p-8">
         <div className="flex flex-col space-y-2">
             <h2 className="text-3xl font-bold tracking-tight">Billing & Revenue</h2>
             <p className="text-muted-foreground">
-                View revenue metrics, manage subscriptions, and track payments.
+                Stripe gross vs estimated AI spend (see disclaimers below). Subscription renewals only appear here when logged as payment rows.
             </p>
         </div>
+
+        <PlatformEconomicsSummary overview={economicsOverview} error={economicsError} />
 
         <div className="grid gap-8 md:grid-cols-1 lg:grid-cols-3">
              <Card>
@@ -100,7 +99,11 @@ export default async function AdminBillingPage() {
                                     </TableCell>
                                      <TableCell>
                                         <div className="font-medium text-destructive">{t.amount?.toLocaleString()}</div>
-                                        <div className="text-xs text-muted-foreground">(${t.platformChargeGBP?.toFixed(2)})</div>
+                                        <div className="text-xs text-muted-foreground">
+                                          {t.platformChargeGBP != null
+                                            ? `Ledger cost hint £${t.platformChargeGBP.toFixed(2)}`
+                                            : 'No provider £ logged on this debit'}
+                                        </div>
                                     </TableCell>
                                     <TableCell>{new Date(t.createdAt as any).toLocaleDateString()}</TableCell>
                                 </TableRow>

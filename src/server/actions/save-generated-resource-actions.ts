@@ -41,8 +41,8 @@ export async function saveGeneratedResourceToLibrary(
       type: parsed.data.type,
       title: parsed.data.title.trim(),
       content: safeContent ?? null,
-      sourceInput: parsed.data.sourceInput ?? null,
-      linkedEntityId: parsed.data.linkedEntityId ?? null,
+      sourceInput: parsed.data.sourceInput?.trim() || undefined,
+      linkedEntityId: parsed.data.linkedEntityId?.trim() || undefined,
     });
     return { success: true };
   } catch (e: unknown) {

@@ -12,6 +12,11 @@ import {z} from 'zod';
 
 const GenerateInteractiveLessonInputSchema = z.object({
   topic: z.string().describe('The topic for which to generate a lesson.'),
+  academicLevel: z
+    .string()
+    .describe(
+      'Student qualification stage from profile (e.g. GCSE, A-Level). Calibrate depth — never teach above this stage.',
+    ),
 });
 export type GenerateInteractiveLessonInput = z.infer<typeof GenerateInteractiveLessonInputSchema>;
 
@@ -48,7 +53,10 @@ Your output must include:
 
 Generate the full lesson plan, but only the content for the first step.
 
-Topic: {{{topic}}}`,
+Topic: {{{topic}}}
+Academic level (stay at or below this stage — e.g. GCSE students must not be taught as if they are sitting A-Level): {{{academicLevel}}}
+
+If the level is GCSE or earlier Key Stages, keep vocabulary, pace, and prerequisites appropriate — do not assume sixth-form or undergraduate knowledge.`,
 });
 
 const interactiveLessonGenerationFlow = ai.defineFlow(

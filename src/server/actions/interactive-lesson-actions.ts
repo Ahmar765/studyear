@@ -11,6 +11,24 @@ import { AIGatewayService } from '../services/ai-gateway';
 import type { AIRequestContext, AIUserInput } from '../ai/gateway-schema';
 import { randomUUID } from 'crypto';
 import { getUserProfileServer } from '../services/user';
+import type { UserProfile } from '@/lib/firebase/services/user';
+
+/** Quiz / lesson calibration — never guess A-Level for younger profiles. */
+function resolveQuizAcademicLevel(profile: UserProfile | null): string {
+  const raw = String(profile?.studyLevel ?? profile?.yearGroup ?? '').trim();
+  if (raw.length > 0) return raw;
+  return 'GCSE';
+}
+
+function resolveQuizSubject(profile: UserProfile | null, lessonTitle: string): string {
+  const subjects = profile?.subjects;
+  if (Array.isArray(subjects) && subjects.length > 0) {
+    const names = subjects.map((s) => String(s?.name ?? '').trim()).filter(Boolean);
+    if (names.length === 1) return names[0];
+    if (names.length > 1) return names.slice(0, 3).join(', ');
+  }
+  return lessonTitle.trim() || 'General studies';
+}
 
 export async function createLesson(topic: string, userId: string) {
   if (!topic || topic.length < 3) {
@@ -36,8 +54,9 @@ export async function createLesson(topic: string, userId: string) {
       idempotencyKey: randomUUID(),
       estimatedInputTokens: Math.ceil(topic.length / 4),
     };
+    const academicLevel = resolveQuizAcademicLevel(userProfile);
     const input: AIUserInput<GenerateInteractiveLessonInput> = {
-        promptPayload: { topic }
+        promptPayload: { topic, academicLevel },
     };
     
     const response = await gateway.execute(context, input, generateInteractiveLesson);
@@ -81,18 +100,27 @@ export async function getNextStep(lessonPlan: z.infer<typeof LessonPlanSchema>, 
     }
 }
 
-export async function createQuiz(topic: string, level: string) {
-    try {
-        const input: GenerateQuizInput = {
-            topic,
-            level,
-            numberOfQuestions: 5,
-            subject: 'General Knowledge' // Placeholder
-        }
-        const result = await generateQuiz(input);
-        return { success: true, quiz: result };
-    } catch (error) {
-        console.error('Error creating quiz:', error);
-        return { success: false, error: 'Failed to generate quiz.' };
-    }
+/**
+ * End-of-lesson quiz — academic level comes from the student's profile (student_profiles / merged user), not the client.
+ */
+export async function createLessonFollowUpQuiz(lessonTitle: string, userId: string) {
+  if (!userId) {
+    return { success: false, error: 'Not signed in.' };
+  }
+  try {
+    const profile = await getUserProfileServer(userId);
+    const level = resolveQuizAcademicLevel(profile);
+    const subject = resolveQuizSubject(profile, lessonTitle);
+    const input: GenerateQuizInput = {
+      topic: lessonTitle,
+      level,
+      numberOfQuestions: 5,
+      subject,
+    };
+    const result = await generateQuiz(input);
+    return { success: true, quiz: result };
+  } catch (error) {
+    console.error('Error creating quiz:', error);
+    return { success: false, error: 'Failed to generate quiz.' };
+  }
 }

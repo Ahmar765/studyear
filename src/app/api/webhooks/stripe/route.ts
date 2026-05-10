@@ -2,11 +2,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { headers } from 'next/headers';
 import Stripe from 'stripe';
-import { manageSubscriptionStatusChange, updateUserAcuBalance } from '@/server/lib/billing';
+import {
+  grantPremiumPlusMonthlyAcusForInvoice,
+  manageSubscriptionStatusChange,
+  recordAcuTopUpFromCheckoutSession,
+} from '@/server/lib/billing';
 import type { SubscriptionType } from '@/server/schemas';
-import { adminDb } from '@/lib/firebase/admin-app';
-import * as admin from 'firebase-admin';
-
 export async function POST(req: NextRequest) {
   const body = await req.text();
   const sig = headers().get('stripe-signature') as string;
@@ -41,23 +42,23 @@ export async function POST(req: NextRequest) {
         }
 
         if (session.mode === 'payment' && session.metadata?.productCode) {
-            await updateUserAcuBalance(userId, session.metadata.productCode);
-            // Also log the payment
-             await adminDb.collection('payments').add({
-                userId: userId,
-                amount: session.amount_total, // Amount in cents
-                currency: session.currency,
-                productCode: session.metadata.productCode,
-                stripeCheckoutId: session.id,
-                status: session.payment_status,
-                createdAt: admin.firestore.FieldValue.serverTimestamp(),
-            });
-            console.log(`Updated ACU balance and logged payment for user ${userId} with product ${session.metadata.productCode}`);
+            const outcome = await recordAcuTopUpFromCheckoutSession(session);
+            if (outcome.ok && !outcome.duplicate) {
+              console.log(
+                `Updated ACU balance and logged payment for user ${userId} with product ${session.metadata.productCode}`,
+              );
+            } else if (outcome.ok && outcome.duplicate) {
+              console.log(`checkout.session.completed duplicate/skipped for session ${session.id}`);
+            } else if (!outcome.ok) {
+              console.error(`recordAcuTopUpFromCheckoutSession failed for session ${session.id}:`, outcome.reason);
+            }
         }
         
         if (session.mode === 'subscription') {
             const subscriptionId = session.subscription as string;
-            const subscriptionType = session.metadata?.productCode as SubscriptionType;
+            const subscriptionType = session.metadata?.productCode
+              ?.trim()
+              .toUpperCase() as SubscriptionType;
             if (!subscriptionType) {
               console.error(`Webhook Error: Missing productCode in metadata for subscription checkout session ${session.id}`);
               break;
@@ -79,17 +80,19 @@ export async function POST(req: NextRequest) {
         if (!subId) break;
 
         const subscription = await stripe.subscriptions.retrieve(subId);
-        const userId =
-          invoice.customer_metadata?.userId || subscription.metadata?.userId;
+        const userId = subscription.metadata?.userId;
         if (!userId) {
           console.error(
-            'Webhook Error: Missing userId on invoice.paid (set subscription metadata userId from Checkout).',
+            'Webhook Error: Missing userId on invoice.paid (subscription.metadata.userId from Checkout).',
           );
           break;
         }
-        const productCode =
+        const productCode = (
           subscription.items.data[0]?.price?.metadata?.productCode ||
-          subscription.metadata?.productCode;
+          subscription.metadata?.productCode
+        )
+          ?.trim()
+          .toUpperCase();
 
         if (!productCode) {
           console.error(
@@ -104,6 +107,21 @@ export async function POST(req: NextRequest) {
             productCode as SubscriptionType,
             'ACTIVE'
         );
+
+        const grant = await grantPremiumPlusMonthlyAcusForInvoice({
+          userId,
+          invoiceId: invoice.id,
+          amountPaidPence: invoice.amount_paid ?? 0,
+          productCode: productCode as SubscriptionType,
+        });
+        if (grant.granted) {
+          console.log(`Premium Plus ACU allowance credited for invoice ${invoice.id}`);
+        } else if (grant.skipReason && grant.skipReason !== 'not_premium_plus') {
+          console.log(
+            `Premium Plus ACU grant skipped for invoice ${invoice.id}: ${grant.skipReason}`,
+          );
+        }
+
         console.log(`Subscription renewed for user ${userId}`);
         break;
       }
@@ -113,17 +131,19 @@ export async function POST(req: NextRequest) {
         if (!subId) break;
 
         const subscription = await stripe.subscriptions.retrieve(subId);
-        const userId =
-          invoice.customer_metadata?.userId || subscription.metadata?.userId;
+        const userId = subscription.metadata?.userId;
         if (!userId) {
           console.error(
-            'Webhook Error: Missing userId on invoice.payment_failed (subscription metadata userId).',
+            'Webhook Error: Missing userId on invoice.payment_failed (subscription.metadata.userId).',
           );
           break;
         }
-        const productCode =
+        const productCode = (
           subscription.items.data[0]?.price?.metadata?.productCode ||
-          subscription.metadata?.productCode;
+          subscription.metadata?.productCode
+        )
+          ?.trim()
+          .toUpperCase();
 
         if (!productCode) {
           console.error(
@@ -143,14 +163,17 @@ export async function POST(req: NextRequest) {
       }
       case 'customer.subscription.deleted': {
         const subscription = event.data.object as Stripe.Subscription;
-        const userId = subscription.metadata.userId;
+        const userId = subscription.metadata?.userId;
          if (!userId) {
             console.error('Webhook Error: Missing userId in customer.subscription.deleted metadata.');
             break;
         }
-        const productCode =
+        const productCode = (
           subscription.items.data[0]?.price?.metadata?.productCode ||
-          subscription.metadata?.productCode;
+          subscription.metadata?.productCode
+        )
+          ?.trim()
+          .toUpperCase();
         if (!productCode) {
           console.error(
             `Webhook Error: Missing productCode for subscription ${subscription.id}.`,
@@ -169,14 +192,17 @@ export async function POST(req: NextRequest) {
       }
        case 'customer.subscription.updated': {
         const subscription = event.data.object as Stripe.Subscription;
-        const userId = subscription.metadata.userId;
+        const userId = subscription.metadata?.userId;
          if (!userId) {
             console.error('Webhook Error: Missing userId in customer.subscription.updated metadata.');
             break;
         }
-        const productCode =
+        const productCode = (
           subscription.items.data[0]?.price?.metadata?.productCode ||
-          subscription.metadata?.productCode;
+          subscription.metadata?.productCode
+        )
+          ?.trim()
+          .toUpperCase();
         if (!productCode) {
           console.error(
             `Webhook Error: Missing productCode for subscription ${subscription.id}.`,

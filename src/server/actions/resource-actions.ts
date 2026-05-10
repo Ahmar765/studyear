@@ -3,7 +3,7 @@
 
 import { adminDb } from '@/lib/firebase/admin-app';
 import { HttpsError } from '../lib/errors';
-import { getCurrentUser } from '../lib/auth';
+import { getVerifiedUser } from '../lib/auth';
 import * as admin from 'firebase-admin';
 import { z } from 'zod';
 import { savedResourceService } from '../services/resources';
@@ -25,33 +25,81 @@ export async function getResourceCountsAction(): Promise<Record<string, number>>
   }
 }
 
-export async function getResourcesByTypeAction(type: string): Promise<{ success: boolean; resources?: any[]; error?: string }> {
+function millisFromFirestoreTimestamp(v: unknown): number {
+  if (v && typeof (v as admin.firestore.Timestamp).toMillis === "function") {
+    return (v as admin.firestore.Timestamp).toMillis();
+  }
+  return 0;
+}
+
+function isoFromFirestoreTimestamp(v: unknown): string {
+  if (v && typeof (v as admin.firestore.Timestamp).toDate === "function") {
+    try {
+      return (v as admin.firestore.Timestamp).toDate().toISOString();
+    } catch {
+      return "";
+    }
+  }
+  return "";
+}
+
+export async function getResourcesByTypeAction(
+  type: string,
+): Promise<{ success: boolean; resources?: any[]; error?: string }> {
   try {
-    const q = adminDb.collection('resources')
-      .where('type', '==', type)
-      .orderBy('createdAt', 'desc')
-      .limit(50);
-      
-    const snapshot = await q.get();
+    const limit = 120;
+    let snapshot: admin.firestore.QuerySnapshot;
+    try {
+      snapshot = await adminDb
+        .collection("resources")
+        .where("type", "==", type)
+        .orderBy("createdAt", "desc")
+        .limit(limit)
+        .get();
+    } catch {
+      snapshot = await adminDb
+        .collection("resources")
+        .where("type", "==", type)
+        .limit(limit)
+        .get();
+    }
+
     if (snapshot.empty) {
       return { success: true, resources: [] };
     }
 
-    const resources = snapshot.docs.map(doc => {
+    const rows = snapshot.docs.map((doc) => {
       const data = doc.data();
-      // Strip creator identity for privacy
-      const { createdBy, ...safeResource } = data;
+      const { createdBy: _c, content: _big, sourceInput: _s, ...meta } = data;
       return {
+        ...meta,
         id: doc.id,
-        ...safeResource,
-        createdAt: (data.createdAt as admin.firestore.Timestamp).toDate().toISOString(),
+        createdAtMillis: millisFromFirestoreTimestamp(data.createdAt),
       };
     });
-    
+
+    rows.sort((a, b) => b.createdAtMillis - a.createdAtMillis);
+
+    const resources = rows.map(({ createdAtMillis: _m, ...rest }) => {
+      const data = rest as Record<string, unknown>;
+      return {
+        id: String(data.id ?? ""),
+        title: String(data.title ?? "Untitled"),
+        topic: String(data.topic ?? ""),
+        subject: String(data.subject ?? ""),
+        level: String(data.level ?? ""),
+        createdAt: isoFromFirestoreTimestamp(data.createdAt),
+        videoUrl:
+          typeof data.videoUrl === "string" ? data.videoUrl : undefined,
+        fileUrl: typeof data.fileUrl === "string" ? data.fileUrl : undefined,
+      };
+    });
+
     return { success: true, resources };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error(`Error fetching resources of type ${type}:`, error);
-    return { success: false, error: error.message };
+    const msg = error instanceof Error ? error.message : String(error);
+    return { success: false, error: msg };
   }
 }
 
@@ -89,7 +137,7 @@ export async function saveUserResourceAction(resourceId: string, userId: string)
 const ContributionSchema = z.object({
   title: z.string().min(5, "Title must be at least 5 characters long."),
   description: z.string().optional(),
-  url: z.string().url("Please provide a valid URL."),
+  url: z.string().min(1, "Please provide a valid URL."),
   type: z.enum(["PAST_PAPER", "VIDEO"]),
   subjectId: z.string().min(1, "Please select a subject."),
   examBoard: z.string().min(1, "Please select an exam board."),
@@ -97,7 +145,8 @@ const ContributionSchema = z.object({
 });
 
 export async function contributeResourceAction(formData: FormData): Promise<{ success: boolean; error?: string }> {
-    const user = await getCurrentUser();
+    const idTokenRaw = formData.get('idToken');
+    const user = await getVerifiedUser(typeof idTokenRaw === 'string' ? idTokenRaw : null);
     if (!user) {
         return { success: false, error: 'You must be logged in to contribute.' };
     }

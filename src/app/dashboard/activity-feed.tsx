@@ -7,26 +7,46 @@ import { Activity, CheckCircle, Bookmark, CalendarCheck } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { getActivityFeedAction, ActivityFeedItem } from '@/server/actions/activity-actions';
 import { formatDistanceToNow } from 'date-fns';
+import { useAuth } from '@/hooks/use-auth';
 
 const iconMap = {
     QUIZ_COMPLETED: CheckCircle,
+    QUIZ_SUBMITTED: CheckCircle,
     LESSON_COMPLETED: CheckCircle,
     RESOURCE_SAVED: Bookmark,
     PLAN_GENERATED: CalendarCheck,
 };
 
 export default function ActivityFeed() {
+    const { user } = useAuth();
     const [activities, setActivities] = useState<ActivityFeedItem[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        getActivityFeedAction().then(result => {
-            if (result.activities) {
-                setActivities(result.activities);
-            }
+        if (!user) {
+            setActivities([]);
             setLoading(false);
-        });
-    }, []);
+            return;
+        }
+
+        let cancelled = false;
+
+        (async () => {
+            try {
+                const idToken = await user.getIdToken();
+                const result = await getActivityFeedAction(idToken);
+                if (!cancelled && result.activities) {
+                    setActivities(result.activities);
+                }
+            } finally {
+                if (!cancelled) setLoading(false);
+            }
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [user]);
 
     if (loading) {
         return (

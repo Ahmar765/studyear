@@ -47,7 +47,11 @@ function AcuPackageCard({
 
   const handlePurchase = () => {
     startTransition(async () => {
-      const { success, sessionId, error } = await createCheckoutSession(productCode, user?.uid);
+      const { success, sessionId, error } = await createCheckoutSession(
+        productCode,
+        user?.uid,
+        user?.email ?? null,
+      );
       if (!success || !sessionId) {
         toast({ variant: 'destructive', title: 'Error', description: error || 'Could not start checkout.' });
         return;
@@ -122,7 +126,11 @@ function SubscriptionCard({
 
   const handleSubscribe = () => {
     startTransition(async () => {
-      const { success, sessionId, error } = await createCheckoutSession(productCode, user?.uid);
+      const { success, sessionId, error } = await createCheckoutSession(
+        productCode,
+        user?.uid,
+        user?.email ?? null,
+      );
       if (!success || !sessionId) {
         toast({ variant: 'destructive', title: 'Error', description: error || 'Could not start Stripe checkout.' });
         return;
@@ -229,8 +237,10 @@ export default function CheckoutPage() {
       <div className="text-center">
         <h1 className="text-4xl font-bold tracking-tight">Top up your ACU wallet</h1>
         <p className="mt-2 text-lg text-muted-foreground max-w-2xl mx-auto">
-          Buy AI Credit Units (ACUs) in packs — power the AI tutor, diagnostics, courses, study planner,
-          and more. Your balance updates after payment.
+          One-off packs at <strong className="text-foreground">£5</strong>,{' '}
+          <strong className="text-foreground">£10</strong>, and{' '}
+          <strong className="text-foreground">£15</strong> — ACUs power the AI tutor, diagnostics,
+          planner, interactive lessons, predictions, and other metered tools. Your balance updates after payment.
         </p>
       </div>
 
@@ -245,11 +255,13 @@ export default function CheckoutPage() {
           <Separator />
           <div className="text-center space-y-2">
             <h2 className="text-2xl font-semibold tracking-tight">
-              Optional: Premium monthly
+              Optional: Premium (£10/mo) & Premium Plus
             </h2>
             <p className="text-muted-foreground text-sm max-w-xl mx-auto">
-              Unlock the full premium toolkit without paying ACUs per feature on included tools.
-              Most students only need ACU top-ups above.
+              <strong className="text-foreground">Premium</strong> unlocks the premium creator toolkit for{' '}
+              <strong className="text-foreground">£10/month</strong> — you still need ACUs for metered AI (planner,
+              tutor, diagnostics, predictions, etc.). <strong className="text-foreground">Premium Plus</strong>{' '}
+              adds the bundled monthly ACU allowance shown in the plan card (same size as the £15 Scale pack).
             </p>
           </div>
           <div className="grid sm:grid-cols-1 md:grid-cols-2 gap-8">

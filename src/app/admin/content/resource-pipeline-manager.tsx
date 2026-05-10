@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -13,14 +13,16 @@ import { useToast } from '@/hooks/use-toast';
 import { addResourceUploadAction, reviewResourceAction, type UploadedResource } from '@/server/actions/admin-actions';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Check, Loader, PlusCircle, X } from 'lucide-react';
+import { Check, FileUp, Loader, PlusCircle, X } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useRouter } from 'next/navigation';
 import { resourceMetadata, ResourceType } from '@/data/academic';
+import { useAuth } from '@/hooks/use-auth';
+import { uploadPastPaperPdf } from '@/lib/upload-past-paper-client';
 
 const formSchema = z.object({
   title: z.string().min(1, 'Title is required.'),
-  url: z.string().url('Must be a valid URL.'),
+  url: z.string().optional(),
   type: z.enum(Object.keys(resourceMetadata) as [ResourceType, ...ResourceType[]]),
   subject: z.string().min(1, 'Subject is required.'),
   topic: z.string().min(1, 'Topic is required.'),
@@ -39,7 +41,10 @@ export default function ResourcePipelineManager({ initialResources, subjects, le
   const [isPending, startTransition] = useTransition();
   const { toast } = useToast();
   const router = useRouter();
+  const { user } = useAuth();
   const [rejectionReason, setRejectionReason] = useState("");
+  const [uploadedPdfUrl, setUploadedPdfUrl] = useState<string | null>(null);
+  const [uploadingPdf, setUploadingPdf] = useState(false);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -55,12 +60,84 @@ export default function ResourcePipelineManager({ initialResources, subjects, le
     },
   });
 
+  const resourceType = form.watch('type');
+
+  useEffect(() => {
+    if (resourceType !== 'PAST_PAPER') {
+      setUploadedPdfUrl(null);
+    }
+  }, [resourceType]);
+
+  function validateHttpsUrl(raw: string): boolean {
+    try {
+      const u = new URL(raw.trim());
+      return u.protocol === 'http:' || u.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  }
+
+  const onPdfSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!user) {
+      toast({ variant: 'destructive', title: 'Sign in required', description: 'Upload requires an authenticated session.' });
+      return;
+    }
+    setUploadingPdf(true);
+    try {
+      const token = await user.getIdToken();
+      const r = await uploadPastPaperPdf(file, token);
+      if (r.error) {
+        toast({ variant: 'destructive', title: 'Upload failed', description: r.error });
+        return;
+      }
+      setUploadedPdfUrl(r.url!);
+      toast({ title: 'PDF uploaded', description: 'Use “Add to Pipeline” to submit with this file.' });
+    } finally {
+      setUploadingPdf(false);
+    }
+  };
+
   const onSubmit = (values: z.infer<typeof formSchema>) => {
     startTransition(async () => {
-        const result = await addResourceUploadAction(values);
+        const urlTrim = (values.url ?? '').trim();
+
+        let effectiveUrl = urlTrim;
+        if (values.type === 'PAST_PAPER') {
+          effectiveUrl = (uploadedPdfUrl || urlTrim).trim();
+          if (!effectiveUrl) {
+            toast({
+              variant: 'destructive',
+              title: 'PDF or link required',
+              description: 'Upload a PDF or paste a direct https link to the paper.',
+            });
+            return;
+          }
+          if (!validateHttpsUrl(effectiveUrl)) {
+            toast({ variant: 'destructive', title: 'Invalid link', description: 'Use a valid http(s) URL or upload a PDF.' });
+            return;
+          }
+        } else {
+          if (!urlTrim) {
+            form.setError('url', { type: 'manual', message: 'URL is required.' });
+            return;
+          }
+          if (!validateHttpsUrl(urlTrim)) {
+            form.setError('url', { type: 'manual', message: 'Must be a valid http(s) URL.' });
+            return;
+          }
+          effectiveUrl = urlTrim;
+        }
+
+        form.clearErrors('url');
+
+        const result = await addResourceUploadAction({ ...values, url: effectiveUrl });
         if (result.success) {
             toast({ title: 'Resource Added', description: 'The resource is now pending review.' });
             form.reset();
+            setUploadedPdfUrl(null);
             router.refresh(); // Refresh server component data
         } else {
             toast({ variant: 'destructive', title: 'Error', description: result.error });
@@ -98,8 +175,46 @@ export default function ResourcePipelineManager({ initialResources, subjects, le
                                 <FormItem><FormLabel>Title</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
                             )} />
                             <FormField control={form.control} name="url" render={({ field }) => (
-                                <FormItem><FormLabel>URL</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                                <FormItem>
+                                  <FormLabel>
+                                    {resourceType === 'PAST_PAPER'
+                                      ? 'Direct link (optional if you upload a PDF)'
+                                      : 'URL'}
+                                  </FormLabel>
+                                  <FormControl><Input type="url" placeholder="https://…" {...field} /></FormControl>
+                                  <FormMessage />
+                                </FormItem>
                             )} />
+                            {resourceType === 'PAST_PAPER' ? (
+                              <div className="space-y-2 rounded-lg border border-dashed p-3">
+                                <p className="text-sm font-medium flex items-center gap-2">
+                                  <FileUp className="h-4 w-4" /> Upload PDF
+                                </p>
+                                <Input
+                                  type="file"
+                                  accept=".pdf,application/pdf"
+                                  disabled={uploadingPdf || isPending}
+                                  className="cursor-pointer"
+                                  onChange={onPdfSelected}
+                                />
+                                {uploadingPdf ? (
+                                  <p className="text-xs text-muted-foreground">Uploading…</p>
+                                ) : null}
+                                {uploadedPdfUrl ? (
+                                  <div className="flex flex-col gap-2 text-xs text-muted-foreground">
+                                    <p className="flex items-center gap-2 text-sm text-foreground">
+                                      <Check className="h-4 w-4 shrink-0 text-green-600" />
+                                      PDF attached — it will be used when you add this resource to the pipeline.
+                                    </p>
+                                    <Button type="button" variant="ghost" size="sm" className="h-7 w-fit px-2" onClick={() => setUploadedPdfUrl(null)}>
+                                      Remove uploaded file
+                                    </Button>
+                                  </div>
+                                ) : (
+                                  <p className="text-xs text-muted-foreground">Max 25 MB. Stored securely for review.</p>
+                                )}
+                              </div>
+                            ) : null}
                             <FormField control={form.control} name="subject" render={({ field }) => (
                                 <FormItem><FormLabel>Subject</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Select subject..." /></SelectTrigger></FormControl><SelectContent>{subjects.map(s => <SelectItem key={s.code} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
                             )} />

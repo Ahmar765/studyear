@@ -24,14 +24,10 @@ const GenerateBlogPostOutputSchema = z.object({
 export type GenerateBlogPostOutput = z.infer<typeof GenerateBlogPostOutputSchema>;
 
 
-export async function generateBlogPost(input: GenerateBlogPostInput, options?: { model?: string }): Promise<GenerateBlogPostOutput> {
-  return blogPostGenerationFlow(input, options);
-}
-
-const prompt = ai.definePrompt({
+const blogPostGenerationPrompt = ai.definePrompt({
   name: 'blogPostGenerationPrompt',
-  input: {schema: GenerateBlogPostInputSchema},
-  output: {schema: GenerateBlogPostOutputSchema},
+  input: { schema: GenerateBlogPostInputSchema },
+  output: { schema: GenerateBlogPostOutputSchema },
   prompt: `You are an expert content creator and SEO specialist. Your task is to write a comprehensive, engaging, and well-structured blog post based on the provided topic.
 
 Follow these instructions carefully:
@@ -45,14 +41,35 @@ Follow these instructions carefully:
 Topic: {{{topic}}}`,
 });
 
-const blogPostGenerationFlow = ai.defineFlow(
-  {
-    name: 'blogPostGenerationFlow',
-    inputSchema: GenerateBlogPostInputSchema,
-    outputSchema: GenerateBlogPostOutputSchema,
-  },
-  async (input, options) => {
-    const {output} = await prompt(input, { model: toGoogleAiGenkitModel(options?.model) });
-    return output!;
+/**
+ * Call the prompt directly (no `defineFlow`). The flow wrapper’s structured-output
+ * validation has triggered runtime errors (undefined `.value`) for some model responses;
+ * we validate with Zod instead (same approach as study plan generation).
+ */
+export async function generateBlogPost(
+  input: GenerateBlogPostInput,
+  options?: { model?: string },
+): Promise<GenerateBlogPostOutput> {
+  const parsed = GenerateBlogPostInputSchema.parse(input);
+  const response = await blogPostGenerationPrompt(parsed, {
+    model: toGoogleAiGenkitModel(options?.model),
+  });
+
+  let structured: unknown;
+  try {
+    structured = response?.output;
+  } catch (e) {
+    throw new Error(
+      `Failed to read blog generation output: ${e instanceof Error ? e.message : String(e)}`,
+    );
   }
-);
+
+  if (structured == null) {
+    const finish =
+      response && typeof response === "object" && "finishReason" in response
+        ? String((response as { finishReason?: unknown }).finishReason ?? "unknown")
+        : "unknown";
+    throw new Error(`Blog generation returned empty output (finish: ${finish}).`);
+  }
+  return GenerateBlogPostOutputSchema.parse(structured);
+}

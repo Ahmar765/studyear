@@ -26,10 +26,14 @@ export interface AIRequestLog {
   latencyMs: number;
   inputTokens: number;
   outputTokens: number;
+  /** Estimated provider-side USD cost from token counts (see `ai-provider-cost-estimate`). */
   realCost: number;
+  /** Rule-of-thumb customer £ value of ACUs debited at the Entry-pack rate. */
   customerChargeEquivalent: number;
   chargedAcus: number;
   pricingPolicyId: string;
+  /** Set when a row is read from `aiUsageLogs` (not sent when writing logs). */
+  createdAt?: Date;
 }
 
 export async function logActivityEvent(userId: string, type: ActivityEventType, meta: ActivityEventMetaData) {

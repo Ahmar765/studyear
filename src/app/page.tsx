@@ -1,14 +1,26 @@
-
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { ArrowRight, Users, Zap, Clock, GraduationCap } from "lucide-react";
-import Image from "next/image";
-import Link from "next/link";
-import placeholderImages from "@/app/lib/placeholder-images.json";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  ArrowRight,
+  Users,
+  GraduationCap,
+  BookOpen,
+  LayoutDashboard,
+  Search,
+  CalendarCheck,
+  TrendingUp,
+} from 'lucide-react';
+import Link from 'next/link';
 import { type Metadata } from 'next';
 import { generateSeoMetadata } from '@/server/ai/flows/seo-generation';
-import SystemVisual from "@/components/system-visual";
-import { Search, CalendarCheck, TrendingUp } from "lucide-react";
+import SystemVisual from '@/components/system-visual';
+import {
+  getPublicHomeStats,
+  formatHomeStatCount,
+} from '@/server/lib/public-home-stats';
+
+/** Homepage counters refresh periodically; avoids stale builds claiming fictitious scale. */
+export const revalidate = 300;
 
 const pageContent = `
   StudYear: The AI-Powered Education Operating System. We unify student data, AI-driven diagnostics, automated planning, and real-time progress tracking into a single command center for students, schools, and parents.
@@ -37,13 +49,6 @@ export async function generateMetadata(): Promise<Metadata> {
   }
 }
 
-const stats = [
-    { value: "1.2M+", label: "Learners", icon: Users },
-    { value: "2,500+", label: "Institutions", icon: GraduationCap },
-    { value: "45%", label: "Avg. Time Saved", icon: Zap },
-    { value: "98.6%", label: "Uptime", icon: Clock },
-];
-
 const systemOperationBlocks = [
   {
     title: "1. Assess & Diagnose",
@@ -62,34 +67,49 @@ const systemOperationBlocks = [
   }
 ];
 
-const testimonials = [
+const platformValueProps = [
   {
-    name: "Westwood Academy",
-    location: "Manchester",
-    avatar: placeholderImages.userAvatar1,
-    quote: "StudYear has transformed how we track progress and support students. Our attendance improved by 12% in one term.",
-    stat: "12%",
-    statLabel: "Increase in Attendance",
+    title: 'Visibility across the learner journey',
+    description:
+      'Diagnostics, plans, and activity stay linked so tutors and families see progress without stitching spreadsheets together.',
   },
   {
-    name: "Riverside College",
-    location: "Bristol",
-    avatar: placeholderImages.userAvatar2,
-    quote: "The insights help us identify at-risk students earlier and improve outcomes. A game changer for our staff and students.",
-    stat: "18%",
-    statLabel: "Improvement in Outcomes",
+    title: 'Planning that reacts to real weakness',
+    description:
+      'Study priorities adapt when mastery shifts — supporting interventions before gaps snowball into grade shocks.',
   },
   {
-    name: "Northfield Sixth Form",
-    location: "Leeds",
-    avatar: placeholderImages.userAvatar3,
-    quote: "Communication with parents is seamless and saves us hours every week. Highly recommended.",
-    stat: "45%",
-    statLabel: "Time Saved Weekly",
+    title: 'Built for trusted partnerships',
+    description:
+      'StudYear is designed alongside schools and parents with transparent roles, permissions, and audit-friendly workflows.',
   },
 ];
 
-export default function Page() {
+export default async function Page() {
+  const live = await getPublicHomeStats();
+  const heroStats = [
+    {
+      value: formatHomeStatCount(live.studentAccounts),
+      label: 'Student accounts',
+      icon: Users,
+    },
+    {
+      value: formatHomeStatCount(live.partnerSchools),
+      label: 'Partner organisations',
+      icon: GraduationCap,
+    },
+    {
+      value: formatHomeStatCount(live.communityResources),
+      label: 'Study resources shared',
+      icon: BookOpen,
+    },
+    {
+      value: formatHomeStatCount(live.totalUserProfiles),
+      label: 'User profiles created',
+      icon: LayoutDashboard,
+    },
+  ];
+
   return (
     <div className="flex flex-col min-h-dvh bg-background">
       <main className="flex-1">
@@ -132,14 +152,20 @@ export default function Page() {
         </section>
 
         <section className="w-full py-12 bg-slate-900 text-slate-50 dark:bg-slate-800">
-            <div className="container mx-auto grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
-                {stats.map(stat => (
+            <div className="container mx-auto">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
+                {heroStats.map((stat) => (
                     <div key={stat.label} className="flex flex-col items-center gap-2">
                         <stat.icon className="h-8 w-8 text-primary" />
-                        <p className="text-3xl font-bold">{stat.value}</p>
+                        <p className="text-3xl font-bold tabular-nums">{stat.value}</p>
                         <p className="text-sm text-slate-400">{stat.label}</p>
                     </div>
                 ))}
+              </div>
+              <p className="mt-6 text-center text-xs text-slate-500">
+                Live totals from StudYear&apos;s database (student role count, registered organisations, shared catalogue items, all user profiles).
+                Figures refresh about every five minutes. Em dash (—) means zero or unavailable.
+              </p>
             </div>
         </section>
 
@@ -170,35 +196,21 @@ export default function Page() {
         <section className="w-full py-20 md:py-24 lg:py-32 bg-muted/50">
           <div className="container mx-auto text-center space-y-12">
             <div className="space-y-4">
-              <h2 className="text-3xl md:text-4xl font-bold tracking-tight">Proven by Results</h2>
-              <p className="text-lg text-muted-foreground max-w-3xl mx-auto">We partner with schools and colleges to deliver tangible improvements in student outcomes and operational efficiency.</p>
+              <h2 className="text-3xl md:text-4xl font-bold tracking-tight">Designed for measurable improvement</h2>
+              <p className="text-lg text-muted-foreground max-w-3xl mx-auto">
+                We share live usage totals above instead of invented benchmarks. Outcomes depend on your context —
+                StudYear focuses on consistent workflows, safer visibility, and faster coordination between students, schools, and families.
+              </p>
             </div>
-            <div className="grid sm:grid-cols-1 lg:grid-cols-3 gap-8">
-              {testimonials.map((testimonial) => (
-                <Card key={testimonial.name} className="text-left flex flex-col bg-background">
-                  <CardContent className="p-6 space-y-4 flex-grow">
-                     <blockquote className="text-muted-foreground italic border-l-2 border-primary pl-4">
-                      "{testimonial.quote}"
-                    </blockquote>
-                     <div className="flex items-center pt-4">
-                      <Image 
-                        src={testimonial.avatar.src} 
-                        alt={testimonial.name}
-                        width={64}
-                        height={64}
-                        className="rounded-full mr-4"
-                        data-ai-hint={testimonial.avatar.hint}
-                      />
-                      <div>
-                        <p className="font-semibold">{testimonial.name}</p>
-                        <p className="text-sm text-muted-foreground">{testimonial.location}</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                  <CardHeader className="p-6 bg-primary/5 rounded-b-lg border-t">
-                      <p className="text-4xl font-bold text-primary">{testimonial.stat}</p>
-                      <p className="text-sm font-medium text-muted-foreground">{testimonial.statLabel}</p>
+            <div className="grid sm:grid-cols-1 lg:grid-cols-3 gap-8 text-left">
+              {platformValueProps.map((item) => (
+                <Card key={item.title} className="bg-background">
+                  <CardHeader>
+                    <CardTitle className="text-xl">{item.title}</CardTitle>
                   </CardHeader>
+                  <CardContent>
+                    <p className="text-muted-foreground">{item.description}</p>
+                  </CardContent>
                 </Card>
               ))}
             </div>
