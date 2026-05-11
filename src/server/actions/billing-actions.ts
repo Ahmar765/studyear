@@ -8,6 +8,7 @@ import {
   recordAcuTopUpFromCheckoutSession,
 } from '@/server/lib/billing';
 import type { SubscriptionType } from '@/server/schemas';
+import { ACU_PACKAGES } from '@/data/acu-packages';
 
 const SUBSCRIPTION_PRODUCT_CODES = new Set<string>([
   'STUDENT_PREMIUM',
@@ -28,11 +29,10 @@ function resolveAppBaseUrl(): string {
 }
 
 /**
- * Maps checkout `productCode` → Stripe Price IDs from `.env`.
- * Student recurring prices should match marketing (£10 Premium, £15 Premium Plus — adjust seed script / Dashboard).
- * Aligns with: STRIPE_PRICE_STUDENT_PREMIUM, STRIPE_PRICE_STUDENT_PREMIUM_PLUS,
- * STRIPE_PRICE_PARENT_PRO, STRIPE_PRICE_PARENT_PRO_PLUS,
- * and legacy packs STRIPE_PRICE_TOPUP_STARTER / TOPUP_GROWTH / TOPUP_SCALE (ENTRY / GROWTH / SCALE).
+ * Maps subscription `productCode` → Stripe Price IDs from `.env`.
+ * ACU one-time packs (ENTRY / GROWTH / SCALE) use inline `price_data` in GBP from `ACU_PACKAGES`, not these IDs.
+ * Student recurring: STRIPE_PRICE_STUDENT_PREMIUM, STRIPE_PRICE_STUDENT_PREMIUM_PLUS,
+ * STRIPE_PRICE_PARENT_PRO, STRIPE_PRICE_PARENT_PRO_PLUS.
  */
 function stripePriceIdForProduct(productCode: string): string | undefined {
   const map: Record<string, string | undefined> = {
@@ -40,9 +40,6 @@ function stripePriceIdForProduct(productCode: string): string | undefined {
     STUDENT_PREMIUM_PLUS: process.env.STRIPE_PRICE_STUDENT_PREMIUM_PLUS,
     PARENT_PRO: process.env.STRIPE_PRICE_PARENT_PRO,
     PARENT_PRO_PLUS: process.env.STRIPE_PRICE_PARENT_PRO_PLUS,
-    ENTRY: process.env.STRIPE_PRICE_TOPUP_STARTER,
-    GROWTH: process.env.STRIPE_PRICE_TOPUP_GROWTH,
-    SCALE: process.env.STRIPE_PRICE_TOPUP_SCALE,
   };
   return map[productCode];
 }
@@ -61,14 +58,6 @@ export async function createCheckoutSession(
     return { success: false, error: 'Stripe is not configured (missing STRIPE_SECRET_KEY).' };
   }
 
-  const priceId = stripePriceIdForProduct(productCode);
-  if (!priceId) {
-    return {
-      success: false,
-      error: `No Stripe price for "${productCode}". Run npm run stripe:seed-acu-packs:missing or stripe:seed-subscription-prices:missing and paste price_* IDs into .env (see billing-actions env mapping).`,
-    };
-  }
-
   const baseUrl = resolveAppBaseUrl();
 
   try {
@@ -77,9 +66,26 @@ export async function createCheckoutSession(
     const isAcuTopUp = ['ENTRY', 'GROWTH', 'SCALE'].includes(productCode);
 
     if (isAcuTopUp) {
+      const pack = ACU_PACKAGES[productCode as keyof typeof ACU_PACKAGES];
+      if (!pack) {
+        return { success: false, error: `Unknown ACU pack "${productCode}".` };
+      }
+      const gbpLabel = (pack.pricePence / 100).toFixed(0);
       const session = await stripe.checkout.sessions.create({
         mode: 'payment',
-        line_items: [{ price: priceId, quantity: 1 }],
+        line_items: [
+          {
+            price_data: {
+              currency: 'gbp',
+              unit_amount: pack.pricePence,
+              product_data: {
+                name: `StudYear ACU — ${pack.label} (£${gbpLabel})`,
+                metadata: { productCode: pack.code },
+              },
+            },
+            quantity: 1,
+          },
+        ],
         success_url: `${baseUrl}/account?purchase=success&session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${baseUrl}/checkout`,
         customer_email: customerEmail?.trim() || undefined,
@@ -90,6 +96,14 @@ export async function createCheckoutSession(
         return { success: false, error: 'Stripe did not return a session id.' };
       }
       return { success: true, sessionId: session.id };
+    }
+
+    const priceId = stripePriceIdForProduct(productCode);
+    if (!priceId) {
+      return {
+        success: false,
+        error: `No Stripe price for "${productCode}". Run npm run stripe:seed-subscription-prices:missing and paste the STRIPE_PRICE_${productCode}=price_… line into .env.`,
+      };
     }
 
     const priceObj = await stripe.prices.retrieve(priceId);
