@@ -1,6 +1,4 @@
-
-// src/app/forgot-password/page.tsx
-"use client";
+'use client';
 
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -10,10 +8,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
-import { useTransition, useState } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { getFirebaseAuth } from '@/lib/firebase/client-app';
+import { getPublicCommunicationsSettings } from '@/server/actions/settings-actions';
 
 const formSchema = z.object({
   email: z.string().email('Please enter a valid email address.'),
@@ -23,6 +22,26 @@ export default function ForgotPasswordPage() {
   const [isPending, startTransition] = useTransition();
   const [emailSent, setEmailSent] = useState(false);
   const { toast } = useToast();
+  const [copy, setCopy] = useState({
+    formDescription: "Enter your email and we'll send you a link to reset your password.",
+    successTitle: 'Check your inbox',
+    successDescription:
+      'If an account exists for that email, we sent a password reset link.',
+  });
+
+  useEffect(() => {
+    void getPublicCommunicationsSettings().then((c) => {
+      if (c.forgotPassword?.body) {
+        setCopy((prev) => ({ ...prev, formDescription: c.forgotPassword!.body! }));
+      }
+      if (c.forgotPassword?.title) {
+        setCopy((prev) => ({ ...prev, successTitle: c.forgotPassword!.title! }));
+      }
+      if (c.forgotPassword?.description) {
+        setCopy((prev) => ({ ...prev, successDescription: c.forgotPassword!.description! }));
+      }
+    });
+  }, []);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -34,40 +53,41 @@ export default function ForgotPasswordPage() {
       try {
         await sendPasswordResetEmail(getFirebaseAuth(), values.email);
         setEmailSent(true);
-      } catch (error: any) {
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'An unexpected error occurred.';
         toast({
           variant: 'destructive',
           title: 'Error',
-          description: error.message || 'An unexpected error occurred.',
+          description: message,
         });
       }
     });
   };
-  
+
   if (emailSent) {
-      return (
-         <div className="flex items-center justify-center min-h-screen bg-background p-4">
-            <Card className="w-full max-w-md">
-                <CardHeader>
-                    <CardTitle>Check your inbox</CardTitle>
-                    <CardDescription>A password reset link has been sent to the email address you provided.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <Button asChild className="w-full">
-                        <Link href="/login">Return to Login</Link>
-                    </Button>
-                </CardContent>
-            </Card>
-        </div>
-      )
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle>{copy.successTitle}</CardTitle>
+            <CardDescription>{copy.successDescription}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button asChild className="w-full">
+              <Link href="/login">Return to Login</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-background p-4">
+    <div className="flex min-h-screen items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle>Forgot Password</CardTitle>
-          <CardDescription>Enter your email and we'll send you a link to reset your password.</CardDescription>
+          <CardDescription>{copy.formDescription}</CardDescription>
         </CardHeader>
         <CardContent>
           <Form {...form}>

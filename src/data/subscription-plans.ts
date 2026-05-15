@@ -44,29 +44,47 @@ export const STUDENT_SUBSCRIPTION_PLANS: CheckoutPlanDefinition[] = [
   },
 ];
 
+export const PARENT_PRO_PLUS_MONTHLY_ACUS = 1650;
+export const PARENT_ELITE_MONTHLY_ACUS = 5000;
+
 export const PARENT_SUBSCRIPTION_PLANS: CheckoutPlanDefinition[] = [
   {
     productCode: 'PARENT_PRO',
     name: 'Parent Pro',
-    price: '9.99',
+    price: '10.00',
     priceSuffix: '/ month',
-    popular: true,
+    popular: false,
     features: [
-      'Parent dashboard access',
-      'Linked student progress overview',
-      'Weekly summary emails',
+      'Visibility + monitoring — Academic Command Centre',
+      'Live child snapshots & stability scoring',
+      'Verified Study Hours™ & weekly AI briefing',
+      '0 ACUs — monitoring-focused',
     ],
   },
   {
     productCode: 'PARENT_PRO_PLUS',
-    name: 'Parent Pro Plus',
-    price: '19.99',
+    name: 'Parent Pro+',
+    price: '20.00',
+    priceSuffix: '/ month',
+    popular: true,
+    features: [
+      'Everything in Parent Pro',
+      `Includes ${PARENT_PRO_PLUS_MONTHLY_ACUS.toLocaleString('en-GB')} ACUs monthly`,
+      'AI intervention mode & Parent Advisor',
+      'Emotional intelligence & predictive grade engine',
+    ],
+  },
+  {
+    productCode: 'PARENT_ELITE',
+    name: 'Parent Elite',
+    price: '39.00',
     priceSuffix: '/ month',
     popular: false,
     features: [
-      'Everything in Parent Pro',
-      'Real-time alerts & engagement insights',
-      'Higher monitoring limits',
+      'Full AI academic optimisation suite',
+      `Includes ${PARENT_ELITE_MONTHLY_ACUS.toLocaleString('en-GB')} ACUs monthly`,
+      'Family intelligence dashboard & live alerts',
+      'University readiness, burnout prevention & priority AI',
     ],
   },
 ];
@@ -82,7 +100,9 @@ export function subscriptionTypeDisplayName(
     case 'PARENT_PRO':
       return 'Parent Pro';
     case 'PARENT_PRO_PLUS':
-      return 'Parent Pro Plus';
+      return 'Parent Pro+';
+    case 'PARENT_ELITE':
+      return 'Parent Elite';
     case 'PRIVATE_TUTOR':
       return 'Private Tutor';
     case 'SCHOOL_STARTER':

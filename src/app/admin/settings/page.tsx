@@ -2,6 +2,7 @@
 import { getSystemSettings } from '@/server/actions/settings-actions';
 import type { SystemSettings } from '@/server/schemas/system-settings';
 import SettingsForms from './settings-forms';
+import CommunicationsSettingsForm from './communications-settings-form';
 
 export default async function AdminSettingsPage() {
   const initialSettings: SystemSettings = await getSystemSettings();
@@ -14,6 +15,7 @@ export default async function AdminSettingsPage() {
                 Control AI rate limits, feature flags, and other global settings. Changes may require a server restart.
             </p>
         </div>
+        <CommunicationsSettingsForm initialSettings={initialSettings} />
         <SettingsForms initialSettings={initialSettings} />
     </div>
   );

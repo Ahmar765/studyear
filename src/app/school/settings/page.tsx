@@ -21,6 +21,7 @@ import {
   type SchoolAccountSettings,
 } from '@/server/actions/school-actions';
 import { useToast } from '@/hooks/use-toast';
+import { SchoolStaffJoinCodePanel } from '@/components/school/school-staff-join-code-panel';
 
 const TIMEZONES = ['Europe/London', 'Europe/Dublin', 'UTC', 'America/New_York'];
 
@@ -108,6 +109,8 @@ export default function SchoolSettingsPage() {
           Update your school profile and record MIS integration plans (automated sync remains optional).
         </p>
       </div>
+
+      <SchoolStaffJoinCodePanel />
 
       <Card>
         <CardHeader>

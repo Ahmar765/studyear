@@ -89,6 +89,11 @@ export default function ProfileSetupForm({ studyLevels, examBoards, subjectsByLe
             router.push('/login');
             return;
         }
+        const role = (userProfile?.role ?? '').toString().toUpperCase().trim();
+        if (!loading && role === 'PRIVATE_TUTOR') {
+            router.replace('/tutor/onboarding');
+            return;
+        }
         if (!userProfile?.uid) return;
 
         /** `signup` / legacy rows may only populate `yearGroup`; saves mirror both. */
@@ -354,15 +359,28 @@ export default function ProfileSetupForm({ studyLevels, examBoards, subjectsByLe
 
     // Non-students (parent, tutor, etc.) skip detailed academic fields here
     if (userProfile && !isStudentSetup) {
+        const dashboardHref =
+            normalizedRole === 'PRIVATE_TUTOR'
+                ? '/tutor/dashboard'
+                : normalizedRole === 'PARENT'
+                  ? '/parent/dashboard'
+                  : normalizedRole === 'SCHOOL_TUTOR'
+                    ? '/teacher/dashboard'
+                    : '/dashboard';
         return (
              <div className="flex items-center justify-center min-h-screen bg-background p-4 py-8">
                 <Card className="w-full max-w-md text-center">
                     <CardHeader>
                         <CardTitle>Profile Complete</CardTitle>
-                        <CardDescription>Your profile as a {userProfile.role?.toLowerCase().replace(/_/g, ' ')} does not require detailed academic setup.</CardDescription>
+                        <CardDescription>
+                          Your profile as a {userProfile.role?.toLowerCase().replace(/_/g, ' ')} does not require detailed academic setup.
+                          {normalizedRole === 'SCHOOL_TUTOR' && (
+                            <> On your Command Centre, link to your school using the join code from your administrator or accept an email invite.</>
+                          )}
+                        </CardDescription>
                     </CardHeader>
                     <CardContent>
-                         <Button onClick={() => router.push('/dashboard')}>Go to Dashboard</Button>
+                         <Button onClick={() => router.push(dashboardHref)}>Go to Dashboard</Button>
                     </CardContent>
                 </Card>
             </div>

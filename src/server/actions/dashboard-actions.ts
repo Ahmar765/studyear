@@ -303,7 +303,12 @@ export async function getStudentDashboardStatsAction(params: {
         ]);
 
         const dashboardState = dashboardStateSnap.exists ? dashboardStateSnap.data() ?? {} : {};
-        const weakestSubject = dashboardState?.weakSubjects?.[0]?.name || 'N/A';
+
+        const progressChart = await getStudentProgressAction(userId);
+        const weakestSubject =
+          progressChart.length > 0
+            ? progressChart.reduce((w, c) => (c.progress < w.progress ? c : w), progressChart[0]!).name
+            : 'N/A';
 
         const predictedGrade = resolveDashboardPredictedGrade({
           dashboardState,

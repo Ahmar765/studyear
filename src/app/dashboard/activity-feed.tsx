@@ -9,12 +9,17 @@ import { getActivityFeedAction, ActivityFeedItem } from '@/server/actions/activi
 import { formatDistanceToNow } from 'date-fns';
 import { useAuth } from '@/hooks/use-auth';
 
-const iconMap = {
+const iconMap: Record<string, typeof Activity> = {
     QUIZ_COMPLETED: CheckCircle,
     QUIZ_SUBMITTED: CheckCircle,
     LESSON_COMPLETED: CheckCircle,
     RESOURCE_SAVED: Bookmark,
+    RESOURCE_GENERATED: Bookmark,
     PLAN_GENERATED: CalendarCheck,
+    STUDY_PLAN_GENERATED: CalendarCheck,
+    DIAGNOSTIC_COMPLETED: Activity,
+    QUESTION_ASKED: Activity,
+    INTERVENTION_TRIGGERED: CalendarCheck,
 };
 
 export default function ActivityFeed() {
@@ -82,7 +87,9 @@ export default function ActivityFeed() {
                                     </div>
                                     <div>
                                         <p className="text-sm font-medium">{item.title}</p>
-                                        <p className="text-xs text-muted-foreground">{item.description}</p>
+                                        {item.description ? (
+                                          <p className="text-xs text-muted-foreground">{item.description}</p>
+                                        ) : null}
                                         <p className="text-xs text-muted-foreground/70 mt-0.5">{formatDistanceToNow(new Date(item.timestamp), { addSuffix: true })}</p>
                                     </div>
                                 </div>

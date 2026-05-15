@@ -4,6 +4,8 @@
 import { generateQuiz, GenerateQuizInput } from '@/server/ai/flows/quiz-generation';
 import { z } from 'zod';
 import { runStudYearAction } from '../services/pipeline';
+import { learningEventService } from '../services/learning-events';
+import { dashboardSyncService } from '../services/dashboard-sync';
 import { adminDb } from '@/lib/firebase/admin-app';
 import * as admin from 'firebase-admin';
 
@@ -64,22 +66,40 @@ export async function logQuizAttempt(attemptData: {
     const attemptRef = adminDb.collection('quiz_attempts').doc();
     const now = admin.firestore.FieldValue.serverTimestamp();
     
+    const scorePercent =
+      attemptData.outOf > 0 ? (attemptData.score / attemptData.outOf) * 100 : 0;
+
     await attemptRef.set({
       attemptId: attemptRef.id,
       quizId: attemptData.quizId,
       studentId: attemptData.studentId,
       subjectId: attemptData.subjectId,
-      startedAt: now, 
+      startedAt: now,
       submittedAt: now,
       status: 'marked',
       scoreRaw: attemptData.score,
-      scorePercent: (attemptData.score / attemptData.outOf) * 100,
+      scorePercent,
       createdAt: now,
       updatedAt: now,
-      weaknessTopicIds: [], // To be populated by a future analysis function
-      strengthTopicIds: [], // To be populated by a future analysis function
+      weaknessTopicIds: [],
+      strengthTopicIds: [],
       aiFeedbackStatus: 'pending',
     });
+
+    await learningEventService.create({
+      studentId: attemptData.studentId,
+      type: 'QUIZ_SUBMITTED',
+      stage: 'PRACTISE',
+      payload: {
+        subjectId: attemptData.subjectId,
+        scoreRaw: attemptData.score,
+        outOf: attemptData.outOf,
+        scorePercent,
+        quizId: attemptData.quizId,
+      },
+    });
+
+    await dashboardSyncService.updateStudentDashboard(attemptData.studentId);
 
     return { success: true };
   } catch (error: any) {

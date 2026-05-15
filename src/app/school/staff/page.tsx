@@ -34,6 +34,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { SchoolStaffJoinCodePanel } from "@/components/school/school-staff-join-code-panel";
 
 export default function SchoolStaffPage() {
   const { user, loading: authLoading } = useAuth();
@@ -77,7 +78,10 @@ export default function SchoolStaffPage() {
       const token = await user.getIdToken();
       const res = await createSchoolStaffInviteAction(token, { email, intendedRole: role });
       if (res.success) {
-        toast({ title: "Invite recorded", description: "They can be onboarded when auth exists for that email." });
+        toast({
+          title: "Invite recorded",
+          description: "They can accept on their teacher dashboard or use your School Join Code from Settings.",
+        });
         setOpen(false);
         setEmail("");
         await load();
@@ -114,8 +118,8 @@ export default function SchoolStaffPage() {
             <DialogHeader>
               <DialogTitle>Invite by email</DialogTitle>
               <DialogDescription>
-                Stores a pending invite on your school. Full email delivery can be wired to Firebase / SendGrid
-                later.
+                Stores a pending invite on your school. Teachers can accept from their dashboard when signed in with
+                this email, or use the School Join Code below.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-2">
@@ -156,6 +160,8 @@ export default function SchoolStaffPage() {
           </DialogContent>
         </Dialog>
       </div>
+
+      <SchoolStaffJoinCodePanel />
 
       <Card>
         <CardHeader>

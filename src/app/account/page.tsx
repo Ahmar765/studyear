@@ -35,6 +35,7 @@ import {
   finalizeAcuCheckoutSessionAction,
   finalizeSubscriptionCheckoutSessionAction,
 } from '@/server/actions/billing-actions';
+import ParentLinkCodeCard from '@/components/student/parent-link-code-card';
 
 
 export default function AccountPage() {
@@ -207,8 +208,9 @@ export default function AccountPage() {
         return '/teacher/dashboard';
       case 'PARENT':
         return '/parent/dashboard';
-      case 'STUDENT':
       case 'PRIVATE_TUTOR':
+        return '/tutor/dashboard';
+      case 'STUDENT':
       default:
         return '/dashboard';
     }
@@ -232,6 +234,8 @@ export default function AccountPage() {
             </Alert>
         )}
       <div className='max-w-4xl mx-auto space-y-8'>
+        <ParentLinkCodeCard id="parent-link-code" />
+
         <Card className="overflow-hidden">
             <div className="relative h-48 w-full bg-muted">
                 {userProfile.coverImageUrl ? (

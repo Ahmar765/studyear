@@ -140,7 +140,7 @@ export async function endImpersonationAction(impersonationLogId: string): Promis
 }
 
 const subscriptionTypes: SubscriptionType[] = [
-    "FREE", "STUDENT_PREMIUM", "STUDENT_PREMIUM_PLUS", "PARENT_PRO", "PARENT_PRO_PLUS", 
+    "FREE", "STUDENT_PREMIUM", "STUDENT_PREMIUM_PLUS", "PARENT_PRO", "PARENT_PRO_PLUS", "PARENT_ELITE", 
     "PRIVATE_TUTOR", "SCHOOL_STARTER", "SCHOOL_GROWTH", "SCHOOL_ENTERPRISE",
     "SCHOOL_TUTOR", "SCHOOL_ADMIN", "ADMIN",
 ];
@@ -917,6 +917,73 @@ export async function getAnalyticsDataAction(): Promise<{
     }
 }
 
+
+export async function deleteUserAction(
+    targetUserId: string,
+    adminIdToken?: string | null,
+): Promise<{ success: boolean; error?: string }> {
+    if (!targetUserId?.trim()) {
+        return { success: false, error: 'User ID is required.' };
+    }
+
+    try {
+        const { getVerifiedUser } = await import('@/server/lib/auth');
+        const adminUser = await getVerifiedUser(adminIdToken);
+        if (!adminUser || adminUser.role !== 'ADMIN') {
+            return { success: false, error: 'Administrator access required.' };
+        }
+        if (adminUser.uid === targetUserId) {
+            return { success: false, error: 'You cannot delete your own account.' };
+        }
+
+        const batch = adminDb.batch();
+        const userRef = adminDb.doc(`users/${targetUserId}`);
+        batch.delete(userRef);
+        batch.delete(adminDb.doc(`subscriptions/${targetUserId}`));
+        batch.delete(adminDb.doc(`acuWallets/${targetUserId}`));
+        batch.delete(adminDb.doc(`student_profiles/${targetUserId}`));
+        batch.delete(adminDb.doc(`parent_profiles/${targetUserId}`));
+        batch.delete(adminDb.doc(`tutor_profiles/${targetUserId}`));
+        batch.delete(adminDb.doc(`student_dashboard_states/${targetUserId}`));
+
+        const staffSnap = await adminDb
+            .collection('school_staff')
+            .where('userId', '==', targetUserId)
+            .get();
+        staffSnap.docs.forEach((d) => batch.delete(d.ref));
+
+        const parentLinks = await adminDb
+            .collection('parent_student_links')
+            .where('parentId', '==', targetUserId)
+            .get();
+        parentLinks.docs.forEach((d) => batch.delete(d.ref));
+
+        const studentLinks = await adminDb
+            .collection('parent_student_links')
+            .where('studentId', '==', targetUserId)
+            .get();
+        studentLinks.docs.forEach((d) => batch.delete(d.ref));
+
+        await batch.commit();
+
+        try {
+            await adminAuth.deleteUser(targetUserId);
+        } catch (authErr: unknown) {
+            const code = (authErr as { code?: string })?.code;
+            if (code !== 'auth/user-not-found') {
+                throw authErr;
+            }
+        }
+
+        return { success: true };
+    } catch (error: unknown) {
+        console.error(`Error deleting user ${targetUserId}:`, error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : 'Could not delete user.',
+        };
+    }
+}
 
 export async function getRecentPaymentsAction(): Promise<{ payments: any[], error: string | null }> {
     try {

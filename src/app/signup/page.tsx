@@ -59,8 +59,13 @@ export default function SignupPage() {
                 title: "Account Created",
                 description: "You can now complete your profile.",
             });
-            // All new users go to profile setup now. Admins will be redirected from there.
-            router.push("/profile-setup");
+            if (role === 'PRIVATE_TUTOR') {
+              router.push('/tutor/onboarding');
+            } else if (role === 'SCHOOL_ADMIN') {
+              router.push('/school/onboarding');
+            } else {
+              router.push('/profile-setup');
+            }
 
         } else {
             toast({

@@ -82,6 +82,7 @@ export const PLAN_ENTITLEMENTS: Record<SubscriptionType, FeatureKey[]> = {
   ],
   PARENT_PRO: [],
   PARENT_PRO_PLUS: [],
+  PARENT_ELITE: [],
   PRIVATE_TUTOR: [],
   SCHOOL_STARTER: [],
   SCHOOL_GROWTH: [],

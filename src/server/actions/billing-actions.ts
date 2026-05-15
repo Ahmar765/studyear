@@ -15,6 +15,7 @@ const SUBSCRIPTION_PRODUCT_CODES = new Set<string>([
   'STUDENT_PREMIUM_PLUS',
   'PARENT_PRO',
   'PARENT_PRO_PLUS',
+  'PARENT_ELITE',
 ]);
 
 function resolveAppBaseUrl(): string {
@@ -40,6 +41,7 @@ function stripePriceIdForProduct(productCode: string): string | undefined {
     STUDENT_PREMIUM_PLUS: process.env.STRIPE_PRICE_STUDENT_PREMIUM_PLUS,
     PARENT_PRO: process.env.STRIPE_PRICE_PARENT_PRO,
     PARENT_PRO_PLUS: process.env.STRIPE_PRICE_PARENT_PRO_PLUS,
+    PARENT_ELITE: process.env.STRIPE_PRICE_PARENT_ELITE,
   };
   return map[productCode];
 }

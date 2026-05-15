@@ -6,6 +6,8 @@ import * as admin from 'firebase-admin';
 import type { DocumentData } from 'firebase-admin/firestore';
 import { createSession, endActiveSession } from "@/server/services/session";
 import type { UserRole, SubscriptionType } from "@/server/schemas";
+import { deriveParentLinkCode } from "@/lib/parent-link-code";
+import { generateSchoolStaffJoinCode } from "@/lib/school-staff-join-code";
 
 const allowedRoles: UserRole[] = ["STUDENT", "PARENT", "PRIVATE_TUTOR", "SCHOOL_ADMIN", "SCHOOL_TUTOR", "ADMIN"];
 
@@ -40,6 +42,7 @@ async function tryPromoteDevSchoolAdmin(uid: string, email: string | null) {
             await schoolAccountRef.set({
                 name: `${domainLabel} (Local)`,
                 approvalStatus: 'APPROVED',
+                staffJoinCode: generateSchoolStaffJoinCode(),
                 createdAt: now,
             });
             await adminDb.collection('school_staff').doc().set({
@@ -103,6 +106,7 @@ export async function signup(uid: string, email: string, role: string, displayNa
         createdAt: now,
         updatedAt: now,
         onboardingComplete: false,
+        ...(userRole === 'STUDENT' ? { parentLinkCode: deriveParentLinkCode(uid) } : {}),
     });
     
     batch.set(walletRef, {
@@ -128,6 +132,7 @@ export async function signup(uid: string, email: string, role: string, displayNa
         batch.set(schoolAccountRef, {
             name: `${email.split('@')[1].split('.')[0]} (Pending)`, 
             approvalStatus: 'PENDING',
+            staffJoinCode: generateSchoolStaffJoinCode(),
             createdAt: now,
         });
         const schoolStaffRef = adminDb.collection('school_staff').doc();

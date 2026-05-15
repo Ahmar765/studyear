@@ -1,53 +1,101 @@
+'use client';
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
-import { Users, UserCog, FileText, LineChart, ShieldAlert, BarChart, Target, BookCopy, Settings } from "lucide-react";
+import { useAuth } from '@/hooks/use-auth';
+import { useCallback, useEffect, useState } from 'react';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { AlertTriangle } from 'lucide-react';
+import { getSchoolCommandCentreAction } from '@/server/actions/school-portal-actions';
+import type { SchoolCommandCentrePayload } from '@/types/school-portal';
+import { SchoolCommandCentreView } from '@/components/school-portal/school-command-centre-view';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 
-const schoolSections = [
-    { title: "Student Management", description: "View and manage student data, progress, and reports.", icon: Users, href: "/school/students" },
-    { title: "Staff Management", description: "Onboard teachers and assign them to student cohorts.", icon: UserCog, href: "/school/staff" },
-    { title: "Assessments", description: "Create, assign, and track school-wide assessments.", icon: FileText, href: "/school/assessments" },
-    { title: "Progress Analytics", description: "Monitor real-time progress data across the school.", icon: LineChart, href: "/school/progress" },
-    { title: "Risk Alerts", description: "Review AI-generated alerts for at-risk students.", icon: ShieldAlert, href: "/school/alerts" },
-    { title: "Reporting", description: "Generate comprehensive reports for staff and parents.", icon: BarChart, href: "/school/reports" },
-    { title: "Interventions", description: "Manage and track academic intervention plans.", icon: Target, href: "/school/interventions" },
-    { title: "Shared Resources", description: "Curate and share resources across your institution.", icon: BookCopy, href: "/school/resources" },
-    { title: "School Settings", description: "Configure MIS integration and platform settings.", icon: Settings, href: "/school/settings" },
-];
-
 export default function SchoolDashboardPage() {
-  return (
-    <div className="flex-1 space-y-8 p-4 md:p-8">
-        <div className="flex flex-col space-y-2">
-            <h2 className="text-3xl font-bold tracking-tight">School Dashboard</h2>
-            <p className="text-muted-foreground">
-                An overview of your school's performance and management tools.
-            </p>
-        </div>
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<SchoolCommandCentrePayload | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-             {schoolSections.map(section => (
-                 <Card key={section.title} className="flex flex-col">
-                    <CardHeader>
-                        <div className="flex items-center gap-4">
-                            <div className="bg-primary/10 text-primary p-3 rounded-full">
-                                <section.icon className="h-6 w-6" />
-                            </div>
-                            <CardTitle>{section.title}</CardTitle>
-                        </div>
-                    </CardHeader>
-                    <CardContent className="flex-grow">
-                        <CardDescription>{section.description}</CardDescription>
-                    </CardContent>
-                    <CardFooter>
-                         <Button asChild className="w-full">
-                            <Link href={section.href}>Manage</Link>
-                        </Button>
-                    </CardFooter>
-                </Card>
-             ))}
+  const load = useCallback(
+    async (silent?: boolean) => {
+      if (!user) return;
+      if (!silent) setLoading(true);
+      try {
+        const token = await user.getIdToken();
+        const result = await getSchoolCommandCentreAction(token);
+        if (result.success && result.data) {
+          setData(result.data);
+          setError(null);
+        } else {
+          setError(result.error ?? 'Could not load command centre');
+        }
+      } catch {
+        setError('Session error — try refreshing.');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [user],
+  );
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  useEffect(() => {
+    if (!user || !data) return;
+    const refresh = () => void load(true);
+    const id = window.setInterval(refresh, 45_000);
+    window.addEventListener('focus', refresh);
+    return () => {
+      window.clearInterval(id);
+      window.removeEventListener('focus', refresh);
+    };
+  }, [user, data, load]);
+
+  if (loading) {
+    return (
+      <div className="school-ops-dashboard flex-1 space-y-6 p-4 md:p-8">
+        <Skeleton className="h-48 w-full rounded-2xl" />
+        <Skeleton className="h-24 w-full" />
+        <div className="grid gap-4 md:grid-cols-3">
+          <Skeleton className="h-40" />
+          <Skeleton className="h-40" />
+          <Skeleton className="h-40" />
         </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-8">
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Command centre unavailable</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
+  if (!data) return null;
+
+  return (
+    <div className="school-ops-dashboard flex-1 space-y-6 p-4 md:p-8">
+      {!data.onboardingComplete && (
+        <Alert>
+          <AlertTitle>Complete your school workspace deployment</AlertTitle>
+          <AlertDescription className="flex flex-wrap items-center gap-3">
+            <span>Finish enterprise onboarding to unlock full operational intelligence.</span>
+            <Button size="sm" asChild>
+              <Link href="/school/onboarding">Continue setup</Link>
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+      <SchoolCommandCentreView data={data} />
     </div>
   );
 }

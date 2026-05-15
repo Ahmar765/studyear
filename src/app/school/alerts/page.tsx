@@ -55,9 +55,9 @@ export default function SchoolAlertsPage() {
   return (
     <div className="flex-1 space-y-8 p-4 md:p-8">
       <div className="flex flex-col space-y-2">
-        <h2 className="text-3xl font-bold tracking-tight">Risk Alerts</h2>
+        <h2 className="text-3xl font-bold tracking-tight">Live Risk Intelligence</h2>
         <p className="text-muted-foreground">
-          Review AI-generated alerts for students who are at risk of falling behind.
+          Predictive academic risk signals — declining grades, homework gaps, and intervention urgency.
         </p>
       </div>
       <Card>

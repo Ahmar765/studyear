@@ -44,6 +44,11 @@ function mergeRoles(
 ): EffectiveUserRole {
   const profileRole = parseRole(profileRoleRaw);
 
+  // Firestore tutor role wins over a stale STUDENT JWT (common after signup before token refresh).
+  if (profileRole === "PRIVATE_TUTOR" || profileRole === "SCHOOL_TUTOR") {
+    return profileRole;
+  }
+
   if (isStaff(claimRole)) return claimRole;
   if (isStaff(profileRole)) return profileRole;
   return claimRole ?? profileRole ?? "STUDENT";

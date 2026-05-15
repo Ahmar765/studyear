@@ -45,6 +45,7 @@ export interface SubscriptionData {
         | "STUDENT_PREMIUM_PLUS"
         | "PARENT_PRO"
         | "PARENT_PRO_PLUS"
+        | "PARENT_ELITE"
         | "PRIVATE_TUTOR"
         | "SCHOOL_STARTER"
         | "SCHOOL_GROWTH"

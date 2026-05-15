@@ -43,6 +43,10 @@ import {
   PlayCircle,
   Wand2,
   Newspaper,
+  Briefcase,
+  PoundSterling,
+  Video,
+  ClipboardList,
 } from "lucide-react";
 import Logo from "../logo";
 import { Button } from "../ui/button";
@@ -69,6 +73,8 @@ import { useImpersonation } from "@/hooks/use-impersonation";
 
 const studentNavItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/tutors", label: "Find tutors", icon: GraduationCap },
+  { href: "/account#parent-link-code", label: "Parent link code", icon: Users },
   { href: "/assessment", label: "Academic Diagnostic", icon: Target },
   { href: "/diagnostic-results", label: "Diagnostic Results", icon: FileClock },
   { href: "/recovery-plan", label: "Personal Recovery Plan", icon: ShieldAlert },
@@ -98,33 +104,75 @@ const adminNavItems = [
 ];
 
 const parentNavItems = [
-    { href: "/parent/dashboard", label: "Parent Dashboard", icon: BookUser },
+    { href: "/parent/dashboard", label: "Command Centre", icon: BookUser },
 ];
 
-const teacherNavItems = [
-    { href: "/teacher/dashboard", label: "Teacher Dashboard", icon: GraduationCap },
+const schoolTutorNavItems = [
+  { href: "/teacher/dashboard", label: "Command Centre", icon: Briefcase },
+  { href: "/teacher/classes", label: "Classes", icon: Users },
+  { href: "/teacher/interventions", label: "Interventions", icon: Target },
+  { href: "/teacher/assignments", label: "Assignments", icon: ClipboardList },
+  { href: "/teacher/classroom", label: "Classroom", icon: Video },
+  { href: "/teacher/analytics", label: "Analytics", icon: BarChart },
+  { href: "/teacher/communications", label: "Communications", icon: MessageSquareText },
+  { href: "/ai-tutor", label: "AI Teaching Assistant", icon: Bot },
+];
+
+const privateTutorNavItems = [
+  { href: "/tutor/dashboard", label: "Command Centre", icon: Briefcase },
+  { href: "/tutor/calendar", label: "Calendar", icon: CalendarCheck },
+  { href: "/tutor/students", label: "Student pipeline", icon: Users },
+  { href: "/tutor/classroom", label: "Classroom", icon: Video },
+  { href: "/tutor/earnings", label: "Earnings", icon: PoundSterling },
+  { href: "/tutor/profile", label: "Authority profile", icon: UserCog },
+  { href: "/ai-tutor", label: "AI Teaching Assistant", icon: Bot },
+  { href: "/tutors", label: "Marketplace listing", icon: GraduationCap },
 ];
 
 const schoolNavItems = [
-    { href: "/school/dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { href: "/school/students", label: "Students", icon: Users },
-    { href: "/school/staff", label: "Staff", icon: UserCog },
-    { href: "/school/assessments", label: "Assessments", icon: FileText },
-    { href: "/school/progress", label: "Progress", icon: LineChart },
-    { href: "/school/alerts", label: "Risk Alerts", icon: ShieldAlert },
-    { href: "/school/reports", label: "Reports", icon: BarChart },
-    { href: "/school/interventions", label: "Interventions", icon: Target },
-    { href: "/school/resources", label: "Resources", icon: BookCopy },
-    { href: "/school/settings", label: "Settings", icon: Settings },
+  { href: "/school/dashboard", label: "Command Centre", icon: Briefcase },
+  { href: "/school/alerts", label: "Risk intelligence", icon: ShieldAlert },
+  { href: "/school/interventions", label: "Intervention war room", icon: Target },
+  { href: "/school/students", label: "Students", icon: Users },
+  { href: "/school/staff", label: "Staff deployment", icon: UserCog },
+  { href: "/school/progress", label: "Analytics", icon: LineChart },
+  { href: "/school/acu", label: "ACU command", icon: Bot },
+  { href: "/school/assessments", label: "Assessments", icon: FileText },
+  { href: "/school/reports", label: "Executive reports", icon: BarChart },
+  { href: "/school/resources", label: "Knowledge hub", icon: BookCopy },
+  { href: "/school/settings", label: "Settings", icon: Settings },
 ];
 
+
+/** Student learning shell — private tutors must never land here. */
+const studentShellPrefixes = [
+  '/dashboard',
+  '/assessment',
+  '/diagnostic-results',
+  '/recovery-plan',
+  '/planner',
+  '/interactive-lesson',
+  '/create',
+  '/progress',
+  '/predict-grade',
+  '/assignment-review',
+  '/saved-resources',
+  '/search',
+  '/profile-setup',
+];
+
+function isStudentShellPath(pathname: string): boolean {
+  return studentShellPrefixes.some(
+    (p) => pathname === p || pathname.startsWith(`${p}/`),
+  );
+}
 
 const navItemsByRole = {
     STUDENT: studentNavItems,
     ADMIN: adminNavItems,
     PARENT: parentNavItems,
-    SCHOOL_TUTOR: teacherNavItems,
-    PRIVATE_TUTOR: studentNavItems, // Tutors might have a student-like view for resources
+    SCHOOL_TUTOR: schoolTutorNavItems,
+    PRIVATE_TUTOR: privateTutorNavItems,
     SCHOOL_ADMIN: schoolNavItems,
 };
 
@@ -206,14 +254,29 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     // Route staff/parent dashboards using effective role (JWT claims + Firestore).
     // Do not require userProfile: missing `users/{uid}` would otherwise block redirects while JWT is correct.
     if (user && tokenRoleResolved) {
-        const role = effectiveRole;
+        const role =
+          userProfile?.role === 'PRIVATE_TUTOR'
+            ? 'PRIVATE_TUTOR'
+            : userProfile?.role === 'SCHOOL_TUTOR'
+              ? 'SCHOOL_TUTOR'
+              : effectiveRole;
         const isAdminDashboard = pathname.startsWith('/admin');
         const isTeacherDashboard = pathname.startsWith('/teacher');
         const isSchoolDashboard = pathname.startsWith('/school');
         const isParentDashboard = pathname.startsWith('/parent');
-        /** Billing / account live outside `/parent`; allow checkout without bouncing back to the dashboard. */
+        const isTutorDashboard = pathname.startsWith('/tutor');
+        /** Billing / account live outside role dashboards; allow checkout without bouncing back. */
         const parentAllowedOutsideParentRoutes =
           pathname.startsWith('/checkout') || pathname === '/account';
+        const tutorAllowedOutsideTutorRoutes =
+          pathname.startsWith('/checkout') ||
+          pathname === '/account' ||
+          pathname.startsWith('/ai-tutor') ||
+          pathname.startsWith('/tutors');
+        const teacherAllowedOutsideTeacherRoutes =
+          pathname.startsWith('/checkout') ||
+          pathname === '/account' ||
+          pathname.startsWith('/ai-tutor');
 
         const adminAllowedOutsideAdmin =
           pathname.startsWith('/blog') ||
@@ -224,12 +287,59 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         if (role === 'ADMIN' && !isAdminDashboard && !adminAllowedOutsideAdmin) {
           router.replace('/admin/dashboard');
         }
-        else if (role === 'SCHOOL_ADMIN' && !isSchoolDashboard) router.replace('/school/dashboard');
-        else if (role === 'SCHOOL_TUTOR' && !isTeacherDashboard) router.replace('/teacher/dashboard');
+        else if (role === 'SCHOOL_ADMIN') {
+          const schoolOnboarding = pathname === '/school/onboarding';
+          const schoolAllowedOutside =
+            pathname.startsWith('/checkout') || pathname === '/account';
+          if (!isSchoolDashboard && !schoolOnboarding && !schoolAllowedOutside) {
+            router.replace('/school/dashboard');
+          } else if (pathname === '/') {
+            router.replace('/school/dashboard');
+          }
+        }
+        else if (role === 'SCHOOL_TUTOR') {
+          if (
+            isAdminDashboard ||
+            isSchoolDashboard ||
+            isParentDashboard ||
+            isTutorDashboard ||
+            isStudentShellPath(pathname)
+          ) {
+            router.replace('/teacher/dashboard');
+          } else if (
+            !isTeacherDashboard &&
+            !teacherAllowedOutsideTeacherRoutes
+          ) {
+            router.replace('/teacher/dashboard');
+          } else if (pathname === '/') {
+            router.replace('/teacher/dashboard');
+          }
+        }
         else if (role === 'PARENT' && !isParentDashboard && !parentAllowedOutsideParentRoutes) {
             router.replace('/parent/dashboard');
         }
-        else if (['STUDENT', 'PRIVATE_TUTOR'].includes(role) && (isAdminDashboard || isTeacherDashboard || isSchoolDashboard || isParentDashboard)) {
+        else if (role === 'PRIVATE_TUTOR') {
+          if (
+            isAdminDashboard ||
+            isTeacherDashboard ||
+            isSchoolDashboard ||
+            isParentDashboard ||
+            isStudentShellPath(pathname)
+          ) {
+            router.replace('/tutor/dashboard');
+          } else if (
+            !onboardingComplete &&
+            pathname !== '/tutor/onboarding' &&
+            !pathname.startsWith('/account')
+          ) {
+            router.replace('/tutor/onboarding');
+          } else if (!isTutorDashboard && !tutorAllowedOutsideTutorRoutes && pathname !== '/tutor/onboarding') {
+            router.replace('/tutor/dashboard');
+          } else if (pathname === '/') {
+            router.replace('/tutor/dashboard');
+          }
+        }
+        else if (role === 'STUDENT' && (isAdminDashboard || isTeacherDashboard || isSchoolDashboard || isParentDashboard || isTutorDashboard)) {
             router.replace('/dashboard');
         } else if (role === 'STUDENT' && pathname === '/') {
             router.replace('/dashboard');
@@ -280,7 +390,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     };
   }, [user]);
 
-  const noLayoutPages = ['/login', '/signup', '/profile-setup', '/forgot-password', '/auth/impersonate'];
+  const noLayoutPages = ['/login', '/signup', '/profile-setup', '/tutor/onboarding', '/school/onboarding', '/forgot-password', '/auth/impersonate'];
   if (noLayoutPages.includes(pathname)) {
     return <main>{children}</main>;
   }
@@ -291,7 +401,13 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  const currentNavItems = navItemsByRole[effectiveRole] || studentNavItems;
+  const resolvedRole =
+    userProfile?.role === 'PRIVATE_TUTOR'
+      ? 'PRIVATE_TUTOR'
+      : userProfile?.role === 'SCHOOL_TUTOR'
+        ? 'SCHOOL_TUTOR'
+        : effectiveRole;
+  const currentNavItems = navItemsByRole[resolvedRole] || studentNavItems;
   const showSidebar = !!user;
 
   return (
@@ -356,7 +472,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                       <DropdownMenuLabel className="space-y-0.5">
                         <span className="block font-medium">{userProfile?.name || user.email}</span>
                         <span className="block text-xs font-normal text-muted-foreground">
-                          {accountRoleLabel(effectiveRole)}
+                          {accountRoleLabel(resolvedRole)}
                         </span>
                       </DropdownMenuLabel>
                       <DropdownMenuSeparator />
@@ -368,7 +484,15 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         className="cursor-pointer"
-                        onSelect={() => router.push('/profile-setup')}
+                        onSelect={() =>
+                          router.push(
+                            resolvedRole === 'PRIVATE_TUTOR'
+                              ? '/tutor/profile'
+                              : resolvedRole === 'SCHOOL_TUTOR'
+                                ? '/teacher/dashboard'
+                                : '/profile-setup',
+                          )
+                        }
                       >
                         Edit Profile
                       </DropdownMenuItem>

@@ -2,6 +2,7 @@
 'use server';
 
 import { adminDb } from '@/lib/firebase/admin-app';
+import * as admin from 'firebase-admin';
 import { z } from 'zod';
 import {
   SystemSettingsSchema,
@@ -18,6 +19,25 @@ const defaultSettings: SystemSettings = {
   pricingRules: {
     multiplier: 3,
     tutor_commission: 20,
+  },
+  communications: {
+    supportEmail: 'support@studyear.ai',
+    contactEmail: 'contact@studyear.ai',
+    noreplyEmail: 'noreply@studyear.ai',
+    forgotPassword: {
+      title: 'Check your inbox',
+      description:
+        'If an account exists for that email, we sent a password reset link. Check spam or contact support.',
+      body: "Enter your email and we'll send you a link to reset your password.",
+    },
+    contactForm: {
+      title: 'Message sent',
+      description: 'Thank you for contacting us. We will get back to you shortly.',
+    },
+    signupWelcome: {
+      title: 'Account created',
+      description: 'You can now complete your profile.',
+    },
   },
   aiProvider: {
     defaultProvider: 'gemini',
@@ -62,6 +82,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
         featureFlags: { ...defaultSettings.featureFlags, ...data.featureFlags },
         pricingRules: { ...defaultSettings.pricingRules, ...data.pricingRules },
         aiProvider: mergeAiProvider(defaultSettings.aiProvider!, data.aiProvider),
+        communications: { ...defaultSettings.communications, ...data.communications },
       };
     }
     return defaultSettings;
@@ -83,5 +104,39 @@ export async function updateSystemSettingsAction(settings: SystemSettings) {
     }
     console.error('Error updating system settings:', error);
     return { success: false, error: 'An unexpected error occurred.' };
+  }
+}
+
+/** Public copy for login, contact, forgot-password pages (no secrets). */
+export async function getPublicCommunicationsSettings() {
+  const settings = await getSystemSettings();
+  return settings.communications ?? defaultSettings.communications!;
+}
+
+export async function submitContactFormAction(input: {
+  fullName: string;
+  email: string;
+  enquiryType: string;
+  message: string;
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const fullName = input.fullName?.trim();
+    const email = input.email?.trim().toLowerCase();
+    const message = input.message?.trim();
+    if (!fullName || !email || !message) {
+      return { success: false, error: 'Please complete all required fields.' };
+    }
+    await adminDb.collection('contact_submissions').add({
+      fullName,
+      email,
+      enquiryType: input.enquiryType?.trim() || 'support',
+      message,
+      status: 'NEW',
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    return { success: true };
+  } catch (error) {
+    console.error('Contact form error:', error);
+    return { success: false, error: 'Could not send your message. Please try again.' };
   }
 }

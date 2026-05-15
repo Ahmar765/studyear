@@ -15,6 +15,7 @@ import LinkParentForm from './link-parent-form';
 import ImpersonationDialog from './impersonation-dialog';
 import LinkSchoolForm from './link-school-form';
 import AcuAdjustmentDialog from './acu-adjustment-dialog';
+import DeleteUserDialog from './delete-user-dialog';
 
 
 export default function UserActions({ user }: { user: UserProfile }) {
@@ -74,6 +75,8 @@ export default function UserActions({ user }: { user: UserProfile }) {
                 </DialogTrigger>
                 <ImpersonationDialog user={user} onSessionStart={() => setIsImpersonateOpen(false)} />
             </Dialog>
+
+            <DeleteUserDialog user={user} />
         </div>
     );
 }

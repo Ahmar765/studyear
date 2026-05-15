@@ -1,77 +1,97 @@
+'use client';
 
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { PlusCircle, User, TrendingUp, Flag, CheckCircle } from "lucide-react";
-import Link from "next/link";
-import { getTeacherStudentsAction, TeacherStudent } from "@/server/actions/teacher-actions";
-import { Progress } from "@/components/ui/progress";
+import { useAuth } from '@/hooks/use-auth';
+import { useCallback, useEffect, useState } from 'react';
+import { Skeleton } from '@/components/ui/skeleton';
+import { getSchoolTutorDashboardDataAction } from '@/server/actions/teacher-actions';
+import type { SchoolTutorDashboardPayload } from '@/types/school-tutor-dashboard';
+import { SchoolTutorDashboardView } from '@/components/school-tutor/school-tutor-dashboard-view';
+import { SchoolLinkSchoolCard } from '@/components/school-tutor/school-link-school-card';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { AlertTriangle, Building2 } from 'lucide-react';
 
-export default async function TeacherDashboardPage() {
-    const { students, error } = await getTeacherStudentsAction();
+export default function SchoolTutorDashboardPage() {
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<SchoolTutorDashboardPayload | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(
+    async (silent?: boolean) => {
+      if (!user) return;
+      if (!silent) setLoading(true);
+      try {
+        const token = await user.getIdToken();
+        const result = await getSchoolTutorDashboardDataAction(token);
+        if (result.success && result.data) {
+          setData(result.data);
+          setError(null);
+        } else {
+          setError(result.error ?? 'Could not load dashboard');
+        }
+      } catch {
+        setError('Session error — try refreshing.');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [user],
+  );
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  useEffect(() => {
+    if (!user || !data) return;
+    const refresh = () => void load(true);
+    const id = window.setInterval(refresh, 45_000);
+    window.addEventListener('focus', refresh);
+    return () => {
+      window.clearInterval(id);
+      window.removeEventListener('focus', refresh);
+    };
+  }, [user, data, load]);
+
+  if (loading) {
+    return (
+      <div className="school-dashboard flex-1 space-y-6 p-4 md:p-8">
+        <Skeleton className="h-48 w-full rounded-2xl" />
+        <div className="grid gap-4 sm:grid-cols-4">
+          <Skeleton className="h-24" />
+          <Skeleton className="h-24" />
+          <Skeleton className="h-24" />
+          <Skeleton className="h-24" />
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-8">
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
+  if (!data) return null;
 
   return (
-    <div className="flex-1 space-y-8 p-4 md:p-8">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div className="space-y-2">
-                <h2 className="text-3xl font-bold tracking-tight">Teacher Dashboard</h2>
-                <p className="text-muted-foreground">
-                    Welcome! Here you can monitor the progress of your assigned students.
-                </p>
-            </div>
-            <Button asChild>
-                <Link href="/create">
-                    <PlusCircle className="mr-2 h-4 w-4" /> Create New Resource
-                </Link>
-            </Button>
-        </div>
-        
-        <Card>
-            <CardHeader>
-                <CardTitle>My Students</CardTitle>
-                <CardDescription>An overview of your assigned students' progress and activity.</CardDescription>
-            </CardHeader>
-            <CardContent>
-                {error && <p className="text-destructive text-center">{error}</p>}
-                {!error && students.length === 0 && (
-                    <div className="flex flex-col items-center justify-center h-48 text-center text-muted-foreground border-2 border-dashed rounded-lg">
-                        <User className="h-12 w-12 mb-4" />
-                        <p className="font-semibold">No students assigned</p>
-                        <p className="text-sm">Once a school administrator assigns you to students, they will appear here.</p>
-                    </div>
-                )}
-                {!error && students.length > 0 && (
-                    <div className="grid md:grid-cols-2 gap-6">
-                        {students.map(student => (
-                            <Card key={student.id}>
-                                <CardHeader className="flex flex-row items-center gap-4">
-                                     <Avatar className="h-12 w-12">
-                                        <AvatarImage src={student.profileImageUrl} />
-                                        <AvatarFallback>{student.name.charAt(0)}</AvatarFallback>
-                                    </Avatar>
-                                    <div>
-                                        <CardTitle>{student.name}</CardTitle>
-                                        <CardDescription>{student.yearGroup}</CardDescription>
-                                    </div>
-                                </CardHeader>
-                                <CardContent className="space-y-3">
-                                    <div>
-                                        <p className="text-xs font-medium text-muted-foreground">Overall Progress</p>
-                                        <div className="flex items-center gap-2">
-                                            <Progress value={student.progressScore} className="h-2" />
-                                            <span>{student.progressScore}%</span>
-                                        </div>
-                                    </div>
-                                    <div className="text-sm flex items-center gap-2"><TrendingUp className="h-4 w-4 text-green-500" /> Strongest Subject: <span className="font-semibold">{student.strongestSubject}</span></div>
-                                    <div className="text-sm flex items-center gap-2"><Flag className="h-4 w-4 text-red-500" /> Weakest Subject: <span className="font-semibold">{student.weakestSubject}</span></div>
-                                    <div className="text-sm flex items-center gap-2"><CheckCircle className="h-4 w-4 text-blue-500" /> Tasks Completed: <span className="font-semibold">{student.tasksCompleted}</span></div>
-                                </CardContent>
-                            </Card>
-                        ))}
-                    </div>
-                )}
-            </CardContent>
-        </Card>
+    <div className="school-dashboard flex-1 space-y-6 p-4 md:p-8">
+      <header className="flex flex-wrap items-center gap-2">
+        <Badge variant="outline" className="border-indigo-500/40 text-indigo-800 dark:text-indigo-200">
+          <Building2 className="mr-1 h-3 w-3" />
+          Institutional staff
+        </Badge>
+      </header>
+      <SchoolLinkSchoolCard onLinked={() => void load(true)} />
+      <SchoolTutorDashboardView data={data} />
     </div>
   );
 }

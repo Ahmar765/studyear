@@ -22,10 +22,28 @@ const PricingRulesSchema = z.object({
   tutor_commission: z.number(),
 });
 
+const MessageBlockSchema = z.object({
+  title: z.string().optional(),
+  description: z.string().optional(),
+  body: z.string().optional(),
+});
+
+const CommunicationsSchema = z.object({
+  supportEmail: z.string().email().optional(),
+  contactEmail: z.string().email().optional(),
+  noreplyEmail: z.string().email().optional(),
+  forgotPassword: MessageBlockSchema.optional(),
+  contactForm: MessageBlockSchema.optional(),
+  signupWelcome: MessageBlockSchema.optional(),
+});
+
 export const SystemSettingsSchema = z.object({
   aiProvider: AIProviderConfigSchema.optional(),
   featureFlags: FeatureFlagsSchema.optional(),
   pricingRules: PricingRulesSchema.optional(),
+  communications: CommunicationsSchema.optional(),
 });
+
+export type CommunicationsSettings = z.infer<typeof CommunicationsSchema>;
 
 export type SystemSettings = z.infer<typeof SystemSettingsSchema>;

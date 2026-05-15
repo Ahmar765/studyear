@@ -3,6 +3,10 @@
 
 import { getVerifiedUser } from '../lib/auth';
 import { adminDb } from '@/lib/firebase/admin-app';
+import {
+    ensureSchoolStaffJoinCode,
+    regenerateSchoolStaffJoinCode,
+} from '@/server/lib/school-staff-link';
 import * as admin from 'firebase-admin';
 
 async function getSchoolIdForAdmin(adminUserId: string): Promise<string | null> {
@@ -534,6 +538,7 @@ export async function createSchoolStaffInviteAction(
         if (!email || !email.includes("@")) {
             return { success: false, error: "Enter a valid email address." };
         }
+        await ensureSchoolStaffJoinCode(schoolId);
         const intendedRole = input.intendedRole === "SCHOOL_ADMIN" ? "SCHOOL_ADMIN" : "SCHOOL_TUTOR";
         const now = admin.firestore.FieldValue.serverTimestamp();
         await adminDb.collection("school_staff_invites").doc().set({
@@ -549,5 +554,33 @@ export async function createSchoolStaffInviteAction(
         const msg = error instanceof Error ? error.message : String(error);
         console.error("Error creating staff invite:", error);
         return { success: false, error: msg };
+    }
+}
+
+export async function getSchoolStaffJoinCodeAction(
+    idToken?: string | null,
+): Promise<{ code: string | null; error?: string }> {
+    try {
+        const { schoolId } = await requireSchoolAdminWithSchool(idToken);
+        const code = await ensureSchoolStaffJoinCode(schoolId);
+        return { code };
+    } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : String(error);
+        console.error("Error fetching staff join code:", error);
+        return { code: null, error: msg };
+    }
+}
+
+export async function regenerateSchoolStaffJoinCodeAction(
+    idToken: string | null | undefined,
+): Promise<{ code: string | null; error?: string }> {
+    try {
+        const { schoolId } = await requireSchoolAdminWithSchool(idToken);
+        const code = await regenerateSchoolStaffJoinCode(schoolId);
+        return { code };
+    } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : String(error);
+        console.error("Error regenerating staff join code:", error);
+        return { code: null, error: msg };
     }
 }
