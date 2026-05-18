@@ -9,6 +9,27 @@ import {
 } from '@/server/lib/billing';
 import type { SubscriptionType } from '@/server/schemas';
 import { ACU_PACKAGES } from '@/data/acu-packages';
+import {
+  PARENT_SUBSCRIPTION_PLANS,
+  STUDENT_SUBSCRIPTION_PLANS,
+} from '@/data/subscription-plans';
+
+const MARKETING_SUBSCRIPTION_PLANS = [
+  ...STUDENT_SUBSCRIPTION_PLANS,
+  ...PARENT_SUBSCRIPTION_PLANS,
+];
+
+function marketingPlanGbpPence(productCode: string): number | null {
+  const plan = MARKETING_SUBSCRIPTION_PLANS.find((p) => p.productCode === productCode);
+  if (!plan) return null;
+  const pounds = Number.parseFloat(plan.price);
+  if (Number.isNaN(pounds)) return null;
+  return Math.round(pounds * 100);
+}
+
+function marketingPlanName(productCode: string): string {
+  return MARKETING_SUBSCRIPTION_PLANS.find((p) => p.productCode === productCode)?.name ?? productCode;
+}
 
 const SUBSCRIPTION_PRODUCT_CODES = new Set<string>([
   'STUDENT_PREMIUM',
@@ -101,25 +122,54 @@ export async function createCheckoutSession(
     }
 
     const priceId = stripePriceIdForProduct(productCode);
-    if (!priceId) {
-      return {
-        success: false,
-        error: `No Stripe price for "${productCode}". Run npm run stripe:seed-subscription-prices:missing and paste the STRIPE_PRICE_${productCode}=price_… line into .env.`,
-      };
+    const gbpPence = marketingPlanGbpPence(productCode);
+    let lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] | null = null;
+
+    if (priceId) {
+      try {
+        const priceObj = await stripe.prices.retrieve(priceId);
+        if (priceObj.type === 'recurring' && priceObj.currency === 'gbp') {
+          lineItems = [{ price: priceId, quantity: 1 }];
+        } else if (priceObj.currency !== 'gbp') {
+          console.warn(
+            `[billing] ${productCode} price ${priceId} is ${priceObj.currency}; using GBP price_data fallback.`,
+          );
+        } else {
+          console.warn(
+            `[billing] ${productCode} price ${priceId} is not recurring; using GBP price_data fallback.`,
+          );
+        }
+      } catch (retrieveErr) {
+        console.warn(`[billing] Could not load ${priceId}:`, retrieveErr);
+      }
     }
 
-    const priceObj = await stripe.prices.retrieve(priceId);
-    if (priceObj.type !== 'recurring') {
-      return {
-        success: false,
-        error:
-          `This plan uses a one-time Stripe price (${priceId}). Subscriptions need recurring monthly prices. Run: npm run stripe:seed-subscription-prices:missing and paste the new STRIPE_PRICE_${productCode}=price_… line into .env. Price metadata should include productCode=${productCode}.`,
-      };
+    if (!lineItems) {
+      if (!gbpPence) {
+        return {
+          success: false,
+          error: `No Stripe price for "${productCode}". Add STRIPE_PRICE_${productCode} to .env (GBP recurring) or run: npm run stripe:seed-subscription-prices:missing`,
+        };
+      }
+      lineItems = [
+        {
+          price_data: {
+            currency: 'gbp',
+            unit_amount: gbpPence,
+            recurring: { interval: 'month' },
+            product_data: {
+              name: `StudYear — ${marketingPlanName(productCode)}`,
+              metadata: { productCode },
+            },
+          },
+          quantity: 1,
+        },
+      ];
     }
 
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
-      line_items: [{ price: priceId, quantity: 1 }],
+      line_items: lineItems,
       success_url: `${baseUrl}/account?purchase=success&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${baseUrl}/checkout`,
       customer_email: customerEmail?.trim() || undefined,

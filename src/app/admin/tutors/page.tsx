@@ -7,6 +7,7 @@ import TutorActions from './tutor-actions';
 
 export default async function AdminTutorsPage() {
     const { applications, error } = await getTutorApplicationsAction();
+    const pendingCount = applications.filter((a) => a.approvalStatus === 'PENDING').length;
 
     if (error) {
         return <div className="p-8">Error loading tutor applications: {error}</div>;
@@ -18,6 +19,11 @@ export default async function AdminTutorsPage() {
                 <h2 className="text-3xl font-bold tracking-tight">Tutor Management</h2>
                 <p className="text-muted-foreground">
                     Review and approve new tutor applications.
+                    {pendingCount > 0 ? (
+                        <span className="ml-2 font-medium text-foreground">
+                            {pendingCount} pending approval{pendingCount === 1 ? '' : 's'}.
+                        </span>
+                    ) : null}
                 </p>
             </div>
             <Card>

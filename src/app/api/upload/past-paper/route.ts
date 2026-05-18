@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import * as admin from 'firebase-admin';
 import { Storage } from '@google-cloud/storage';
 import { adminAuth } from '@/lib/firebase/admin-app';
-import { configureCloudinary, cloudinary, isCloudinaryConfigured } from '@/lib/cloudinary-server';
+import { isCloudinaryConfigured, uploadBufferToCloudinary } from '@/lib/cloudinary-server';
 import { randomUUID } from 'crypto';
 import { existsSync, readFileSync } from 'fs';
 
@@ -138,38 +138,19 @@ function storageSetupHint(projectId: string | undefined): string {
   return (
     `Enable Firebase Storage: https://console.firebase.google.com/project/${p}/storage — ` +
     `ensure Cloud Storage API is on for the GCP project: https://console.developers.google.com/apis/library/storage.googleapis.com — ` +
-    `or set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET for Cloudinary uploads.`
+    `or set NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME and NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET for Cloudinary uploads.`
   );
 }
 
 async function uploadPdfToCloudinary(buf: Buffer, uid: string): Promise<string> {
-  if (!configureCloudinary()) {
-    throw new Error('Cloudinary configuration failed');
-  }
   const folder = `studyear/past-papers/${uid}`;
   const public_id = `paper_${Date.now()}_${randomUUID().slice(0, 8)}`;
-
-  const result = await new Promise<{ secure_url: string }>((resolve, reject) => {
-    const stream = cloudinary.uploader.upload_stream(
-      {
-        folder,
-        public_id,
-        resource_type: 'raw',
-        overwrite: false,
-        invalidate: true,
-      },
-      (err, res) => {
-        if (err || !res?.secure_url) {
-          reject(err ?? new Error('Upload failed'));
-        } else {
-          resolve({ secure_url: res.secure_url });
-        }
-      },
-    );
-    stream.end(buf);
+  return uploadBufferToCloudinary(buf, {
+    folder,
+    public_id,
+    resource_type: 'raw',
+    overwrite: false,
   });
-
-  return result.secure_url;
 }
 
 /** Firebase-friendly download URL (works with Storage rules that allow token-based reads). */

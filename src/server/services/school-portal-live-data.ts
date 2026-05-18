@@ -80,13 +80,14 @@ export async function fetchSchoolPortalContext(adminUserId: string): Promise<Sch
   const staffSnap = await adminDb
     .collection('school_staff')
     .where('userId', '==', adminUserId)
-    .where('role', '==', 'SCHOOL_ADMIN')
-    .limit(1)
     .get();
 
   if (staffSnap.empty) return null;
 
-  const schoolId = staffSnap.docs[0]!.data().schoolId as string;
+  const staffDoc =
+    staffSnap.docs.find((d) => (d.data().role as string) === 'SCHOOL_ADMIN') ?? staffSnap.docs[0];
+  const schoolId = staffDoc!.data().schoolId as string;
+  if (!schoolId) return null;
   const [schoolSnap, profileSnap, staffLinksSnap, interventionsSnap, assessmentsSnap, walletSnap] =
     await Promise.all([
       adminDb.collection('school_accounts').doc(schoolId).get(),

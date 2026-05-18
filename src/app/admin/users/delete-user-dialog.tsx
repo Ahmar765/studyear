@@ -42,7 +42,7 @@ export default function DeleteUserDialog({
       return;
     }
     startTransition(async () => {
-      const token = await admin?.getIdToken();
+      const token = await admin?.getIdToken(true);
       const result = await deleteUserAction(user.uid, token);
       if (result.success) {
         toast({ title: 'User deleted', description: `${user.email} has been removed.` });

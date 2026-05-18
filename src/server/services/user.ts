@@ -29,7 +29,10 @@ export async function getUserProfileServer(uid: string): Promise<UserProfile | n
             ...userData,
             ...parentData,
             ...studentData,
-            subscription: (subscriptionData as { type?: string })?.type || 'FREE',
+            subscription:
+              userData.role === 'ADMIN'
+                ? 'ADMIN'
+                : (subscriptionData as { type?: string })?.type || 'FREE',
         } as UserProfile;
     }
     console.warn(`No user profile found for UID: ${uid}`);

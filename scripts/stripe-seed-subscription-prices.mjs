@@ -12,7 +12,7 @@
  *
  * Env vars used by the app (see billing-actions.ts):
  *   STRIPE_PRICE_STUDENT_PREMIUM, STRIPE_PRICE_STUDENT_PREMIUM_PLUS,
- *   STRIPE_PRICE_PARENT_PRO, STRIPE_PRICE_PARENT_PRO_PLUS,
+ *   STRIPE_PRICE_PARENT_PRO, STRIPE_PRICE_PARENT_PRO_PLUS, STRIPE_PRICE_PARENT_ELITE,
  */
 
 import Stripe from 'stripe';
@@ -30,6 +30,7 @@ const PLANS = [
   { code: 'STUDENT_PREMIUM_PLUS', name: 'StudYear — Student Premium Plus', amountPence: 1500 },
   { code: 'PARENT_PRO', name: 'StudYear — Parent Pro', amountPence: 999 },
   { code: 'PARENT_PRO_PLUS', name: 'StudYear — Parent Pro Plus', amountPence: 1999 },
+  { code: 'PARENT_ELITE', name: 'StudYear — Parent Elite', amountPence: 3900 },
 ];
 
 function loadDotEnv() {

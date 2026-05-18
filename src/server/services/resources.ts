@@ -22,6 +22,9 @@ async function publishToGlobalLibrary(input: {
   sourceInput?: string | null;
   fileUrl?: string | null;
   videoUrl?: string | null;
+  subject?: string | null;
+  level?: string | null;
+  topic?: string | null;
 }): Promise<void> {
   let safeContent: unknown = null;
   if (input.content !== undefined && input.content !== null) {
@@ -43,9 +46,12 @@ async function publishToGlobalLibrary(input: {
     sourceInput: input.sourceInput ?? null,
     fileUrl: input.fileUrl ?? null,
     videoUrl: input.videoUrl ?? null,
-    topic: title.length > 120 ? `${title.slice(0, 117)}…` : title,
-    subject: 'Community',
-    level: 'Various',
+    topic:
+      (input.topic?.trim() || title).length > 120
+        ? `${(input.topic?.trim() || title).slice(0, 117)}…`
+        : input.topic?.trim() || title,
+    subject: input.subject?.trim() || 'General',
+    level: input.level?.trim() || 'All levels',
     origin: 'student_generated',
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
   });
@@ -74,6 +80,9 @@ export const savedResourceService = {
     fileUrl?: string;
     videoUrl?: string;
     linkedEntityId?: string;
+    subject?: string | null;
+    level?: string | null;
+    topic?: string | null;
     /** When true, do not add to the global `resources` feed (e.g. copying an existing public item into “my library”). */
     skipGlobalPublish?: boolean;
   }) {
@@ -104,6 +113,9 @@ export const savedResourceService = {
           sourceInput: input.sourceInput ?? null,
           fileUrl: input.fileUrl ?? null,
           videoUrl: input.videoUrl ?? null,
+          subject: input.subject ?? null,
+          level: input.level ?? null,
+          topic: input.topic ?? null,
         });
       } catch (e) {
         console.error('publishToGlobalLibrary failed (saved_resources still stored):', e);

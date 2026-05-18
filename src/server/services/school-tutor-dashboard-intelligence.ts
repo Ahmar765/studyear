@@ -112,6 +112,7 @@ export function buildSchoolTutorDashboardPayload(
       department: ctx.department,
       subjects: ctx.subjects,
       yearGroups: ctx.yearGroups,
+      assignedYearGroups: ctx.assignedYearGroups,
       schoolName: ctx.schoolName,
       schoolId: ctx.schoolId,
     },

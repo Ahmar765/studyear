@@ -18,7 +18,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { useTransition, useEffect } from 'react';
+import { useTransition, useEffect, useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { subscriptionTypeDisplayName } from '@/data/subscription-plans';
@@ -28,17 +28,17 @@ import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { deleteUser } from 'firebase/auth';
 import { doc, deleteDoc } from 'firebase/firestore';
 import { getFirebaseAuth, getFirestoreDb } from '@/lib/firebase/client-app';
-import placeholderImages from '@/lib/placeholder-images.json';
-import SystemVisual from '@/components/system-visual';
 import Image from 'next/image';
+import { Suspense } from 'react';
 import {
   finalizeAcuCheckoutSessionAction,
   finalizeSubscriptionCheckoutSessionAction,
 } from '@/server/actions/billing-actions';
 import ParentLinkCodeCard from '@/components/student/parent-link-code-card';
+import { getSchoolAcuPoolForTeacherAction } from '@/server/actions/teacher-actions';
 
 
-export default function AccountPage() {
+function AccountPageInner() {
   const { user, logout } = useAuth();
   const { userProfile, loading: profileLoading } = useUserProfile();
   const { wallet, loading: walletLoading } = useAcuWallet();
@@ -49,9 +49,41 @@ export default function AccountPage() {
   const { isImpersonating } = useImpersonation();
 
   const isStudentLike =
-    userProfile?.role === 'STUDENT' || userProfile?.role === 'PRIVATE_TUTOR';
+    userProfile?.role === 'STUDENT' ||
+    userProfile?.role === 'PRIVATE_TUTOR' ||
+    userProfile?.role === 'SCHOOL_ADMIN';
+  const isParent = userProfile?.role === 'PARENT';
+  const isSchoolAdmin = userProfile?.role === 'SCHOOL_ADMIN';
+  const isSchoolTeacher = userProfile?.role === 'SCHOOL_TUTOR';
+  const [schoolPool, setSchoolPool] = useState<{
+    linked: boolean;
+    schoolName?: string;
+    balance?: number;
+  } | null>(null);
+  const isPlatformAdmin =
+    userProfile?.role === 'ADMIN' || userProfile?.subscription === 'ADMIN';
 
-  const loading = profileLoading || (!!userProfile && isStudentLike && walletLoading);
+  const loading =
+    profileLoading ||
+    (!!userProfile && isStudentLike && walletLoading) ||
+    (!!userProfile && isSchoolTeacher && schoolPool === null);
+
+  useEffect(() => {
+    if (!user || !isSchoolTeacher) return;
+    void (async () => {
+      const token = await user.getIdToken();
+      const res = await getSchoolAcuPoolForTeacherAction(token);
+      if (res.success) {
+        setSchoolPool({
+          linked: res.linked ?? false,
+          schoolName: res.schoolName,
+          balance: res.balance,
+        });
+      } else {
+        setSchoolPool({ linked: false, balance: 0 });
+      }
+    })();
+  }, [user, isSchoolTeacher]);
 
   useEffect(() => {
     if (searchParams.get('purchase') !== 'success') return;
@@ -234,7 +266,7 @@ export default function AccountPage() {
             </Alert>
         )}
       <div className='max-w-4xl mx-auto space-y-8'>
-        <ParentLinkCodeCard id="parent-link-code" />
+        {isStudentLike ? <ParentLinkCodeCard id="parent-link-code" /> : null}
 
         <Card className="overflow-hidden">
             <div className="relative h-48 w-full bg-muted">
@@ -248,13 +280,7 @@ export default function AccountPage() {
                     priority
                   />
                 ) : (
-                  <SystemVisual
-                    module="accountHeader"
-                    user_role={userProfile.role}
-                    intent="control"
-                    className="object-cover"
-                    fill
-                  />
+                  <div className="h-full w-full bg-gradient-to-br from-primary/30 via-muted to-violet-600/20" aria-hidden />
                 )}
             </div>
             <CardContent className="relative p-6">
@@ -270,7 +296,13 @@ export default function AccountPage() {
                 </div>
                 <div className="flex flex-col sm:flex-row flex-wrap gap-4 pt-6">
                     <Button asChild className="w-full sm:w-auto">
-                        <Link href="/profile-setup">
+                        <Link
+                          href={
+                            userProfile.role === 'PRIVATE_TUTOR'
+                              ? '/tutor/onboarding?edit=1'
+                              : '/profile-setup'
+                          }
+                        >
                             <Edit className="mr-2 h-4 w-4" /> Edit Profile
                         </Link>
                     </Button>
@@ -288,8 +320,8 @@ export default function AccountPage() {
             </CardContent>
         </Card>
         
-        <div className="grid md:grid-cols-2 gap-8">
-            {isStudentLike ? (
+        <div className={`grid gap-8 ${isPlatformAdmin ? '' : 'md:grid-cols-2'}`}>
+            {isStudentLike && !isPlatformAdmin ? (
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -312,13 +344,43 @@ export default function AccountPage() {
                 </CardFooter>
               </Card>
             ) : null}
+            {isSchoolTeacher && !isPlatformAdmin ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Fuel /> School ACU pool
+                  </CardTitle>
+                  <CardDescription>
+                    {schoolPool?.linked
+                      ? `Shared wallet for ${schoolPool.schoolName ?? 'your school'}. AI tools debit this balance — contact your school admin to top up.`
+                      : 'Link your school from the Command Centre to use the shared ACU pool.'}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-4xl font-bold">
+                    {Number(schoolPool?.balance ?? 0).toLocaleString()}
+                  </p>
+                  <p className="text-sm text-muted-foreground">ACUs available (school pool)</p>
+                </CardContent>
+                <CardFooter>
+                  <Button asChild variant="outline">
+                    <Link href="/teacher/dashboard">Command Centre</Link>
+                  </Button>
+                </CardFooter>
+              </Card>
+            ) : null}
+            {!isPlatformAdmin ? (
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2"><Crown /> Subscription</CardTitle>
                     <CardDescription>
-                      {isStudentLike
-                        ? 'Premium (£10/mo) unlocks creator tools; many AI features still spend ACUs. Premium Plus includes a monthly ACU bundle on each paid renewal.'
-                        : 'Your current StudYear plan. Manage upgrades via Stripe checkout.'}
+                      {isSchoolAdmin
+                        ? 'School workspace ACUs power AI across your cohort. Top up with the same £5 / £10 / £15 packs as students, or add Premium for creator tools.'
+                        : isStudentLike
+                          ? 'Premium (£10/mo) unlocks creator tools; many AI features still spend ACUs. Premium Plus includes a monthly ACU bundle on each paid renewal.'
+                          : isParent
+                            ? 'Parent plans are billed in GBP (£). Pro+ and Elite unlock AI advisor, intervention mode, and monthly ACU bundles.'
+                            : 'Your current StudYear plan. Manage upgrades via Stripe checkout.'}
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -326,13 +388,35 @@ export default function AccountPage() {
                     <p className="text-sm text-muted-foreground mt-1">
                       {isStudentLike
                         ? 'Top up ACUs anytime from Plans & top-up — Premium Plus adds ACUs automatically when Stripe bills successfully.'
-                        : 'Premium features unlock automatically when payment completes.'}
+                        : isParent
+                          ? 'Upgrade from checkout — Parent Elite includes family intelligence and live alerts.'
+                          : 'Premium features unlock automatically when payment completes.'}
                     </p>
                 </CardContent>
                 <CardFooter>
-                    <Button asChild><Link href="/top-up"><PlusCircle className="mr-2 h-4 w-4"/> {isStudentLike ? 'Plans & top-up' : 'View plans'}</Link></Button>
+                    <Button asChild>
+                      <Link href="/checkout">
+                        <PlusCircle className="mr-2 h-4 w-4" />
+                        {isStudentLike || isParent ? 'Plans & top-up' : 'View plans'}
+                      </Link>
+                    </Button>
                 </CardFooter>
             </Card>
+            ) : (
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2"><Crown /> Platform access</CardTitle>
+                    <CardDescription>Internal administrator — unlimited AI tools, no billing or ACU wallet.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <p className="text-3xl font-bold">Platform Admin</p>
+                    <p className="text-sm text-muted-foreground mt-1">Manage users, content, and platform settings from the admin dashboard.</p>
+                </CardContent>
+                <CardFooter>
+                    <Button asChild variant="outline"><Link href="/admin/dashboard">Open admin dashboard</Link></Button>
+                </CardFooter>
+            </Card>
+            )}
         </div>
 
         <Card className="border-destructive/50 max-w-4xl mx-auto mt-8">
@@ -368,5 +452,19 @@ export default function AccountPage() {
           </Card>
       </div>
     </div>
+  );
+}
+
+export default function AccountPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-screen w-full items-center justify-center">
+          <Loader className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      }
+    >
+      <AccountPageInner />
+    </Suspense>
   );
 }

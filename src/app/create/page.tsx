@@ -9,6 +9,7 @@ import { useUserProfile } from "@/hooks/use-user-profile";
 import { useAuth } from "@/hooks/use-auth";
 import { Badge } from "@/components/ui/badge";
 import { PLAN_ENTITLEMENTS } from "@/data/entitlements";
+import { ACU_FEATURE_COSTS, isAcuOnlyFeature, type FeatureKey } from "@/data/acu-costs";
 
 const tools = [
   {
@@ -120,9 +121,19 @@ export default function CreatePage() {
 
               const userSubscription = userProfile?.subscription || 'FREE';
               const userEntitlements = PLAN_ENTITLEMENTS[userSubscription as keyof typeof PLAN_ENTITLEMENTS] || [];
-              const hasAccess = !tool.entitlement || isAdminTool || userEntitlements.includes(tool.entitlement as any);
+              const featureKey = tool.entitlement as FeatureKey | "ADMIN_ONLY";
+              const acuOnly = featureKey !== "ADMIN_ONLY" && isAcuOnlyFeature(featureKey);
+              const hasAccess =
+                !tool.entitlement ||
+                isAdminTool ||
+                acuOnly ||
+                userEntitlements.includes(tool.entitlement as FeatureKey);
               const isEnabled = tool.enabled;
-              const isPremium = !!tool.entitlement && tool.entitlement !== "ADMIN_ONLY";
+              const isPremium = !!tool.entitlement && tool.entitlement !== "ADMIN_ONLY" && !acuOnly;
+              const acuCost =
+                acuOnly && featureKey !== "ADMIN_ONLY"
+                  ? ACU_FEATURE_COSTS[featureKey]
+                  : null;
 
               return (
                 <Card key={tool.title} className="flex flex-col">
@@ -133,7 +144,11 @@ export default function CreatePage() {
                         </div>
                          <CardTitle>{tool.title}</CardTitle>
                        </div>
-                       {isPremium && <Badge variant="outline" className="border-accent text-accent">Premium</Badge>}
+                       {acuCost != null ? (
+                         <Badge variant="outline">{acuCost} ACUs</Badge>
+                       ) : isPremium ? (
+                         <Badge variant="outline" className="border-accent text-accent">Premium</Badge>
+                       ) : null}
                     </CardHeader>
                     <CardContent className="flex-grow">
                         <CardDescription>{tool.description}</CardDescription>

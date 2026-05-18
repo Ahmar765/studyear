@@ -5,6 +5,11 @@ import { HttpsError } from './errors';
 import { ACUService } from '../services/acu-service';
 import type { SubscriptionType } from '../schemas';
 import { ACU_PACKAGES, STUDENT_PREMIUM_PLUS_MONTHLY_ACUS } from '@/data/acu-packages';
+import {
+  PARENT_ELITE_MONTHLY_ACUS,
+  PARENT_PRO_PLUS_MONTHLY_ACUS,
+} from '@/data/subscription-plans';
+import { sendAcuTopUpReceiptEmail } from '@/server/lib/mail';
 
 /**
  * Idempotently credit ACUs and write `payments` for a paid Checkout session (mode=payment + ACU pack metadata).
@@ -91,6 +96,23 @@ export async function recordAcuTopUpFromCheckoutSession(
     status: session.payment_status,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
   });
+
+  const pack = ACU_PACKAGES[productCode as keyof typeof ACU_PACKAGES];
+  try {
+    const userSnap = await adminDb.doc(`users/${userId}`).get();
+    const userEmail = userSnap.data()?.email as string | undefined;
+    if (userEmail && pack) {
+      const amountGbp = `£${((session.amount_total ?? 0) / 100).toFixed(2)}`;
+      void sendAcuTopUpReceiptEmail({
+        email: userEmail,
+        name: userSnap.data()?.name as string | undefined,
+        acus: pack.totalACUs,
+        amountGbp,
+      }).catch((err) => console.error('[billing] top-up receipt email failed:', err));
+    }
+  } catch (mailErr) {
+    console.error('[billing] could not send receipt email:', mailErr);
+  }
 
   return { ok: true, duplicate: false };
 }
@@ -191,6 +213,76 @@ export async function grantPremiumPlusMonthlyAcusForInvoice(params: {
     `Premium Plus ACUs (${STUDENT_PREMIUM_PLUS_MONTHLY_ACUS}) credited to ${params.userId} for invoice ${params.invoiceId}`,
   );
   return { granted: true };
+}
+
+/**
+ * Parent Pro+ / Elite: grant bundled ACUs once per paid Stripe invoice. Idempotent per `invoiceId`.
+ */
+export async function grantParentMonthlyAcusForInvoice(params: {
+  userId: string;
+  invoiceId: string;
+  amountPaidPence: number;
+  productCode: SubscriptionType;
+}): Promise<{ granted: boolean; skipReason?: string; acus?: number }> {
+  let acus = 0;
+  if (params.productCode === 'PARENT_PRO_PLUS') {
+    acus = PARENT_PRO_PLUS_MONTHLY_ACUS;
+  } else if (params.productCode === 'PARENT_ELITE') {
+    acus = PARENT_ELITE_MONTHLY_ACUS;
+  } else {
+    return { granted: false, skipReason: 'not_parent_acu_plan' };
+  }
+
+  if (!params.invoiceId) {
+    return { granted: false, skipReason: 'missing_invoice_id' };
+  }
+  if (params.amountPaidPence <= 0) {
+    return { granted: false, skipReason: 'zero_or_negative_payment' };
+  }
+
+  const grantRef = adminDb.collection('stripe_parent_acu_grants').doc(params.invoiceId);
+
+  const shouldCredit = await adminDb.runTransaction(async (transaction) => {
+    const snap = await transaction.get(grantRef);
+    if (snap.exists) return false;
+    transaction.set(grantRef, {
+      userId: params.userId,
+      acus,
+      productCode: params.productCode,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    return true;
+  });
+
+  if (!shouldCredit) {
+    return { granted: false, skipReason: 'already_credited_for_invoice' };
+  }
+
+  const planLabel =
+    params.productCode === 'PARENT_ELITE' ? 'Parent Elite' : 'Parent Pro+';
+
+  try {
+    await ACUService.creditACUs({
+      userId: params.userId,
+      amount: acus,
+      type: 'BONUS',
+      description: `${planLabel} — ${acus.toLocaleString('en-GB')} ACUs (subscription invoice)`,
+      metadata: {
+        source: 'stripe_invoice',
+        stripeInvoiceId: params.invoiceId,
+        productCode: params.productCode,
+      },
+    });
+  } catch (error) {
+    await grantRef.delete().catch(() => {});
+    console.error('grantParentMonthlyAcusForInvoice: credit failed', error);
+    throw error;
+  }
+
+  console.log(
+    `${planLabel} ACUs (${acus}) credited to ${params.userId} for invoice ${params.invoiceId}`,
+  );
+  return { granted: true, acus };
 }
 
 export async function manageSubscriptionStatusChange(

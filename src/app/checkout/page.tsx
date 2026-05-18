@@ -1,6 +1,7 @@
 
 'use client';
 
+import Link from 'next/link';
 import { useTransition } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,7 +22,7 @@ import { ACU_PACKAGES } from '@/data/acu-packages';
 import { Separator } from '@/components/ui/separator';
 
 function isStudentLikeRole(role: string | undefined): boolean {
-  return role === 'STUDENT' || role === 'PRIVATE_TUTOR';
+  return role === 'STUDENT' || role === 'PRIVATE_TUTOR' || role === 'SCHOOL_ADMIN';
 }
 
 function AcuPackageCard({
@@ -209,7 +210,32 @@ export default function CheckoutPage() {
   }
 
   const isParent = role === 'PARENT';
+  const isSchoolTeacher = role === 'SCHOOL_TUTOR';
   const studentLike = isStudentLikeRole(role);
+
+  if (isSchoolTeacher) {
+    return (
+      <div className="flex-1 flex items-center justify-center p-4 md:p-8">
+        <Card className="max-w-lg w-full">
+          <CardHeader>
+            <CardTitle>School ACU wallet</CardTitle>
+            <CardDescription>
+              School teachers use AI credits from your institution&apos;s shared pool — not a personal top-up.
+              Ask your school administrator to add ACUs from <strong>School → ACU command</strong>.
+            </CardDescription>
+          </CardHeader>
+          <CardFooter className="flex flex-wrap gap-2">
+            <Button asChild>
+              <Link href="/account">View school balance</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/teacher/dashboard">Command Centre</Link>
+            </Button>
+          </CardFooter>
+        </Card>
+      </div>
+    );
+  }
 
   if (isParent) {
     return (

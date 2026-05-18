@@ -17,9 +17,13 @@ const chartConfig = {
   }
 };
 
-const studyTimeData: any[] = [];
-
-export default function AnalyticsCharts({ newUsersData }: { newUsersData: any[] }) {
+export default function AnalyticsCharts({
+  newUsersData,
+  studyTimeData = [],
+}: {
+  newUsersData: { month: string; users: number }[];
+  studyTimeData?: { week: string; hours: number }[];
+}) {
     return (
         <div className="grid gap-4 md:grid-cols-2">
             <Card>
@@ -92,7 +96,7 @@ export default function AnalyticsCharts({ newUsersData }: { newUsersData: any[] 
                     ) : (
                          <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
                             <BarChartIcon className="h-10 w-10 mb-2" />
-                            <p>Analytics integration required to display study time data.</p>
+                            <p>No completed study sessions in the last 8 weeks yet.</p>
                         </div>
                     )}
                 </CardContent>

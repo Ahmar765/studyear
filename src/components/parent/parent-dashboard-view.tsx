@@ -1,6 +1,10 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useTransition } from 'react';
+import { useAuth } from '@/hooks/use-auth';
+import { useToast } from '@/hooks/use-toast';
+import { askParentAdvisorAction } from '@/server/actions/parent-advisor-actions';
+import { triggerInterventionAction } from '@/server/actions/intervention-actions';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -41,8 +45,10 @@ import {
   Target,
   TrendingUp,
   Zap,
+  Loader,
 } from 'lucide-react';
 import Link from 'next/link';
+import { PARENT_ELITE_MONTHLY_ACUS, PARENT_PRO_PLUS_MONTHLY_ACUS } from '@/data/subscription-plans';
 
 const moodEmoji: Record<ChildSnapshot['mood'], string> = {
   focused: '🎯',
@@ -56,6 +62,33 @@ const planLabels: Record<ParentPlanTier, string> = {
   PARENT_PRO_PLUS: 'Parent Pro+',
   PARENT_ELITE: 'Parent Elite',
 };
+
+function ParentPlanBanner({ data }: { data: ParentDashboardPayload }) {
+  const tier = data.planTier;
+  const upgradeHint =
+    tier === 'PARENT_PRO'
+      ? `Parent Pro+ unlocks AI advisor, intervention mode, predictive grades, and ${PARENT_PRO_PLUS_MONTHLY_ACUS.toLocaleString('en-GB')} ACUs/month.`
+      : tier === 'PARENT_PRO_PLUS'
+        ? `Parent Elite adds family intelligence, full live alerts, and ${PARENT_ELITE_MONTHLY_ACUS.toLocaleString('en-GB')} ACUs/month.`
+        : null;
+
+  return (
+    <Card className="parent-panel border-primary/25 bg-primary/5">
+      <CardContent className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Your subscription</p>
+          <p className="text-lg font-semibold">{planLabels[tier]}</p>
+          {upgradeHint ? <p className="mt-1 max-w-xl text-sm text-muted-foreground">{upgradeHint}</p> : null}
+        </div>
+        {tier !== 'PARENT_ELITE' ? (
+          <Button size="sm" asChild className="shrink-0">
+            <Link href="/checkout">Upgrade plan</Link>
+          </Button>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
 
 function LockedOverlay({ label, href = '/checkout' }: { label: string; href?: string }) {
   return (
@@ -143,7 +176,19 @@ function ChildSnapshotCard({
 }
 
 export function ParentDashboardView({ data }: { data: ParentDashboardPayload }) {
+  const { user } = useAuth();
+  const { toast } = useToast();
   const [selectedId, setSelectedId] = useState(data.children[0]?.id ?? '');
+  const [advisorAnswer, setAdvisorAnswer] = useState<string | null>(null);
+  const [advisorActions, setAdvisorActions] = useState<string[]>([]);
+  const [advisorPending, startAdvisor] = useTransition();
+  const [interventionPending, startIntervention] = useTransition();
+  const [interventionResult, setInterventionResult] = useState<{
+    studentMessage: string;
+    microLesson: string;
+    practiceStep: string;
+  } | null>(null);
+
   const selected = useMemo(
     () => data.children.find((c) => c.id === selectedId) ?? data.children[0],
     [data.children, selectedId],
@@ -154,6 +199,22 @@ export function ParentDashboardView({ data }: { data: ParentDashboardPayload }) 
     [data.performance, selected?.id],
   );
 
+  const childWarnings = useMemo(
+    () => data.earlyWarnings.filter((w) => w.studentId === selected?.id),
+    [data.earlyWarnings, selected?.id],
+  );
+
+  const childMicro = useMemo(
+    () => data.microWeaknesses.filter((m) => m.studentId === selected?.id),
+    [data.microWeaknesses, selected?.id],
+  );
+
+  useEffect(() => {
+    setAdvisorAnswer(null);
+    setAdvisorActions([]);
+    setInterventionResult(null);
+  }, [selectedId]);
+
   const advisorQuestions = [
     'Why is my child struggling?',
     'What subject needs urgent attention?',
@@ -161,11 +222,89 @@ export function ParentDashboardView({ data }: { data: ParentDashboardPayload }) 
     'Should revision intensity increase?',
   ];
 
+  const childSummaryForAi = (child: ChildSnapshot) =>
+    JSON.stringify(
+      {
+        academicHealth: child.academicHealth,
+        engagement: child.engagement,
+        examRisk: child.examRisk,
+        weeklyGrowth: child.weeklyGrowth,
+        weakestSubject: child.weakestSubject,
+        strongestSubject: child.strongestSubject,
+        mood: child.mood,
+        subjects: child.subjects?.slice(0, 8),
+      },
+      null,
+      0,
+    );
+
+  const askAdvisor = (question: string) => {
+    if (!user || !selected || !data.features.parentAdvisor) return;
+    setAdvisorAnswer(null);
+    setAdvisorActions([]);
+    startAdvisor(async () => {
+      const token = await user.getIdToken();
+      const result = await askParentAdvisorAction({
+        idToken: token,
+        studentId: selected.id,
+        question,
+        childName: selected.name,
+        childSummary: childSummaryForAi(selected),
+      });
+      if (result.success && result.response) {
+        setAdvisorAnswer(result.response.answer);
+        setAdvisorActions(result.response.suggestedActions);
+      } else {
+        toast({
+          variant: 'destructive',
+          title: 'Advisor unavailable',
+          description: result.error ?? 'Please try again.',
+        });
+      }
+    });
+  };
+
+  const runIntervention = () => {
+    if (!user || !selected || !data.features.aiIntervention) return;
+    setInterventionResult(null);
+    const topic =
+      childMicro[0]?.areas[0] ??
+      childWarnings[0]?.title ??
+      selected.weakestSubject;
+    startIntervention(async () => {
+      const result = await triggerInterventionAction({
+        studentId: selected.id,
+        subject: selected.weakestSubject || 'General',
+        topic,
+        mistakePattern:
+          childWarnings[0]?.causes?.join('; ') ??
+          `Low momentum in ${selected.weakestSubject}`,
+        struggleScore: selected.examRisk === 'high' ? 0.85 : 0.65,
+        userId: user.uid,
+      });
+      if (result.success && result.output) {
+        setInterventionResult({
+          studentMessage: result.output.studentMessage,
+          microLesson: result.output.microLesson,
+          practiceStep: result.output.practiceStep,
+        });
+        toast({ title: 'Intervention generated', description: 'A recovery plan was created for your child.' });
+      } else {
+        toast({
+          variant: 'destructive',
+          title: 'Intervention failed',
+          description: result.error ?? 'Could not generate intervention.',
+        });
+      }
+    });
+  };
+
   if (data.children.length === 0) return null;
 
   return (
     <div className="parent-dashboard space-y-8">
       <CommandCentreHero data={data} />
+      <ParentPlanBanner data={data} />
 
       <section>
         <div className="mb-4 flex items-center justify-between">
@@ -190,8 +329,14 @@ export function ParentDashboardView({ data }: { data: ParentDashboardPayload }) 
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="live">Subjects & resources</TabsTrigger>
             <TabsTrigger value="warnings">Early warnings</TabsTrigger>
-            <TabsTrigger value="study">Study intelligence</TabsTrigger>
-            <TabsTrigger value="pathway">Future pathway</TabsTrigger>
+            <TabsTrigger value="study" className="gap-1">
+              Study intelligence
+              {!data.features.studyBehaviourEngine && <Lock className="h-3 w-3 opacity-60" />}
+            </TabsTrigger>
+            <TabsTrigger value="pathway" className="gap-1">
+              Future pathway
+              {!data.features.pathwayEngine && <Lock className="h-3 w-3 opacity-60" />}
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
@@ -395,7 +540,10 @@ export function ParentDashboardView({ data }: { data: ParentDashboardPayload }) 
                 </Card>
               ))}
 
-            <Card className="parent-panel">
+            <Card className="parent-panel relative">
+              {!data.features.studyBehaviourEngine && (
+                <LockedOverlay label="AI study behaviour engine — Parent Pro+ and Elite" />
+              )}
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
                   <Brain className="h-4 w-4 text-violet-500" />
@@ -413,6 +561,12 @@ export function ParentDashboardView({ data }: { data: ParentDashboardPayload }) 
                       {insight.insight}
                     </div>
                   ))}
+                {data.features.studyBehaviourEngine &&
+                  data.studyInsights.filter((i) => i.studentId === selected.id).length === 0 && (
+                    <p className="text-sm text-muted-foreground sm:col-span-2">
+                      Insights appear as your child completes quizzes and planner tasks.
+                    </p>
+                  )}
               </CardContent>
             </Card>
 
@@ -447,9 +601,11 @@ export function ParentDashboardView({ data }: { data: ParentDashboardPayload }) 
             </Card>
           </TabsContent>
 
-          <TabsContent value="pathway" className="space-y-6">
-            <Card className="parent-panel relative">
-              {!data.features.pathwayEngine && <LockedOverlay label="Predictive grade engine — Parent Pro+ and Elite" />}
+          <TabsContent value="pathway" className="relative space-y-6">
+            {!data.features.pathwayEngine && (
+              <LockedOverlay label="Future pathway & predictive grades — Parent Pro+ and Elite" />
+            )}
+            <Card className="parent-panel">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <GraduationCap className="h-4 w-4" />
@@ -458,8 +614,16 @@ export function ParentDashboardView({ data }: { data: ParentDashboardPayload }) 
                 <CardDescription>GCSE trajectory · predictive certainty</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {data.gradeProbabilities.map((g) => (
-                  <div key={g.grade}>
+                {selected.predictedGrade && (
+                  <p className="text-sm text-muted-foreground">
+                    Latest AI forecast:{' '}
+                    <span className="font-semibold text-foreground">{selected.predictedGrade}</span>
+                  </p>
+                )}
+                {data.gradeProbabilities
+                  .filter((g) => g.studentId === selected.id)
+                  .map((g) => (
+                  <div key={`${g.studentId}-${g.grade}`}>
                     <div className="mb-1 flex justify-between text-sm">
                       <span>{g.grade} likelihood</span>
                       <span className="font-semibold">{g.likelihood}%</span>
@@ -598,11 +762,32 @@ export function ParentDashboardView({ data }: { data: ParentDashboardPayload }) 
             </div>
             <div className="flex flex-wrap gap-2">
               {advisorQuestions.map((q) => (
-                <Button key={q} variant="outline" size="sm" className="text-xs">
+                <Button
+                  key={q}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="text-xs"
+                  disabled={advisorPending || !data.features.parentAdvisor}
+                  onClick={() => askAdvisor(q)}
+                >
+                  {advisorPending ? <Loader className="mr-1 h-3 w-3 animate-spin" /> : null}
                   {q}
                 </Button>
               ))}
             </div>
+            {advisorAnswer ? (
+              <div className="space-y-2 rounded-lg border bg-background p-3 text-sm">
+                <p className="whitespace-pre-wrap leading-relaxed">{advisorAnswer}</p>
+                {advisorActions.length > 0 ? (
+                  <ul className="list-disc space-y-1 pl-4 text-muted-foreground">
+                    {advisorActions.map((a) => (
+                      <li key={a}>{a}</li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            ) : null}
           </CardContent>
         </Card>
       </div>
@@ -616,21 +801,74 @@ export function ParentDashboardView({ data }: { data: ParentDashboardPayload }) 
               <Badge>{planLabels[data.planTier]}</Badge>
             </CardTitle>
             <CardDescription>
-              The system actively protects your child — schedules, workloads, and recovery plans adjust automatically.
+              Live signals for {selected?.name ?? 'your child'} — generate a recovery plan when risk is elevated.
             </CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 text-sm">
-            {[
-              'Rebuilds schedules',
-              'Increases weak-area intensity',
-              'Optimises revision timing',
-              'Reduces burnout risk',
-            ].map((item) => (
-              <div key={item} className="flex items-center gap-2 rounded-lg border bg-background/60 p-3">
-                <Sparkles className="h-4 w-4 shrink-0 text-sky-500" />
-                {item}
+          <CardContent className="space-y-4">
+            {(childWarnings.length > 0 || childMicro.length > 0) && (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {childWarnings.slice(0, 2).map((w) => (
+                  <div
+                    key={w.id}
+                    className={cn(
+                      'rounded-lg border p-3 text-sm',
+                      w.severity === 'critical' ? 'border-red-500/40 bg-red-500/5' : 'border-amber-500/40 bg-amber-500/5',
+                    )}
+                  >
+                    <p className="font-medium">{w.title}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{w.recommendation}</p>
+                  </div>
+                ))}
+                {childMicro.slice(0, 2).map((m) => (
+                  <div key={m.id} className="rounded-lg border bg-background/60 p-3 text-sm">
+                    <p className="font-medium">{m.subject}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Focus: {m.areas.join(', ') || 'General review'} · {m.recoveryWeeks} week recovery
+                    </p>
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" onClick={runIntervention} disabled={interventionPending}>
+                {interventionPending ? (
+                  <Loader className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Sparkles className="mr-2 h-4 w-4" />
+                )}
+                Generate intervention for {selected?.name ?? 'child'}
+              </Button>
+            </div>
+            {interventionResult ? (
+              <div className="space-y-3 rounded-lg border bg-background p-4 text-sm">
+                <div>
+                  <p className="text-xs font-semibold uppercase text-muted-foreground">Message for student</p>
+                  <p className="mt-1 whitespace-pre-wrap">{interventionResult.studentMessage}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase text-muted-foreground">Micro-lesson</p>
+                  <p className="mt-1 whitespace-pre-wrap">{interventionResult.microLesson}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase text-muted-foreground">Practice step</p>
+                  <p className="mt-1 whitespace-pre-wrap">{interventionResult.practiceStep}</p>
+                </div>
+              </div>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 text-sm text-muted-foreground">
+                {[
+                  'Rebuilds schedules',
+                  'Increases weak-area intensity',
+                  'Optimises revision timing',
+                  'Reduces burnout risk',
+                ].map((item) => (
+                  <div key={item} className="flex items-center gap-2 rounded-lg border bg-background/60 p-3">
+                    <Sparkles className="h-4 w-4 shrink-0 text-sky-500" />
+                    {item}
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

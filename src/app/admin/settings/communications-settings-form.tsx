@@ -36,6 +36,9 @@ export default function CommunicationsSettingsForm({
       c.contactForm?.description ?? 'Thank you for contacting us. We will get back to you shortly.',
     signupTitle: c.signupWelcome?.title ?? 'Account created',
     signupDescription: c.signupWelcome?.description ?? 'You can now complete your profile.',
+    companyName: c.businessDetails?.companyName ?? 'StudYear Ltd.',
+    registeredAddress:
+      c.businessDetails?.registeredAddress ?? '123 Learning Lane, London, UK, SW1A 0AA',
   });
 
   const save = () => {
@@ -47,6 +50,10 @@ export default function CommunicationsSettingsForm({
           supportEmail: form.supportEmail.trim(),
           contactEmail: form.contactEmail.trim(),
           noreplyEmail: form.noreplyEmail.trim(),
+          businessDetails: {
+            companyName: form.companyName.trim(),
+            registeredAddress: form.registeredAddress.trim(),
+          },
           forgotPassword: {
             title: form.forgotTitle.trim(),
             description: form.forgotDescription.trim(),
@@ -82,6 +89,24 @@ export default function CommunicationsSettingsForm({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2 sm:col-span-2">
+            <Label>Company name (contact page)</Label>
+            <Input
+              value={form.companyName}
+              onChange={(e) => setForm((f) => ({ ...f, companyName: e.target.value }))}
+            />
+          </div>
+          <div className="space-y-2 sm:col-span-2">
+            <Label>Registered address (contact page)</Label>
+            <Textarea
+              value={form.registeredAddress}
+              onChange={(e) => setForm((f) => ({ ...f, registeredAddress: e.target.value }))}
+              rows={2}
+            />
+          </div>
+        </div>
+
         <div className="grid gap-4 sm:grid-cols-3">
           <div className="space-y-2">
             <Label>Support email</Label>

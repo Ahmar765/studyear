@@ -2,12 +2,13 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useAuth } from '@/hooks/use-auth';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { updateUserProfile } from '@/server/actions/auth-actions';
+import { updateBasicUserProfile, updateUserProfile } from '@/server/actions/auth-actions';
 import { saveStudentAcademicClient } from '@/lib/firebase/save-student-profile';
 import { useToast } from '@/hooks/use-toast';
 import { useUserProfile } from '@/hooks/use-user-profile';
@@ -91,7 +92,8 @@ export default function ProfileSetupForm({ studyLevels, examBoards, subjectsByLe
         }
         const role = (userProfile?.role ?? '').toString().toUpperCase().trim();
         if (!loading && role === 'PRIVATE_TUTOR') {
-            router.replace('/tutor/onboarding');
+            const edit = userProfile?.onboardingComplete ? '?edit=1' : '';
+            router.replace(`/tutor/onboarding${edit}`);
             return;
         }
         if (!userProfile?.uid) return;
@@ -275,9 +277,10 @@ export default function ProfileSetupForm({ studyLevels, examBoards, subjectsByLe
             try {
                 const result = await updateUserProfile(user.uid, payload);
                 if (result.success) {
-                    setSaveBanner({ variant: 'default', title: 'Saved', detail: 'Redirecting to your dashboard.' });
+                    const next = isEditingProfile ? '/account' : '/dashboard';
+                    setSaveBanner({ variant: 'default', title: 'Saved', detail: isEditingProfile ? 'Returning to My Account.' : 'Redirecting to your dashboard.' });
                     toast({ title: 'Profile saved', description: 'Your profile has been saved.' });
-                    router.push('/dashboard');
+                    router.push(next);
                     return;
                 }
                 setSaveBanner({
@@ -330,31 +333,311 @@ export default function ProfileSetupForm({ studyLevels, examBoards, subjectsByLe
     /** Missing or empty `role` must NOT send users to the “non‑student” screen — treat as student setup. */
     const isStudentSetup =
         !userProfile || !normalizedRole || normalizedRole === 'STUDENT';
+    const isEditingProfile = Boolean(userProfile?.onboardingComplete);
 
-    if (userProfile && normalizedRole === 'SCHOOL_ADMIN') {
+    if (userProfile && normalizedRole === 'ADMIN') {
+        const saveAdminProfile = async (e: React.FormEvent) => {
+            e.preventDefault();
+            if (!user) return;
+            setIsSaving(true);
+            try {
+                const result = await updateBasicUserProfile(user.uid, {
+                    fullName: profileData.fullName?.trim() || userProfile.name || '',
+                    profileImageUrl: profileData.profileImageUrl ?? null,
+                    coverImageUrl: profileData.coverImageUrl ?? null,
+                });
+                if (result.success) {
+                    toast({ title: 'Profile saved', description: 'Your administrator profile has been updated.' });
+                    router.push('/admin/dashboard');
+                } else {
+                    toast({ variant: 'destructive', title: 'Save failed', description: result.error });
+                }
+            } finally {
+                setIsSaving(false);
+            }
+        };
+
         return (
             <div className="flex items-center justify-center min-h-screen bg-background p-4 py-8">
-                <Card className="w-full max-w-lg text-center">
+                <Card className="w-full max-w-lg">
                     <CardHeader>
-                        <CardTitle className="flex items-center justify-center gap-2"><Building className="h-6 w-6"/> School Account Pending Approval</CardTitle>
-                        <CardDescription>Thank you for registering your school with StudYear.</CardDescription>
+                        <CardTitle>Edit administrator profile</CardTitle>
+                        <CardDescription>Update your display name and profile images.</CardDescription>
                     </CardHeader>
-                    <CardContent className="space-y-4">
-                        <p className="text-muted-foreground">
-                            Your school account has been created and is now awaiting verification by our team.
-                            You will receive an email once the account is approved, typically within 24-48 hours.
-                        </p>
-                         <p className="text-sm text-muted-foreground">
-                            Once approved, you will gain full access to the School Dashboard to manage teachers, students, and view analytics.
-                        </p>
-                    </CardContent>
-                     <CardFooter className="flex-col gap-4">
-                        <p className="text-xs text-muted-foreground">You can close this window. We will contact you at {user?.email}.</p>
-                        <Button variant="outline" onClick={logout}>Log Out</Button>
-                    </CardFooter>
+                    <form onSubmit={saveAdminProfile}>
+                        <CardContent className="space-y-6">
+                            <div className="space-y-2">
+                                <Label htmlFor="admin-name">Full name</Label>
+                                <Input
+                                    id="admin-name"
+                                    value={profileData.fullName ?? userProfile.name ?? ''}
+                                    onChange={(e) => setProfileData((p) => ({ ...p, fullName: e.target.value }))}
+                                    required
+                                />
+                            </div>
+                            <ProfileImageUpload
+                                label="Profile photo"
+                                kind="profile"
+                                variant="avatar"
+                                value={profileData.profileImageUrl ?? ''}
+                                onChange={(url) => setProfileData((p) => ({ ...p, profileImageUrl: url }))}
+                                disabled={isSaving}
+                            />
+                            <ProfileImageUpload
+                                label="Cover image"
+                                kind="cover"
+                                variant="banner"
+                                value={profileData.coverImageUrl ?? ''}
+                                onChange={(url) => setProfileData((p) => ({ ...p, coverImageUrl: url }))}
+                                disabled={isSaving}
+                            />
+                        </CardContent>
+                        <CardFooter className="flex gap-2">
+                            <Button type="submit" disabled={isSaving}>
+                                {isSaving ? 'Saving…' : 'Save profile'}
+                            </Button>
+                            <Button type="button" variant="outline" onClick={() => router.push('/account')}>
+                                Cancel
+                            </Button>
+                        </CardFooter>
+                    </form>
                 </Card>
             </div>
-        )
+        );
+    }
+
+    if (userProfile && normalizedRole === 'PARENT') {
+        const saveParentProfile = async (e: React.FormEvent) => {
+            e.preventDefault();
+            if (!user) return;
+            setIsSaving(true);
+            try {
+                const result = await updateBasicUserProfile(user.uid, {
+                    fullName: profileData.fullName?.trim() || userProfile.name || '',
+                    profileImageUrl: profileData.profileImageUrl ?? null,
+                    coverImageUrl: profileData.coverImageUrl ?? null,
+                });
+                if (result.success) {
+                    toast({ title: 'Profile saved', description: 'Your parent profile has been updated.' });
+                    router.push('/parent/dashboard');
+                } else {
+                    toast({ variant: 'destructive', title: 'Save failed', description: result.error });
+                }
+            } finally {
+                setIsSaving(false);
+            }
+        };
+
+        return (
+            <div className="flex items-center justify-center min-h-screen bg-background p-4 py-8">
+                <Card className="w-full max-w-lg">
+                    <CardHeader>
+                        <CardTitle>Edit parent profile</CardTitle>
+                        <CardDescription>Update your name and photo shown in the Command Centre.</CardDescription>
+                    </CardHeader>
+                    <form onSubmit={saveParentProfile}>
+                        <CardContent className="space-y-6">
+                            <div className="space-y-2">
+                                <Label htmlFor="parent-name">Full name</Label>
+                                <Input
+                                    id="parent-name"
+                                    value={profileData.fullName ?? userProfile.name ?? ''}
+                                    onChange={(e) => setProfileData((p) => ({ ...p, fullName: e.target.value }))}
+                                    required
+                                />
+                            </div>
+                            <ProfileImageUpload
+                                label="Profile photo"
+                                kind="profile"
+                                variant="avatar"
+                                value={profileData.profileImageUrl ?? ''}
+                                onChange={(url) => setProfileData((p) => ({ ...p, profileImageUrl: url }))}
+                                disabled={isSaving}
+                            />
+                            <ProfileImageUpload
+                                label="Cover image"
+                                kind="cover"
+                                variant="banner"
+                                value={profileData.coverImageUrl ?? ''}
+                                onChange={(url) => setProfileData((p) => ({ ...p, coverImageUrl: url }))}
+                                disabled={isSaving}
+                            />
+                        </CardContent>
+                        <CardFooter className="flex gap-2">
+                            <Button type="submit" disabled={isSaving}>
+                                {isSaving ? 'Saving…' : 'Save profile'}
+                            </Button>
+                            <Button type="button" variant="outline" onClick={() => router.push('/account')}>
+                                Cancel
+                            </Button>
+                        </CardFooter>
+                    </form>
+                </Card>
+            </div>
+        );
+    }
+
+    if (userProfile && normalizedRole === 'SCHOOL_TUTOR') {
+        const saveTeacherProfile = async (e: React.FormEvent) => {
+            e.preventDefault();
+            if (!user) return;
+            setIsSaving(true);
+            try {
+                const result = await updateBasicUserProfile(user.uid, {
+                    fullName: profileData.fullName?.trim() || userProfile.name || '',
+                    profileImageUrl: profileData.profileImageUrl ?? null,
+                    coverImageUrl: profileData.coverImageUrl ?? null,
+                });
+                if (result.success) {
+                    toast({ title: 'Profile saved', description: 'Your teacher profile has been updated.' });
+                    router.push('/account');
+                } else {
+                    toast({ variant: 'destructive', title: 'Save failed', description: result.error });
+                }
+            } finally {
+                setIsSaving(false);
+            }
+        };
+
+        return (
+            <div className="flex items-center justify-center min-h-screen bg-background p-4 py-8">
+                <Card className="w-full max-w-lg">
+                    <CardHeader>
+                        <CardTitle>Edit teacher profile</CardTitle>
+                        <CardDescription>
+                            Update your display name and photos. Link your school from the Command Centre if you have
+                            not already.
+                        </CardDescription>
+                    </CardHeader>
+                    <form onSubmit={saveTeacherProfile}>
+                        <CardContent className="space-y-6">
+                            <div className="space-y-2">
+                                <Label htmlFor="teacher-name">Full name</Label>
+                                <Input
+                                    id="teacher-name"
+                                    value={profileData.fullName ?? userProfile.name ?? ''}
+                                    onChange={(e) => setProfileData((p) => ({ ...p, fullName: e.target.value }))}
+                                    required
+                                />
+                            </div>
+                            <ProfileImageUpload
+                                label="Profile photo"
+                                kind="profile"
+                                variant="avatar"
+                                value={profileData.profileImageUrl ?? ''}
+                                onChange={(url) => setProfileData((p) => ({ ...p, profileImageUrl: url }))}
+                                disabled={isSaving}
+                            />
+                            <ProfileImageUpload
+                                label="Cover image"
+                                kind="cover"
+                                variant="banner"
+                                value={profileData.coverImageUrl ?? ''}
+                                onChange={(url) => setProfileData((p) => ({ ...p, coverImageUrl: url }))}
+                                disabled={isSaving}
+                            />
+                        </CardContent>
+                        <CardFooter className="flex flex-wrap gap-2">
+                            <Button type="submit" disabled={isSaving}>
+                                {isSaving ? 'Saving…' : 'Save profile'}
+                            </Button>
+                            <Button type="button" variant="secondary" asChild>
+                                <Link href="/teacher/dashboard">Command Centre</Link>
+                            </Button>
+                            <Button type="button" variant="outline" onClick={() => router.push('/account')}>
+                                Cancel
+                            </Button>
+                        </CardFooter>
+                    </form>
+                </Card>
+            </div>
+        );
+    }
+
+    if (userProfile && normalizedRole === 'SCHOOL_ADMIN') {
+        const saveSchoolAdminProfile = async (e: React.FormEvent) => {
+            e.preventDefault();
+            if (!user) return;
+            setIsSaving(true);
+            try {
+                const result = await updateBasicUserProfile(user.uid, {
+                    fullName: profileData.fullName?.trim() || userProfile.name || '',
+                    profileImageUrl: profileData.profileImageUrl ?? null,
+                    coverImageUrl: profileData.coverImageUrl ?? null,
+                });
+                if (result.success) {
+                    toast({ title: 'Profile saved', description: 'Your administrator profile has been updated.' });
+                    router.push('/school/dashboard');
+                } else {
+                    toast({ variant: 'destructive', title: 'Save failed', description: result.error });
+                }
+            } finally {
+                setIsSaving(false);
+            }
+        };
+
+        return (
+            <div className="flex items-center justify-center min-h-screen bg-background p-4 py-8">
+                <Card className="w-full max-w-lg">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <Building className="h-6 w-6" />
+                            School administrator profile
+                        </CardTitle>
+                        <CardDescription>
+                            Update your display name and photo. Configure your school workspace separately.
+                        </CardDescription>
+                    </CardHeader>
+                    <form onSubmit={saveSchoolAdminProfile}>
+                        <CardContent className="space-y-6">
+                            <Alert>
+                                <AlertTitle>Platform verification</AlertTitle>
+                                <AlertDescription>
+                                    Your institution may still show as pending in our records. You can use the Command
+                                    Centre, onboarding, and ACU tools while setup is in progress.
+                                </AlertDescription>
+                            </Alert>
+                            <div className="space-y-2">
+                                <Label htmlFor="school-admin-name">Full name</Label>
+                                <Input
+                                    id="school-admin-name"
+                                    value={profileData.fullName ?? userProfile.name ?? ''}
+                                    onChange={(e) => setProfileData((p) => ({ ...p, fullName: e.target.value }))}
+                                    required
+                                />
+                            </div>
+                            <ProfileImageUpload
+                                label="Profile photo"
+                                kind="profile"
+                                variant="avatar"
+                                value={profileData.profileImageUrl ?? ''}
+                                onChange={(url) => setProfileData((p) => ({ ...p, profileImageUrl: url }))}
+                                disabled={isSaving}
+                            />
+                            <ProfileImageUpload
+                                label="Cover image"
+                                kind="cover"
+                                variant="banner"
+                                value={profileData.coverImageUrl ?? ''}
+                                onChange={(url) => setProfileData((p) => ({ ...p, coverImageUrl: url }))}
+                                disabled={isSaving}
+                            />
+                        </CardContent>
+                        <CardFooter className="flex flex-wrap gap-2">
+                            <Button type="submit" disabled={isSaving}>
+                                {isSaving ? 'Saving…' : 'Save profile'}
+                            </Button>
+                            <Button type="button" variant="secondary" asChild>
+                                <Link href="/school/onboarding?edit=1">Edit school workspace</Link>
+                            </Button>
+                            <Button type="button" variant="outline" onClick={() => router.push('/account')}>
+                                Cancel
+                            </Button>
+                        </CardFooter>
+                    </form>
+                </Card>
+            </div>
+        );
     }
 
     // Non-students (parent, tutor, etc.) skip detailed academic fields here
@@ -391,8 +674,12 @@ export default function ProfileSetupForm({ studyLevels, examBoards, subjectsByLe
         <div className="flex items-center justify-center min-h-screen bg-background p-4 py-8">
             <Card className="w-full max-w-4xl">
                 <CardHeader>
-                    <CardTitle>Set Up Your Student Profile</CardTitle>
-                    <CardDescription>This helps us personalize your learning experience and generate your academic recovery plan.</CardDescription>
+                    <CardTitle>{isEditingProfile ? 'Edit your profile' : 'Set Up Your Student Profile'}</CardTitle>
+                    <CardDescription>
+                        {isEditingProfile
+                            ? 'Update your personal details, study level, subjects, and photos.'
+                            : 'This helps us personalize your learning experience and generate your academic recovery plan.'}
+                    </CardDescription>
                 </CardHeader>
                 <form onSubmit={handleSubmit} noValidate>
                     <CardContent className="space-y-8">
@@ -564,9 +851,30 @@ export default function ProfileSetupForm({ studyLevels, examBoards, subjectsByLe
                                 ) : null}
                             </Alert>
                         )}
-                         <Button type="submit" className="w-full" disabled={isSaving}>
-                            {isSaving ? <><Loader className="mr-2 h-4 w-4 animate-spin" /> Saving...</> : 'Save Profile & Continue'}
-                        </Button>
+                        <div className="flex w-full flex-col gap-2 sm:flex-row">
+                            <Button type="submit" className="w-full sm:flex-1" disabled={isSaving}>
+                                {isSaving ? (
+                                    <>
+                                        <Loader className="mr-2 h-4 w-4 animate-spin" /> Saving...
+                                    </>
+                                ) : isEditingProfile ? (
+                                    'Save changes'
+                                ) : (
+                                    'Save Profile & Continue'
+                                )}
+                            </Button>
+                            {isEditingProfile ? (
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="w-full sm:w-auto"
+                                    disabled={isSaving}
+                                    onClick={() => router.push('/account')}
+                                >
+                                    Cancel
+                                </Button>
+                            ) : null}
+                        </div>
                     </CardFooter>
                 </form>
             </Card>

@@ -216,7 +216,7 @@ export default function ResourcePipelineManager({ initialResources, subjects, le
                               </div>
                             ) : null}
                             <FormField control={form.control} name="subject" render={({ field }) => (
-                                <FormItem><FormLabel>Subject</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Select subject..." /></SelectTrigger></FormControl><SelectContent>{subjects.map(s => <SelectItem key={s.code} value={s.name}>{s.name}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
+                                <FormItem><FormLabel>Subject</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Select subject..." /></SelectTrigger></FormControl><SelectContent>{subjects.map(s => <SelectItem key={s.code} value={s.code}>{s.name}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
                             )} />
                              <FormField control={form.control} name="level" render={({ field }) => (
                                 <FormItem><FormLabel>Level</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Select level..." /></SelectTrigger></FormControl><SelectContent>{levels.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>

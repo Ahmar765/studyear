@@ -6,7 +6,7 @@ import AnalyticsCharts from "./analytics-charts";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 export default async function AdminAnalyticsPage() {
-  const { newUsersData, kpi, kpiWarnings, error } = await getAnalyticsDataAction();
+  const { newUsersData, studyTimeData, kpi, kpiWarnings, error } = await getAnalyticsDataAction();
 
   const kpiCards = [
     {
@@ -76,7 +76,7 @@ export default async function AdminAnalyticsPage() {
         ))}
       </div>
 
-      <AnalyticsCharts newUsersData={newUsersData} />
+      <AnalyticsCharts newUsersData={newUsersData} studyTimeData={studyTimeData} />
     </div>
   );
 }

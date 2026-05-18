@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { headers } from 'next/headers';
 import Stripe from 'stripe';
 import {
+  grantParentMonthlyAcusForInvoice,
   grantPremiumPlusMonthlyAcusForInvoice,
   manageSubscriptionStatusChange,
   recordAcuTopUpFromCheckoutSession,
@@ -119,6 +120,25 @@ export async function POST(req: NextRequest) {
         } else if (grant.skipReason && grant.skipReason !== 'not_premium_plus') {
           console.log(
             `Premium Plus ACU grant skipped for invoice ${invoice.id}: ${grant.skipReason}`,
+          );
+        }
+
+        const parentGrant = await grantParentMonthlyAcusForInvoice({
+          userId,
+          invoiceId: invoice.id,
+          amountPaidPence: invoice.amount_paid ?? 0,
+          productCode: productCode as SubscriptionType,
+        });
+        if (parentGrant.granted) {
+          console.log(
+            `Parent subscription ACUs (${parentGrant.acus}) credited for invoice ${invoice.id}`,
+          );
+        } else if (
+          parentGrant.skipReason &&
+          parentGrant.skipReason !== 'not_parent_acu_plan'
+        ) {
+          console.log(
+            `Parent ACU grant skipped for invoice ${invoice.id}: ${parentGrant.skipReason}`,
           );
         }
 

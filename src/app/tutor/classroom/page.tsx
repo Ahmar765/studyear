@@ -1,4 +1,5 @@
 import { TutorSubPage } from '@/components/tutor/tutor-sub-page';
+import { TutorLiveClassroom } from '@/components/tutor/tutor-live-classroom';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { Bot, Video } from 'lucide-react';
@@ -10,18 +11,15 @@ export default function TutorClassroomPage() {
       description="Video, whiteboard, AI explanations, live quizzes, and session recording."
       icon={Video}
     >
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Button asChild size="lg" className="h-auto flex-col gap-2 py-8">
+      <div className="mb-6 flex flex-wrap gap-3">
+        <Button asChild variant="outline">
           <Link href="/ai-tutor">
-            <Bot className="h-8 w-8" />
+            <Bot className="mr-2 h-4 w-4" />
             Explain with AI
           </Link>
         </Button>
-        <Button variant="secondary" size="lg" className="h-auto flex-col gap-2 py-8" disabled>
-          <Video className="h-8 w-8" />
-          Live video room (coming soon)
-        </Button>
       </div>
+      <TutorLiveClassroom />
     </TutorSubPage>
   );
 }

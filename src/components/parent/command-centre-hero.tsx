@@ -43,8 +43,15 @@ function StabilityRing({ score, status }: { score: number; status: string }) {
   );
 }
 
+const planLabels = {
+  PARENT_PRO: 'Parent Pro',
+  PARENT_PRO_PLUS: 'Parent Pro+',
+  PARENT_ELITE: 'Parent Elite',
+} as const;
+
 export function CommandCentreHero({ data }: { data: ParentDashboardPayload }) {
-  const { stability, liveAlerts } = data;
+  const { stability, liveAlerts, planTier, features } = data;
+  const visibleAlerts = features.fullLiveAlerts ? liveAlerts : liveAlerts.slice(0, 3);
   const statusLabel =
     stability.status === 'stable'
       ? 'Stable'
@@ -62,6 +69,9 @@ export function CommandCentreHero({ data }: { data: ParentDashboardPayload }) {
         <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-200">
           <Activity className="h-3.5 w-3.5 animate-pulse" />
           Live intelligence
+        </span>
+        <span className="inline-flex items-center rounded-full border border-violet-400/30 bg-violet-500/10 px-3 py-1 text-xs font-medium text-violet-200">
+          {planLabels[planTier]}
         </span>
       </div>
 
@@ -90,11 +100,13 @@ export function CommandCentreHero({ data }: { data: ParentDashboardPayload }) {
 
         <div className="flex flex-col rounded-xl border border-white/10 bg-black/20 backdrop-blur">
           <div className="border-b border-white/10 px-4 py-3">
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-300">Live AI Alerts</h3>
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-300">
+              {features.fullLiveAlerts ? 'Live AI Alerts' : 'Priority alerts'}
+            </h3>
           </div>
           <ScrollArea className="h-[280px] px-4 py-3">
             <ul className="space-y-2">
-              {liveAlerts.map((alert) => (
+              {visibleAlerts.map((alert) => (
                 <li
                   key={alert.id}
                   className={cn(
@@ -106,6 +118,11 @@ export function CommandCentreHero({ data }: { data: ParentDashboardPayload }) {
                 </li>
               ))}
             </ul>
+            {!features.fullLiveAlerts && liveAlerts.length > 3 && (
+              <p className="mt-3 text-center text-xs text-slate-400">
+                Upgrade to Parent Pro+ for the full live alert feed.
+              </p>
+            )}
           </ScrollArea>
         </div>
       </div>

@@ -10,14 +10,27 @@ import { savedResourceService } from '../services/resources';
 
 export async function getResourceCountsAction(): Promise<Record<string, number>> {
   try {
-    const countsSnapshot = await adminDb.collection('resourceCounts').get();
-    if (countsSnapshot.empty) {
-      return {};
-    }
     const counts: Record<string, number> = {};
-    countsSnapshot.forEach(doc => {
+    const countsSnapshot = await adminDb.collection('resourceCounts').get();
+    countsSnapshot.forEach((doc) => {
       counts[doc.id] = doc.data().total || 0;
     });
+
+    /** Reconcile from live `resources` when counters are missing (e.g. legacy VIDEO rows). */
+    const types = ['VIDEO', 'PAST_PAPER', 'QUIZ', 'FLASHCARD'];
+    await Promise.all(
+      types.map(async (type) => {
+        if ((counts[type] ?? 0) > 0) return;
+        try {
+          const snap = await adminDb.collection('resources').where('type', '==', type).count().get();
+          const n = snap.data().count;
+          if (n > 0) counts[type] = n;
+        } catch {
+          /* index may be missing — ignore */
+        }
+      }),
+    );
+
     return counts;
   } catch (error) {
     console.error("Error fetching resource counts:", error);
@@ -90,8 +103,17 @@ export async function getResourcesByTypeAction(
         level: String(data.level ?? ""),
         createdAt: isoFromFirestoreTimestamp(data.createdAt),
         videoUrl:
-          typeof data.videoUrl === "string" ? data.videoUrl : undefined,
-        fileUrl: typeof data.fileUrl === "string" ? data.fileUrl : undefined,
+          typeof data.videoUrl === "string"
+            ? data.videoUrl
+            : typeof data.url === "string" && type === "VIDEO"
+              ? data.url
+              : undefined,
+        fileUrl:
+          typeof data.fileUrl === "string"
+            ? data.fileUrl
+            : typeof data.url === "string" && type === "PAST_PAPER"
+              ? data.url
+              : undefined,
       };
     });
 
@@ -174,9 +196,11 @@ export async function contributeResourceAction(formData: FormData): Promise<{ su
             type,
             title,
             description,
+            url,
             videoUrl: type === 'VIDEO' ? url : null,
-            fileUrl: type === 'PAST_PAPER' ? url : null, // Using URL for now
-            subject: subjectId, // Use subjectId from form as the main subject identifier
+            fileUrl: type === 'PAST_PAPER' ? url : null,
+            subject: subjectId,
+            topic: examBoard,
             examBoard,
             level,
             approvalStatus: 'PENDING',

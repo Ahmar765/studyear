@@ -9,7 +9,7 @@ export default function TeacherClassesPage() {
   return (
     <SchoolTutorSubPage
       title="My classes"
-      description="Live cohorts by year group — all students linked to your school."
+      description="Students in your assigned year groups (school admin sets cohorts under Staff deployment). Empty assignment shows all school students."
       icon={Users}
     >
       {(data) => (

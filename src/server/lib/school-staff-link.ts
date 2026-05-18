@@ -11,14 +11,25 @@ export async function getTeacherSchoolLink(userId: string): Promise<{
   linked: boolean;
   schoolId?: string;
   staffRole?: SchoolStaffLinkRole;
+  staffLinkId?: string;
+  assignedYearGroups?: string[];
+  assignedClassNames?: string[];
 }> {
   const snap = await adminDb.collection('school_staff').where('userId', '==', userId).limit(1).get();
   if (snap.empty) return { linked: false };
-  const data = snap.docs[0]!.data();
+  const doc = snap.docs[0]!;
+  const data = doc.data();
   return {
     linked: true,
     schoolId: data.schoolId as string,
     staffRole: data.role as SchoolStaffLinkRole,
+    staffLinkId: doc.id,
+    assignedYearGroups: Array.isArray(data.assignedYearGroups)
+      ? (data.assignedYearGroups as string[])
+      : [],
+    assignedClassNames: Array.isArray(data.assignedClassNames)
+      ? (data.assignedClassNames as string[])
+      : [],
   };
 }
 

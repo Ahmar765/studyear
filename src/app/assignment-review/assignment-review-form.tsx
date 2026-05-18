@@ -15,7 +15,8 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Sparkles, Loader, FileCheck2, Lightbulb, TrendingUp, AlertTriangle, Lock } from "lucide-react";
+import { Sparkles, Loader, FileCheck2, Lightbulb, TrendingUp, AlertTriangle, Lock, Paperclip } from "lucide-react";
+import { uploadPastPaperPdf } from '@/lib/upload-past-paper-client';
 import { AssignmentReviewOutput, submitAssignmentForReviewAction } from "@/server/actions/assignment-review-actions";
 import { Separator } from "@/components/ui/separator";
 import { useUserProfile } from "@/hooks/use-user-profile";
@@ -29,8 +30,13 @@ const FormSchema = z.object({
   type: z.enum(assignmentTypes as [string, ...string[]]),
   subject: z.string().min(1, "Please select a subject."),
   studyLevel: z.string().min(1, "Please select a level."),
-  pastedText: z.string().min(100, "Assignment text must be at least 100 characters."),
-});
+  pastedText: z.string().optional(),
+  attachmentUrl: z.string().optional(),
+  attachmentName: z.string().optional(),
+}).refine(
+  (d) => (d.pastedText?.trim().length ?? 0) >= 100 || Boolean(d.attachmentUrl?.trim()),
+  { message: 'Paste at least 100 characters or attach a .txt / .pdf file.', path: ['pastedText'] },
+);
 
 interface AssignmentReviewFormProps {
     subjectsByLevel: Record<string, string[]>;
@@ -40,6 +46,8 @@ interface AssignmentReviewFormProps {
 export default function AssignmentReviewForm({ subjectsByLevel, levels }: AssignmentReviewFormProps) {
     const [review, setReview] = useState<AssignmentReviewOutput | null>(null);
     const [isPending, startTransition] = useTransition();
+    const [uploadingFile, setUploadingFile] = useState(false);
+    const [attachment, setAttachment] = useState<{ url: string; name: string } | null>(null);
     const { user } = useAuth();
     const { userProfile, loading: profileLoading } = useUserProfile();
     const { toast } = useToast();
@@ -56,7 +64,9 @@ export default function AssignmentReviewForm({ subjectsByLevel, levels }: Assign
             type: "ASSIGNMENT",
             subject: "",
             studyLevel: "",
-            pastedText: ""
+            pastedText: "",
+            attachmentUrl: "",
+            attachmentName: "",
         }
     });
 
@@ -68,7 +78,13 @@ export default function AssignmentReviewForm({ subjectsByLevel, levels }: Assign
 
         setReview(null);
         startTransition(async () => {
-            const result = await submitAssignmentForReviewAction({ ...values, userId: user.uid, studentId: user.uid });
+            const result = await submitAssignmentForReviewAction({
+              ...values,
+              userId: user.uid,
+              studentId: user.uid,
+              attachmentUrl: attachment?.url,
+              attachmentName: attachment?.name,
+            });
             if (result.success && result.review) {
                 setReview(result.review);
                 toast({ title: 'Review Complete!', description: 'Your feedback has been generated.' });
@@ -147,8 +163,58 @@ export default function AssignmentReviewForm({ subjectsByLevel, levels }: Assign
                             <FormField control={form.control} name="subject" render={({ field }) => (
                                 <FormItem><FormLabel>Subject</FormLabel><Select value={field.value} onValueChange={field.onChange} disabled={subjectsForLevel.length === 0}><FormControl><SelectTrigger><SelectValue placeholder="Select..."/></SelectTrigger></FormControl><SelectContent>{subjectsForLevel.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
                             )}/>
+                            <FormItem>
+                              <FormLabel className="flex items-center gap-2">
+                                <Paperclip className="h-4 w-4" />
+                                Attach file (optional)
+                              </FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="file"
+                                  accept=".txt,text/plain,application/pdf"
+                                  disabled={uploadingFile || isPending}
+                                  onChange={async (e) => {
+                                    const file = e.target.files?.[0];
+                                    e.target.value = '';
+                                    if (!file || !user) return;
+                                    if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
+                                      const text = await file.text();
+                                      form.setValue('pastedText', text);
+                                      setAttachment({ url: '', name: file.name });
+                                      toast({ title: 'Text loaded', description: 'Review the pasted text below before submitting.' });
+                                      return;
+                                    }
+                                    if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
+                                      setUploadingFile(true);
+                                      try {
+                                        const token = await user.getIdToken();
+                                        const r = await uploadPastPaperPdf(file, token);
+                                        if (r.error || !r.url) {
+                                          toast({ variant: 'destructive', title: 'Upload failed', description: r.error });
+                                          return;
+                                        }
+                                        setAttachment({ url: r.url, name: file.name });
+                                        form.setValue('attachmentUrl', r.url);
+                                        form.setValue('attachmentName', file.name);
+                                        toast({
+                                          title: 'PDF attached',
+                                          description: 'Also paste key excerpts in the text box if the PDF is long.',
+                                        });
+                                      } finally {
+                                        setUploadingFile(false);
+                                      }
+                                      return;
+                                    }
+                                    toast({ variant: 'destructive', title: 'Unsupported file', description: 'Use .txt or .pdf' });
+                                  }}
+                                />
+                              </FormControl>
+                              {attachment?.name ? (
+                                <p className="text-xs text-muted-foreground">Attached: {attachment.name}</p>
+                              ) : null}
+                            </FormItem>
                             <FormField control={form.control} name="pastedText" render={({ field }) => (
-                                <FormItem><FormLabel>Assignment Text</FormLabel><FormControl><Textarea {...field} placeholder="Paste your full written assignment here." className="min-h-[250px]" /></FormControl><FormMessage /></FormItem>
+                                <FormItem><FormLabel>Assignment Text</FormLabel><FormControl><Textarea {...field} placeholder="Paste your full written assignment here (min. 100 characters), or attach a file above." className="min-h-[250px]" /></FormControl><FormMessage /></FormItem>
                             )}/>
                              <Button type="submit" disabled={isPending} className="w-full">
                                 {isPending ? <Loader className="animate-spin mr-2"/> : <Sparkles className="mr-2"/>}

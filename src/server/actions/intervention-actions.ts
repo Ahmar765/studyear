@@ -10,6 +10,7 @@ import { savedResourceService } from '../services/resources';
 import { logActivityEvent } from '../services/activity';
 import { getUserProfileServer } from '../services/user';
 import { runStudYearAction } from '../services/pipeline';
+import { assertParentFeature, assertParentStudentLink } from '@/server/lib/parent-plan';
 
 
 const InterventionActionSchema = InterventionInputSchema.extend({
@@ -18,6 +19,9 @@ const InterventionActionSchema = InterventionInputSchema.extend({
 
 export async function triggerInterventionAction(input: z.infer<typeof InterventionActionSchema>): Promise<{ success: boolean; output?: InterventionOutput; error?: string }> {
     try {
+        await assertParentFeature(input.userId, 'aiIntervention');
+        await assertParentStudentLink(input.userId, input.studentId);
+
         const result = await runStudYearAction({
             userId: input.userId,
             studentId: input.studentId,

@@ -15,15 +15,22 @@ import { Timestamp } from "firebase-admin/firestore";
 
 const assignmentTypes = ["HOMEWORK", "ASSIGNMENT", "ESSAY", "COURSEWORK", "REPORT", "DISSERTATION", "THESIS", "PERSONAL_STATEMENT", "OTHER"];
 
-const ActionSchema = z.object({
+const ActionSchema = z
+  .object({
     userId: z.string(),
     studentId: z.string(),
     title: z.string().min(5),
     type: z.enum(assignmentTypes as [string, ...string[]]),
     subject: z.string().min(1, "Choose a subject."),
     studyLevel: z.string().min(1, "Choose your study level."),
-    pastedText: z.string().min(100),
-});
+    pastedText: z.string().optional(),
+    attachmentUrl: z.string().url().optional().or(z.literal('')),
+    attachmentName: z.string().optional(),
+  })
+  .refine(
+    (d) => (d.pastedText?.trim().length ?? 0) >= 100 || Boolean(d.attachmentUrl?.trim()),
+    { message: 'Paste at least 100 characters or attach a file.' },
+  );
 
 export type { AssignmentReviewOutput };
 
@@ -38,12 +45,18 @@ export async function submitAssignmentForReviewAction(input: z.infer<typeof Acti
 
     const { userId, studentId, type } = validatedData.data;
 
+    const pastedText = validatedData.data.pastedText?.trim() ?? '';
+    const attachmentUrl = validatedData.data.attachmentUrl?.trim() || undefined;
+
     const aiPayload: AssignmentSubmissionInput = {
         title: validatedData.data.title.trim(),
         type: validatedData.data.type,
         subject: validatedData.data.subject.trim(),
         studyLevel: validatedData.data.studyLevel.trim(),
-        pastedText: validatedData.data.pastedText.trim(),
+        pastedText:
+          pastedText.length >= 100
+            ? pastedText
+            : `[See attached file: ${attachmentUrl ?? 'uploaded document'}]\n\n${pastedText}`.trim(),
     };
 
     const aiParsed = AssignmentSubmissionInputSchema.safeParse(aiPayload);
@@ -62,6 +75,9 @@ export async function submitAssignmentForReviewAction(input: z.infer<typeof Acti
         const submissionRef = adminDb.collection("assignment_submissions").doc();
         await submissionRef.set({
             ...validatedData.data,
+            pastedText,
+            attachmentUrl: attachmentUrl ?? null,
+            attachmentName: validatedData.data.attachmentName ?? null,
             status: "PROCESSING",
             createdAt: Timestamp.now(),
             updatedAt: Timestamp.now(),

@@ -8,6 +8,7 @@ import {
   SystemSettingsSchema,
   type SystemSettings,
 } from '@/server/schemas/system-settings';
+import { sendContactFormNotification } from '@/server/lib/mail';
 
 const defaultSettings: SystemSettings = {
   featureFlags: {
@@ -24,10 +25,14 @@ const defaultSettings: SystemSettings = {
     supportEmail: 'support@studyear.ai',
     contactEmail: 'contact@studyear.ai',
     noreplyEmail: 'noreply@studyear.ai',
+    businessDetails: {
+      companyName: 'StudYear Ltd.',
+      registeredAddress: '123 Learning Lane, London, UK, SW1A 0AA',
+    },
     forgotPassword: {
       title: 'Check your inbox',
       description:
-        'If an account exists for that email, we sent a password reset link. Check spam or contact support.',
+        'If an account exists for that email, we sent a password reset link. Check your spam or junk folder — messages from new senders often land there until your mail provider learns to trust them.',
       body: "Enter your email and we'll send you a link to reset your password.",
     },
     contactForm: {
@@ -82,7 +87,14 @@ export async function getSystemSettings(): Promise<SystemSettings> {
         featureFlags: { ...defaultSettings.featureFlags, ...data.featureFlags },
         pricingRules: { ...defaultSettings.pricingRules, ...data.pricingRules },
         aiProvider: mergeAiProvider(defaultSettings.aiProvider!, data.aiProvider),
-        communications: { ...defaultSettings.communications, ...data.communications },
+        communications: {
+          ...defaultSettings.communications,
+          ...data.communications,
+          businessDetails: {
+            ...defaultSettings.communications?.businessDetails,
+            ...data.communications?.businessDetails,
+          },
+        },
       };
     }
     return defaultSettings;
@@ -134,6 +146,17 @@ export async function submitContactFormAction(input: {
       status: 'NEW',
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
+
+    const mail = await sendContactFormNotification({
+      fullName,
+      email,
+      enquiryType: input.enquiryType?.trim() || 'support',
+      message,
+    });
+    if (!mail.sent) {
+      console.warn('[contact] stored in Firestore but outbound email was not sent (check MAIL_* env).');
+    }
+
     return { success: true };
   } catch (error) {
     console.error('Contact form error:', error);

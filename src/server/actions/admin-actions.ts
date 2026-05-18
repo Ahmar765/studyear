@@ -9,6 +9,7 @@ import { UserProfile } from '@/lib/firebase/services/user';
 import { AIRequestLog } from '@/server/services/activity';
 import { AcuTransaction, SubscriptionType, UserRole } from '@/server/schemas';
 import { Timestamp, type QuerySnapshot } from 'firebase-admin/firestore';
+import { fetchUserLabelsByIds } from '@/server/lib/admin-user-labels';
 import { USD_TO_GBP_ASSUMED } from '@/server/lib/ai-provider-cost-estimate';
 import { GBP_PER_ACU_ENTRY_RATE } from '@/data/acu-economics';
 import { AI_USAGE_AGG_ROW_CAP } from '@/server/lib/platform-economics-constants';
@@ -52,11 +53,13 @@ import { HttpsError } from '../lib/errors';
 import { resourceMetadata, ResourceType } from '@/data/academic';
 import { ACUService } from '../services/acu-service';
 import { getVerifiedUser } from '@/server/lib/auth';
+import { isPlatformAdmin } from '@/server/lib/platform-admin';
 
-function assertPlatformAdmin(tokenUser: Awaited<ReturnType<typeof getVerifiedUser>>) {
+async function assertPlatformAdmin(tokenUser: Awaited<ReturnType<typeof getVerifiedUser>>) {
     if (!tokenUser) throw new Error('Not authenticated.');
-    const role = (tokenUser as { role?: string }).role;
-    if (role !== 'ADMIN') throw new Error('Forbidden.');
+    if (!(await isPlatformAdmin(tokenUser.uid, tokenUser))) {
+        throw new Error('Forbidden.');
+    }
 }
 
 export type ImpersonationSearchUserRow = {
@@ -311,10 +314,11 @@ export async function getAcuTransactionsAction(): Promise<{ transactions: AcuTra
         const snapshot = await adminDb.collection('acuTransactions').orderBy('createdAt', 'desc').limit(20).get();
         const transactions = snapshot.docs.map(doc => {
             const data = doc.data();
+            const createdAt = data.createdAt as Timestamp | undefined;
             return {
                 ...data,
                 id: doc.id,
-                createdAt: (data.createdAt as Timestamp).toDate(),
+                createdAt: createdAt?.toDate?.()?.toISOString() ?? new Date().toISOString(),
             } as AcuTransaction;
         });
         return { transactions, error: null };
@@ -474,11 +478,54 @@ export async function reviewResourceAction(values: z.infer<typeof ReviewSchema>)
             const uploadData = uploadDoc.data();
             if (uploadData) {
                 const resourceRef = adminDb.collection('resources').doc();
+                const fileUrl =
+                    (typeof uploadData.fileUrl === 'string' && uploadData.fileUrl) ||
+                    (typeof uploadData.url === 'string' && uploadData.url) ||
+                    null;
+                const isVideo = uploadData.type === 'VIDEO';
                 await resourceRef.set({
-                    ...uploadData,
+                    type: uploadData.type,
+                    title: uploadData.title ?? 'Resource',
+                    topic: uploadData.topic ?? '',
+                    subject: uploadData.subject ?? 'General',
+                    level: uploadData.level ?? '',
+                    url: fileUrl,
+                    videoUrl: isVideo ? fileUrl : uploadData.videoUrl ?? null,
+                    fileUrl: !isVideo ? fileUrl : null,
+                    approvalStatus: 'APPROVED',
                     resourceId: resourceRef.id,
-                    createdAt: Timestamp.now()
+                    createdAt: Timestamp.now(),
                 });
+
+                const countRef = adminDb.collection('resourceCounts').doc(String(uploadData.type));
+                await countRef.set(
+                    {
+                        total: admin.firestore.FieldValue.increment(1),
+                        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                    },
+                    { merge: true },
+                );
+
+                if (uploadData.type === 'PAST_PAPER' && fileUrl) {
+                    const subjectId =
+                        typeof uploadData.subject === 'string' && uploadData.subject.trim()
+                            ? uploadData.subject.trim().toUpperCase()
+                            : 'GENERAL';
+                    const paperRef = adminDb.collection('past_papers').doc();
+                    await paperRef.set({
+                        subjectId,
+                        examBoard:
+                            typeof uploadData.topic === 'string' ? uploadData.topic : null,
+                        title: uploadData.title ?? 'Past paper',
+                        paperYear: new Date().getFullYear(),
+                        paperSeries:
+                            typeof uploadData.level === 'string' ? uploadData.level : null,
+                        fileUrl,
+                        active: true,
+                        sourceUploadId: values.resourceId,
+                        createdAt: Timestamp.now(),
+                    });
+                }
             }
         }
         
@@ -550,59 +597,90 @@ export async function getTutorApplicationsAction(): Promise<{ applications: Tuto
             return { applications: [] };
         }
 
-        const tutorIds = tutorProfilesSnapshot.docs.map(doc => doc.id);
-        const usersSnapshot = await adminDb.collection('users').where(admin.firestore.FieldPath.documentId(), 'in', tutorIds).get();
-        
-        const usersMap = new Map<string, any>();
-        usersSnapshot.forEach(doc => {
-            usersMap.set(doc.id, doc.data());
-        });
+        const tutorIds = tutorProfilesSnapshot.docs.map((doc) => doc.id);
+        const userLabels = await fetchUserLabelsByIds(tutorIds);
+        const userRoles = new Map<string, string>();
+        for (let i = 0; i < tutorIds.length; i += 30) {
+            const chunk = tutorIds.slice(i, i + 30);
+            if (!chunk.length) continue;
+            const usersSnap = await adminDb
+                .collection('users')
+                .where(admin.firestore.FieldPath.documentId(), 'in', chunk)
+                .get();
+            usersSnap.forEach((userDoc) => {
+                const roleVal = userDoc.data()?.role;
+                if (typeof roleVal === 'string') userRoles.set(userDoc.id, roleVal);
+            });
+        }
 
         const applications: TutorApplication[] = [];
-        tutorProfilesSnapshot.forEach(doc => {
+        tutorProfilesSnapshot.forEach((doc) => {
             const profileData = firestoreValueToPlain(doc.data()) as TutorProfileData;
-            const userData = firestoreValueToPlain(usersMap.get(doc.id)) as Record<string, unknown> | undefined;
-            if (userData) {
-                 applications.push({
-                    ...profileData,
-                    userId: doc.id,
-                    displayName: (userData.name as string) || 'N/A',
-                    email: userData.email as string,
-                    role: userData.role as TutorApplication['role'],
-                });
-            }
+            const label = userLabels[doc.id];
+            const roleRaw = userRoles.get(doc.id);
+            const role =
+                typeof roleRaw === 'string'
+                    ? (roleRaw.toUpperCase().trim() as TutorApplication['role'])
+                    : ('PRIVATE_TUTOR' as const);
+
+            applications.push({
+                ...profileData,
+                userId: doc.id,
+                approvalStatus: profileData.approvalStatus ?? 'PENDING',
+                displayName: label?.displayName ?? 'Unknown tutor',
+                email: label?.email ?? '—',
+                role,
+            });
         });
-        
-        // Filter for only private tutors for marketplace approval
-        const privateTutorApplications = applications.filter(app => app.role === 'PRIVATE_TUTOR');
+
+        const privateTutorApplications = applications.filter(
+            (app) => app.role === 'PRIVATE_TUTOR',
+        );
+
+        privateTutorApplications.sort((a, b) => {
+            const rank = (s: string) => (s === 'PENDING' ? 0 : s === 'APPROVED' ? 1 : 2);
+            return rank(a.approvalStatus) - rank(b.approvalStatus);
+        });
 
         return { applications: privateTutorApplications };
-
-    } catch (error: any) {
-        console.error("Error fetching tutor applications:", error);
-        return { applications: [], error: error.message };
+    } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'Could not load applications.';
+        console.error('Error fetching tutor applications:', error);
+        return { applications: [], error: message };
     }
 }
 
 const ReviewTutorSchema = z.object({
+    idToken: z.string().min(1),
     tutorId: z.string().min(1),
     decision: z.enum(['APPROVED', 'REJECTED']),
 });
 
-export async function reviewTutorApplicationAction(values: z.infer<typeof ReviewTutorSchema>): Promise<{ success: boolean; error?: string }> {
+export async function reviewTutorApplicationAction(
+    values: z.infer<typeof ReviewTutorSchema>,
+): Promise<{ success: boolean; error?: string }> {
     try {
-        const { tutorId, decision } = values;
-        const profileRef = adminDb.collection('tutor_profiles').doc(tutorId);
+        const parsed = ReviewTutorSchema.parse(values);
+        const adminUser = await getVerifiedUser(parsed.idToken);
+        await assertPlatformAdmin(adminUser);
+
+        const profileRef = adminDb.collection('tutor_profiles').doc(parsed.tutorId);
+        const profileSnap = await profileRef.get();
+        if (!profileSnap.exists) {
+            return { success: false, error: 'Tutor profile not found.' };
+        }
 
         await profileRef.update({
-            approvalStatus: decision,
+            approvalStatus: parsed.decision,
+            reviewedAt: admin.firestore.FieldValue.serverTimestamp(),
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         });
-        
+
         return { success: true };
-    } catch (error: any) {
-        console.error("Error reviewing tutor application:", error);
-        return { success: false, error: error.message };
+    } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'Review failed.';
+        console.error('Error reviewing tutor application:', error);
+        return { success: false, error: message };
     }
 }
 
@@ -796,8 +874,69 @@ function labelForYmKey(ym: string): string {
     return new Date(y, m - 1, 15).toLocaleString('en-GB', { month: 'short', year: 'numeric' });
 }
 
+function weekStartMonday(d: Date): Date {
+    const copy = new Date(d);
+    const day = copy.getDay();
+    const diff = copy.getDate() - day + (day === 0 ? -6 : 1);
+    copy.setDate(diff);
+    copy.setHours(0, 0, 0, 0);
+    return copy;
+}
+
+async function getWeeklyStudyTimeData(): Promise<{ week: string; hours: number }[]> {
+    const now = new Date();
+    const buckets: Record<string, { totalSec: number; userIds: Set<string> }> = {};
+    for (let i = 7; i >= 0; i--) {
+        const d = new Date(now.getTime() - i * 7 * 86400000);
+        const key = weekStartMonday(d).toISOString().slice(0, 10);
+        buckets[key] = { totalSec: 0, userIds: new Set() };
+    }
+
+    try {
+        const eightWeeksAgo = Timestamp.fromMillis(now.getTime() - 8 * 7 * 86400000);
+        const snap = await adminDb
+            .collectionGroup('sessions')
+            .where('endedAt', '>=', eightWeeksAgo)
+            .limit(2500)
+            .get();
+
+        snap.forEach((doc) => {
+            const data = doc.data();
+            const ended = parseFirestoreDate(data.endedAt);
+            if (!ended) return;
+            const key = weekStartMonday(ended).toISOString().slice(0, 10);
+            const bucket = buckets[key];
+            if (!bucket) return;
+            const uid = doc.ref.parent.parent?.id;
+            const sec = typeof data.durationSec === 'number' ? data.durationSec : 0;
+            bucket.totalSec += sec;
+            if (uid) bucket.userIds.add(uid);
+        });
+    } catch (error) {
+        console.warn('[analytics] study time query failed:', error);
+    }
+
+    return Object.keys(buckets)
+        .sort()
+        .map((key) => {
+            const bucket = buckets[key]!;
+            const avgHours =
+                bucket.userIds.size > 0
+                    ? bucket.totalSec / 3600 / bucket.userIds.size
+                    : 0;
+            return {
+                week: new Date(`${key}T12:00:00`).toLocaleDateString('en-GB', {
+                    month: 'short',
+                    day: 'numeric',
+                }),
+                hours: Math.round(avgHours * 10) / 10,
+            };
+        });
+}
+
 export async function getAnalyticsDataAction(): Promise<{
     newUsersData: { month: string; users: number }[];
+    studyTimeData: { week: string; hours: number }[];
     kpi: AnalyticsKpi;
     kpiWarnings: string[];
     error: string | null;
@@ -895,8 +1034,11 @@ export async function getAnalyticsDataAction(): Promise<{
             users: counts[ym] ?? 0,
         }));
 
+        const studyTimeData = await getWeeklyStudyTimeData();
+
         return {
             newUsersData,
+            studyTimeData,
             kpi: {
                 totalUsers,
                 returningApprox30d,
@@ -910,6 +1052,7 @@ export async function getAnalyticsDataAction(): Promise<{
         console.error('Error fetching analytics data:', error);
         return {
             newUsersData: [],
+            studyTimeData: [],
             kpi: defaultKpi,
             kpiWarnings,
             error: error.message,
@@ -929,7 +1072,7 @@ export async function deleteUserAction(
     try {
         const { getVerifiedUser } = await import('@/server/lib/auth');
         const adminUser = await getVerifiedUser(adminIdToken);
-        if (!adminUser || adminUser.role !== 'ADMIN') {
+        if (!adminUser || !(await isPlatformAdmin(adminUser.uid, adminUser))) {
             return { success: false, error: 'Administrator access required.' };
         }
         if (adminUser.uid === targetUserId) {
@@ -990,12 +1133,15 @@ export async function getRecentPaymentsAction(): Promise<{ payments: any[], erro
         const snapshot = await adminDb.collection('payments').orderBy('createdAt', 'desc').limit(10).get();
         const payments = snapshot.docs.map(doc => {
             const data = doc.data();
+            const createdAt = data.createdAt as Timestamp | undefined;
             return {
                 id: doc.id,
-                ...data,
-                /** Stripe minor units (e.g. pence); display as `(amount / 100).toFixed(2)` */
+                userId: typeof data.userId === 'string' ? data.userId : '',
                 amount: typeof data.amount === 'number' ? data.amount : 0,
-                createdAt: (data.createdAt as Timestamp).toDate().toISOString()
+                currency: typeof data.currency === 'string' ? data.currency : 'gbp',
+                productCode: data.productCode ?? null,
+                status: data.status ?? null,
+                createdAt: createdAt?.toDate?.()?.toISOString() ?? new Date().toISOString(),
             };
         });
         return { payments, error: null };

@@ -1,9 +1,10 @@
 import { ACUService } from "./acu-service";
 import { FeatureKey, ACU_FEATURE_COSTS } from "@/data/acu-costs";
 import { getUserProfileServer } from "./user";
-import { canUsePremiumFeature } from "@/data/entitlements";
+import { canUsePremiumFeature, requiresSubscriptionForFeature } from "@/data/entitlements";
 import type { SubscriptionType } from "../schemas";
 import { HttpsError } from "../lib/errors";
+import { getTeacherSchoolLink } from "../lib/school-staff-link";
 
 export interface PaidAIFeatureResult<T> {
   success: true,
@@ -26,10 +27,26 @@ export async function runPaidAIFeature<T>(input: {
     throw new HttpsError("not-found", "USER_NOT_FOUND");
   }
 
-  // Admins bypass subscription checks
-  if (user.role !== 'ADMIN') {
-    if (!canUsePremiumFeature(user.subscription as SubscriptionType, input.featureKey)) {
-      throw new HttpsError("failed-precondition", `FEATURE_NOT_INCLUDED_IN_PLAN: ${input.featureKey}`);
+  // Admins bypass subscription checks. ACU-only features (e.g. lesson builder) need ACUs only.
+  if (user.role !== 'ADMIN' && requiresSubscriptionForFeature(input.featureKey)) {
+    const subscriptionType = user.subscription as SubscriptionType;
+    const schoolLinkedTutor =
+      user.role === 'SCHOOL_TUTOR' && (await getTeacherSchoolLink(input.userId)).linked;
+    if (
+      !schoolLinkedTutor &&
+      !canUsePremiumFeature(subscriptionType, input.featureKey)
+    ) {
+      throw new HttpsError('failed-precondition', `FEATURE_NOT_INCLUDED_IN_PLAN: ${input.featureKey}`);
+    }
+    if (
+      schoolLinkedTutor &&
+      !canUsePremiumFeature('SCHOOL_TUTOR', input.featureKey) &&
+      !canUsePremiumFeature(subscriptionType, input.featureKey)
+    ) {
+      throw new HttpsError(
+        'failed-precondition',
+        `FEATURE_NOT_INCLUDED_IN_PLAN: ${input.featureKey} is not enabled for school teachers.`,
+      );
     }
   }
 

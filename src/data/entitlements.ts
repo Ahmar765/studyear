@@ -1,5 +1,5 @@
 import type { SubscriptionType } from "@/server/schemas";
-import { FeatureKey } from "./acu-costs";
+import { FeatureKey, isAcuOnlyFeature } from "./acu-costs";
 
 export const PLAN_ENTITLEMENTS: Record<SubscriptionType, FeatureKey[]> = {
   /**
@@ -83,12 +83,47 @@ export const PLAN_ENTITLEMENTS: Record<SubscriptionType, FeatureKey[]> = {
   PARENT_PRO: [],
   PARENT_PRO_PLUS: [],
   PARENT_ELITE: [],
-  PRIVATE_TUTOR: [],
+  PRIVATE_TUTOR: [
+    "AI_EXPLANATION",
+    "AI_INTERACTIVE_LESSON",
+    "AI_TUTOR_SESSION",
+    "AI_STUDY_PLAN",
+    "AI_QUIZ_GENERATION",
+    "AI_FLASHCARDS",
+    "AI_FEEDBACK",
+    "AI_COURSE_GENERATOR",
+    "TOPIC_SUMMARY",
+    "FORMULA_SHEET",
+    "GRADE_PREDICTION",
+  ],
   SCHOOL_STARTER: [],
   SCHOOL_GROWTH: [],
   SCHOOL_ENTERPRISE: [],
-  SCHOOL_TUTOR: [],
-  SCHOOL_ADMIN: [],
+  SCHOOL_TUTOR: [
+    "AI_EXPLANATION",
+    "AI_INTERACTIVE_LESSON",
+    "AI_TUTOR_SESSION",
+    "AI_STUDY_PLAN",
+    "AI_QUIZ_GENERATION",
+    "AI_FLASHCARDS",
+    "AI_FEEDBACK",
+    "AI_COURSE_GENERATOR",
+    "TOPIC_SUMMARY",
+    "FORMULA_SHEET",
+    "GRADE_PREDICTION",
+    "AI_ASSIGNMENT_REVIEW",
+  ],
+  SCHOOL_ADMIN: [
+    "AI_EXPLANATION",
+    "AI_QUIZ_GENERATION",
+    "AI_FLASHCARDS",
+    "AI_FEEDBACK",
+    "AI_STUDY_PLAN",
+    "AI_COURSE_GENERATOR",
+    "TOPIC_SUMMARY",
+    "AI_INTERACTIVE_LESSON",
+    "GRADE_PREDICTION",
+  ],
   ADMIN: [ // Admins get all entitlements
     "AI_EXPLANATION",
     "AI_QUIZ_GENERATION",
@@ -122,10 +157,16 @@ export const PLAN_ENTITLEMENTS: Record<SubscriptionType, FeatureKey[]> = {
   ],
 };
 
+/** Subscription plan gate — ACU-only features always pass (billing is ACU-only). */
+export function requiresSubscriptionForFeature(featureKey: FeatureKey): boolean {
+  return !isAcuOnlyFeature(featureKey);
+}
+
 export function canUsePremiumFeature(
   subscriptionType: SubscriptionType,
   featureKey: FeatureKey
 ): boolean {
+  if (isAcuOnlyFeature(featureKey)) return true;
   if (subscriptionType === 'ADMIN') return true;
   
   // If a feature is in the FREE tier, anyone can use it (assuming they have ACUs)

@@ -99,7 +99,10 @@ export function getUserProfile(
   const combineAndCallback = () => {
     if (userData) {
       const needsExtended = profileDocPathForRole(userData.role) !== null;
-      const subscriptionTier = subscriptionData?.type ?? 'FREE';
+      const subscriptionTier =
+        userData.role === 'ADMIN'
+          ? 'ADMIN'
+          : (subscriptionData?.type ?? 'FREE');
       const hasPaidSubscriptionDoc =
         subscriptionData &&
         typeof subscriptionTier === 'string' &&

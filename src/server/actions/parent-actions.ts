@@ -19,14 +19,7 @@ import type { ParentDashboardPayload, ParentPlanTier, StudentData } from '@/type
 
 export type { StudentData, ParentDashboardPayload, ParentPlanTier };
 
-const ACTIVE_PARENT_PLANS: ParentPlanTier[] = ['PARENT_PRO', 'PARENT_PRO_PLUS', 'PARENT_ELITE'];
-
-function resolveParentPlan(type: string | undefined): ParentPlanTier | null {
-  if (type && ACTIVE_PARENT_PLANS.includes(type as ParentPlanTier)) {
-    return type as ParentPlanTier;
-  }
-  return null;
-}
+import { resolveParentPlanType } from '@/server/lib/parent-plan';
 
 export interface SavedResourceSummary {
   id: string;
@@ -128,7 +121,7 @@ export async function getParentDashboardDataAction(
   try {
     const subscriptionSnap = await adminDb.collection('subscriptions').doc(parentUser.uid).get();
     const subData = subscriptionSnap.data();
-    const planTier = resolveParentPlan(subData?.type);
+    const planTier = resolveParentPlanType(subData?.type);
 
     if (!subscriptionSnap.exists || !planTier || subData?.status !== 'ACTIVE') {
       throw new HttpsError(

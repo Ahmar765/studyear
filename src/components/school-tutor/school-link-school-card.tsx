@@ -97,8 +97,8 @@ export function SchoolLinkSchoolCard({ onLinked }: { onLinked?: () => void }) {
           Link to your school
         </CardTitle>
         <CardDescription>
-          Connect your teacher account to your school&apos;s StudYear workspace to see live student cohorts,
-          interventions, and assessments.
+          Connect your teacher account to your school&apos;s StudYear workspace. Once linked, AI tools (lesson
+          builder, teaching assistant, etc.) use your school&apos;s shared ACU pool — not a personal wallet.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">

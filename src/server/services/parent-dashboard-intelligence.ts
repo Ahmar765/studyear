@@ -19,6 +19,10 @@ import type {
 } from '@/types/parent-dashboard';
 
 import type { LiveSavedResource, LiveStudyTask, LiveSubjectRow } from '@/server/services/parent-student-live-data';
+import {
+  applyParentPlanGates,
+  parentFeatureFlagsFromTier,
+} from '@/server/lib/parent-plan';
 
 export interface RawStudentRow {
   id: string;
@@ -39,6 +43,13 @@ export interface RawStudentRow {
   strongSubjects: { name: string; topic?: string }[];
   dashboardUpdatedAt?: string;
   predictedGrade?: string;
+  studyActivity?: {
+    pendingTasks: number;
+    completedTasks30d: number;
+    quizAttempts30d: number;
+    avgQuizScore30d: number;
+    dashboardRiskLevel?: string;
+  };
 }
 
 function seedFromId(id: string, salt = 0): number {
@@ -191,63 +202,205 @@ function buildAlerts(children: ChildSnapshot[]): LiveAlert[] {
   return alerts.slice(0, 8);
 }
 
-function buildEarlyWarnings(children: ChildSnapshot[]): EarlyWarning[] {
-  return children
-    .filter((c) => c.examRisk !== 'low' || c.consistency !== 'Good')
-    .map((child) => {
-      const prob = child.examRisk === 'high' ? 68 + (seedFromId(child.id) % 12) : 45 + (seedFromId(child.id, 1) % 20);
-      const severity: EarlyWarning['severity'] = prob > 65 ? 'critical' : 'warning';
-      return {
-        id: `warn-${child.id}`,
-        studentId: child.id,
-        studentName: child.name,
-        title: `${child.weakestSubject} Underperformance Risk`,
-        probability: prob,
-        forecastDays: 12 + (seedFromId(child.id, 2) % 14),
-        causes: [
-          'Reduced revision consistency',
-          child.engagement === 'Low' ? 'Low quiz retention' : 'Increased avoidance behaviour',
-          'Focus collapse after 23 minutes',
-        ],
-        recommendation:
-          'Increase short revision blocks, reduce overload, and add active recall sessions.',
-        severity,
-      };
-    })
-    .slice(0, 4);
+function daysUntil(iso: string): number {
+  const ms = new Date(iso).getTime() - Date.now();
+  return Math.ceil(ms / (1000 * 60 * 60 * 24));
 }
 
-function buildStudyInsights(children: ChildSnapshot[]): StudyBehaviourInsight[] {
-  const templates: Omit<StudyBehaviourInsight, 'id' | 'studentId' | 'studentName'>[] = [
-    { insight: 'Performance improves 28% after 6PM.', category: 'timing' },
-    { insight: 'Attention drops after 23 minutes.', category: 'focus' },
-    { insight: 'Visual learning produces stronger retention.', category: 'method' },
-    { insight: 'Short sessions outperform long sessions.', category: 'fatigue' },
-  ];
+function buildEarlyWarnings(children: ChildSnapshot[], rows: RawStudentRow[]): EarlyWarning[] {
+  const warnings: EarlyWarning[] = [];
 
-  return children.flatMap((child, ci) =>
-    templates.slice(0, 2).map((t, ti) => ({
-      id: `insight-${child.id}-${ti}`,
+  for (const child of children) {
+    const row = rows.find((r) => r.id === child.id);
+    const subjects = child.subjects ?? [];
+    const declining = subjects.filter((s) => s.momentum < -4 || s.progressPercent < 45);
+    const dueSoon =
+      row?.studyTasks?.filter((t) => {
+        const d = daysUntil(t.scheduledAt);
+        return d >= 0 && d <= 3;
+      }) ?? [];
+    const activity = row?.studyActivity;
+    const hasRisk =
+      child.examRisk !== 'low' ||
+      declining.length > 0 ||
+      dueSoon.length > 0 ||
+      (activity?.pendingTasks ?? 0) > 4 ||
+      activity?.dashboardRiskLevel === 'high';
+
+    if (!hasRisk) continue;
+
+    const prob = clamp(
+      100 -
+        child.academicHealth +
+        declining.length * 10 +
+        dueSoon.length * 6 +
+        (activity?.pendingTasks ?? 0) * 2,
+      38,
+      92,
+    );
+    const severity: EarlyWarning['severity'] = prob > 65 ? 'critical' : 'warning';
+    const causes: string[] = [];
+
+    if (declining.length > 0) {
+      const s = declining[0]!;
+      causes.push(
+        `${s.name} quiz average at ${s.progressPercent}% with ${s.momentum < 0 ? 'negative' : 'flat'} momentum (${s.momentum}%)`,
+      );
+    }
+    if (row?.weakTopic) causes.push(`Identified weak area: ${row.weakTopic}`);
+    if (dueSoon.length > 0) {
+      causes.push(
+        `${dueSoon.length} planner task(s) due within 3 days${dueSoon[0] ? ` (next: ${dueSoon[0].title})` : ''}`,
+      );
+    }
+    if ((activity?.pendingTasks ?? 0) > 4) {
+      causes.push(`${activity!.pendingTasks} overdue or pending study tasks in planner`);
+    }
+    if (child.engagement === 'Low') causes.push('Low study-task completion rate (30 days)');
+    if (causes.length === 0) causes.push(`${child.weakestSubject} flagged as weakest subject on dashboard`);
+
+    const recommendations: string[] = [];
+    if (declining.length > 0) {
+      recommendations.push(
+        `Schedule 20-minute active-recall blocks for ${declining[0]!.name} before the next quiz.`,
+      );
+    }
+    if (dueSoon.length > 0) {
+      recommendations.push('Prioritise upcoming planner deadlines — break work into two short sessions.');
+    }
+    if (child.engagement === 'Low') {
+      recommendations.push('Re-enable daily planner reminders and aim for one completed task per day.');
+    }
+    if (recommendations.length === 0) {
+      recommendations.push('Review quiz results together and set one measurable goal for this week.');
+    }
+
+    const forecastDays = dueSoon.length > 0 ? Math.max(1, daysUntil(dueSoon[0]!.scheduledAt)) : 14;
+
+    warnings.push({
+      id: `warn-${child.id}`,
       studentId: child.id,
       studentName: child.name,
-      ...t,
-      insight: ci === 0 ? t.insight : t.insight.replace('23', String(18 + (seedFromId(child.id) % 10))),
-    })),
-  );
+      title:
+        declining.length > 0
+          ? `${declining[0]!.name} underperformance risk`
+          : `${child.weakestSubject !== 'N/A' ? child.weakestSubject : 'Academic'} risk alert`,
+      probability: prob,
+      forecastDays,
+      causes,
+      recommendation: recommendations.join(' '),
+      severity,
+    });
+  }
+
+  return warnings.slice(0, 6);
 }
 
-function buildVerifiedHours(children: ChildSnapshot[]): VerifiedStudyHours[] {
+function buildStudyInsights(children: ChildSnapshot[], rows: RawStudentRow[]): StudyBehaviourInsight[] {
+  const insights: StudyBehaviourInsight[] = [];
+
+  for (const child of children) {
+    const row = rows.find((r) => r.id === child.id);
+    const subjects = child.subjects ?? [];
+    const activity = row?.studyActivity;
+
+    if (subjects.length > 0) {
+      const best = subjects.reduce((a, b) => (a.momentum > b.momentum ? a : b));
+      const worst = subjects.reduce((a, b) => (a.momentum < b.momentum ? a : b));
+
+      if (best.momentum > 2) {
+        insights.push({
+          id: `insight-${child.id}-best`,
+          studentId: child.id,
+          studentName: child.name,
+          insight: `${best.name} improved ${best.momentum}% vs earlier quiz attempts (now ${best.progressPercent}% average).`,
+          category: 'method',
+        });
+      }
+      if (worst.momentum < -2) {
+        insights.push({
+          id: `insight-${child.id}-worst`,
+          studentId: child.id,
+          studentName: child.name,
+          insight: `${worst.name} retention dipped ${Math.abs(worst.momentum)}% — short revision blocks recommended.`,
+          category: 'focus',
+        });
+      }
+      const belowTarget = subjects.filter(
+        (s) => s.targetGrade && s.progressPercent < 55,
+      );
+      if (belowTarget.length > 0) {
+        insights.push({
+          id: `insight-${child.id}-target`,
+          studentId: child.id,
+          studentName: child.name,
+          insight: `${belowTarget.length} subject(s) below target pace — focus on ${belowTarget[0]!.name} (target ${belowTarget[0]!.targetGrade}).`,
+          category: 'fatigue',
+        });
+      }
+    }
+
+    if (activity && activity.quizAttempts30d > 0) {
+      insights.push({
+        id: `insight-${child.id}-quiz`,
+        studentId: child.id,
+        studentName: child.name,
+        insight: `${activity.quizAttempts30d} quiz attempts in the last 30 days — average score ${activity.avgQuizScore30d}%.`,
+        category: 'method',
+      });
+    }
+
+    if (activity && activity.completedTasks30d > 0) {
+      const ratio =
+        activity.quizAttempts30d > 0
+          ? Math.min(1, activity.quizAttempts30d / activity.completedTasks30d)
+          : 0.5;
+      insights.push({
+        id: `insight-${child.id}-tasks`,
+        studentId: child.id,
+        studentName: child.name,
+        insight: `${activity.completedTasks30d} planner tasks completed in 30 days${activity.pendingTasks > 0 ? `; ${activity.pendingTasks} still pending` : ''}.`,
+        category: ratio < 0.6 ? 'timing' : 'method',
+      });
+    }
+
+    if (child.strongestSubject !== 'N/A' && child.weakestSubject !== 'N/A') {
+      insights.push({
+        id: `insight-${child.id}-spread`,
+        studentId: child.id,
+        studentName: child.name,
+        insight: `Strongest: ${child.strongestSubject} · needs attention: ${child.weakestSubject} (overall progress ${child.progress}%).`,
+        category: 'focus',
+      });
+    }
+  }
+
+  return insights;
+}
+
+function buildVerifiedHours(children: ChildSnapshot[], rows: RawStudentRow[]): VerifiedStudyHours[] {
   return children.map((child) => {
-    const logged = 8 + (seedFromId(child.id) % 8);
-    const ratio = child.consistency === 'Good' ? 0.82 : child.consistency === 'Fair' ? 0.68 : 0.55;
-    const verified = Math.round(logged * ratio * 10) / 10;
+    const row = rows.find((r) => r.id === child.id);
+    const activity = row?.studyActivity;
+    const completed = activity?.completedTasks30d ?? 0;
+    const quizzes = activity?.quizAttempts30d ?? 0;
+    const pending = activity?.pendingTasks ?? 0;
+
+    const loggedHours = Math.round((completed * 0.75 + pending * 0.35) * 10) / 10;
+    const verificationRatio =
+      completed > 0 ? clamp(quizzes / completed, 0.35, 1) : quizzes > 0 ? 0.7 : 0.45;
+    const verifiedHours = Math.round(loggedHours * verificationRatio * 10) / 10;
+    const verifiedScore = Math.round(verificationRatio * 100);
+
     return {
       studentId: child.id,
       studentName: child.name,
-      loggedHours: logged,
-      verifiedHours: verified,
-      verifiedScore: Math.round(ratio * 100),
-      sessionQuality: ratio > 0.8 ? 'Excellent' : ratio > 0.65 ? 'Good' : 'Fair',
+      loggedHours: loggedHours > 0 ? loggedHours : quizzes > 0 ? Math.round(quizzes * 0.4 * 10) / 10 : 0,
+      verifiedHours:
+        verifiedHours > 0 ? verifiedHours : quizzes > 0 ? Math.round(quizzes * 0.3 * 10) / 10 : 0,
+      verifiedScore,
+      sessionQuality:
+        verifiedScore > 80 ? 'Excellent' : verifiedScore > 60 ? 'Good' : verifiedScore > 40 ? 'Fair' : 'Needs focus',
     };
   });
 }
@@ -291,48 +444,119 @@ function buildHomework(children: ChildSnapshot[], rows: RawStudentRow[]): Homewo
   return items;
 }
 
-function buildGradeProbabilities(children: ChildSnapshot[]): GradeProbability[] {
-  const avg = children.length
-    ? children.reduce((a, c) => a + c.academicHealth, 0) / children.length
-    : 70;
-  const base = avg / 100;
-  return [
-    { grade: 'Grade 7', likelihood: clamp(Math.round(base * 95), 40, 95) },
-    { grade: 'Grade 8', likelihood: clamp(Math.round(base * 72), 25, 80) },
-    { grade: 'Grade 9', likelihood: clamp(Math.round(base * 38), 10, 55) },
-  ];
+function parsePredictedGradeLabel(predicted?: string): string | null {
+  if (!predicted?.trim()) return null;
+  const t = predicted.trim();
+  const match = t.match(/grade\s*(\d+)/i) ?? t.match(/^(\d)$/);
+  if (match) return `Grade ${match[1]}`;
+  if (/^[A-F][*+-]?$/i.test(t)) return t.toUpperCase();
+  return t;
 }
 
-function buildMicroWeaknesses(children: ChildSnapshot[]): MicroWeakness[] {
-  const areaPools: Record<string, string[]> = {
-    Mathematics: [
-      'Algebraic structure',
-      'Equation interpretation',
-      'Speed under pressure',
-      'Multi-step reasoning',
-    ],
-    default: [
-      'Concept retention',
-      'Application under time pressure',
-      'Cross-topic synthesis',
-      'Exam technique',
-    ],
-  };
+function buildGradeProbabilities(children: ChildSnapshot[], rows: RawStudentRow[]): GradeProbability[] {
+  const out: GradeProbability[] = [];
 
-  return children
-    .filter((c) => c.weakestSubject !== 'N/A')
-    .map((child) => {
-      const areas = areaPools[child.weakestSubject] ?? areaPools.default;
-      return {
-        id: `micro-${child.id}`,
+  for (const child of children) {
+    const row = rows.find((r) => r.id === child.id);
+    const predicted = parsePredictedGradeLabel(row?.predictedGrade ?? child.predictedGrade);
+    const subjects = child.subjects ?? [];
+    const avgProgress =
+      subjects.length > 0
+        ? subjects.reduce((a, s) => a + s.progressPercent, 0) / subjects.length
+        : child.progress;
+    const avgMomentum =
+      subjects.length > 0
+        ? subjects.reduce((a, s) => a + s.momentum, 0) / subjects.length
+        : child.weeklyGrowth;
+
+    if (predicted) {
+      const anchor = parseInt(predicted.replace(/\D/g, ''), 10);
+      if (Number.isFinite(anchor) && anchor >= 1 && anchor <= 9) {
+        for (const offset of [-1, 0, 1]) {
+          const g = anchor + offset;
+          if (g < 4 || g > 9) continue;
+          const dist = Math.abs(offset);
+          const likelihood = clamp(
+            Math.round(avgProgress * 0.6 + avgMomentum * 2 - dist * 18 + (offset === 0 ? 25 : 0)),
+            12,
+            88,
+          );
+          out.push({
+            studentId: child.id,
+            grade: `Grade ${g}`,
+            likelihood,
+          });
+        }
+      } else {
+        out.push({
+          studentId: child.id,
+          grade: predicted,
+          likelihood: clamp(Math.round(avgProgress * 0.85), 35, 92),
+        });
+      }
+    } else {
+      const base = avgProgress / 100;
+      for (const { grade, mult } of [
+        { grade: 'Grade 7', mult: 0.95 },
+        { grade: 'Grade 8', mult: 0.72 },
+        { grade: 'Grade 9', mult: 0.38 },
+      ]) {
+        out.push({
+          studentId: child.id,
+          grade,
+          likelihood: clamp(Math.round(base * mult * 100 + avgMomentum), 10, 90),
+        });
+      }
+    }
+  }
+
+  return out;
+}
+
+function buildMicroWeaknesses(children: ChildSnapshot[], rows: RawStudentRow[]): MicroWeakness[] {
+  const items: MicroWeakness[] = [];
+
+  for (const child of children) {
+    const row = rows.find((r) => r.id === child.id);
+    const weakList = row?.weakSubjects?.length
+      ? row.weakSubjects
+      : child.weakestSubject !== 'N/A'
+        ? [{ name: child.weakestSubject, topic: row?.weakTopic }]
+        : [];
+
+    for (const ws of weakList.slice(0, 2)) {
+      const subjectRow = child.subjects?.find((s) => s.name === ws.name);
+      const areas: string[] = [];
+      if (ws.topic) areas.push(ws.topic);
+      if (subjectRow) {
+        if (subjectRow.progressPercent < 50) {
+          areas.push(`Quiz mastery at ${subjectRow.progressPercent}%`);
+        }
+        if (subjectRow.momentum < 0) {
+          areas.push(`Recent quiz trend: ${subjectRow.momentum}%`);
+        }
+        if (subjectRow.targetGrade) {
+          areas.push(`Target ${subjectRow.targetGrade} — below pace`);
+        }
+      }
+      if (areas.length === 0) {
+        areas.push('Concept retention', 'Application under time pressure');
+      }
+
+      const gap = subjectRow ? Math.max(0, 70 - subjectRow.progressPercent) : 20;
+      items.push({
+        id: `micro-${child.id}-${ws.name}`,
         studentId: child.id,
         studentName: child.name,
-        subject: child.weakestSubject,
-        areas: areas.slice(0, 3 + (seedFromId(child.id) % 2)),
-        recoveryWeeks: 2 + (seedFromId(child.id, 4) % 5),
-        intensity: child.examRisk === 'high' ? 'intensive' : 'moderate',
-      } as MicroWeakness;
-    });
+        subject: ws.name,
+        areas: areas.slice(0, 4),
+        recoveryWeeks: clamp(Math.ceil(gap / 15), 2, 8),
+        intensity: child.examRisk === 'high' || (subjectRow?.progressPercent ?? 100) < 40 ? 'intensive' : 'moderate',
+      });
+    }
+  }
+
+  return items;
 }
 
 function buildEmotional(children: ChildSnapshot[]): EmotionalSignal[] {
@@ -449,16 +673,6 @@ function buildBriefing(children: ChildSnapshot[]): WeeklyBriefing {
   };
 }
 
-function planFeatures(tier: ParentPlanTier) {
-  return {
-    aiIntervention: tier === 'PARENT_PRO_PLUS' || tier === 'PARENT_ELITE',
-    liveAlerts: tier === 'PARENT_ELITE',
-    pathwayEngine: tier === 'PARENT_PRO_PLUS' || tier === 'PARENT_ELITE',
-    emotionalIntelligence: tier === 'PARENT_PRO_PLUS' || tier === 'PARENT_ELITE',
-    parentAdvisor: tier === 'PARENT_PRO_PLUS' || tier === 'PARENT_ELITE',
-    familyIntelligence: tier === 'PARENT_ELITE',
-  };
-}
 
 export function buildParentDashboardPayload(
   rows: RawStudentRow[],
@@ -481,7 +695,7 @@ export function buildParentDashboardPayload(
   const focusConsistency: ConsistencyLevel =
     overallScore > 75 ? 'High' : overallScore > 55 ? 'Moderate' : 'Low';
 
-  return {
+  const payload: ParentDashboardPayload = {
     planTier,
     stability: {
       overallScore,
@@ -491,18 +705,20 @@ export function buildParentDashboardPayload(
     },
     liveAlerts: buildAlerts(children),
     children,
-    earlyWarnings: buildEarlyWarnings(children),
-    studyInsights: buildStudyInsights(children),
-    verifiedHours: buildVerifiedHours(children),
+    earlyWarnings: buildEarlyWarnings(children, rows),
+    studyInsights: buildStudyInsights(children, rows),
+    verifiedHours: buildVerifiedHours(children, rows),
     homework: buildHomework(children, rows),
-    gradeProbabilities: buildGradeProbabilities(children),
-    microWeaknesses: buildMicroWeaknesses(children),
+    gradeProbabilities: buildGradeProbabilities(children, rows),
+    microWeaknesses: buildMicroWeaknesses(children, rows),
     emotionalSignals: buildEmotional(children),
     performance: buildPerformance(children, rows),
     family: buildFamily(children),
     weeklyBriefing: buildBriefing(children),
-    features: planFeatures(planTier),
+    features: parentFeatureFlagsFromTier(planTier),
   };
+
+  return applyParentPlanGates(payload);
 }
 
 export { deriveParentLinkCode } from '@/lib/parent-link-code';

@@ -1,18 +1,6 @@
-import Link from 'next/link';
-import { TutorSubPage } from '@/components/tutor/tutor-sub-page';
-import { Button } from '@/components/ui/button';
-import { UserCog } from 'lucide-react';
+import { redirect } from 'next/navigation';
 
+/** Profile editor lives on onboarding flow with `?edit=1` (avoids redirect when already complete). */
 export default function TutorProfilePage() {
-  return (
-    <TutorSubPage
-      title="Authority profile"
-      description="Edit headline, bio, rates, verification badges, and marketplace positioning."
-      icon={UserCog}
-    >
-      <Button asChild>
-        <Link href="/tutor/onboarding">Open profile editor</Link>
-      </Button>
-    </TutorSubPage>
-  );
+  redirect('/tutor/onboarding?edit=1');
 }

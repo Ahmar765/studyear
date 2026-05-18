@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminAuth } from '@/lib/firebase/admin-app';
-import { configureCloudinary, cloudinary, isCloudinaryConfigured } from '@/lib/cloudinary-server';
+import { isCloudinaryConfigured, uploadBufferToCloudinary } from '@/lib/cloudinary-server';
 
 export const runtime = 'nodejs';
 
@@ -9,8 +9,11 @@ const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
 export async function POST(req: NextRequest) {
   if (!isCloudinaryConfigured()) {
     return NextResponse.json(
-      { error: 'Image uploads are not configured (missing CLOUDINARY_* env vars).' },
-      { status: 503 }
+      {
+        error:
+          'Image uploads are not configured. Add NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME and NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET to .env, then restart the dev server.',
+      },
+      { status: 503 },
     );
   }
 
@@ -53,35 +56,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Image must be 5 MB or smaller' }, { status: 400 });
   }
 
-  if (!configureCloudinary()) {
-    return NextResponse.json({ error: 'Cloudinary configuration failed' }, { status: 503 });
-  }
-
   const folder = `studyear/users/${uid}`;
   const public_id = kind === 'cover' ? 'cover' : 'avatar';
 
   try {
-    const result = await new Promise<{ secure_url: string }>((resolve, reject) => {
-      const stream = cloudinary.uploader.upload_stream(
-        {
-          folder,
-          public_id,
-          overwrite: true,
-          resource_type: 'image',
-          invalidate: true,
-        },
-        (err, res) => {
-          if (err || !res?.secure_url) {
-            reject(err ?? new Error('Upload failed'));
-          } else {
-            resolve({ secure_url: res.secure_url });
-          }
-        }
-      );
-      stream.end(buf);
+    const url = await uploadBufferToCloudinary(buf, {
+      folder,
+      public_id,
+      resource_type: 'image',
+      overwrite: true,
     });
-
-    return NextResponse.json({ url: result.secure_url });
+    return NextResponse.json({ url });
   } catch (e: unknown) {
     console.error('Cloudinary upload error:', e);
     const message = e instanceof Error ? e.message : 'Upload failed';

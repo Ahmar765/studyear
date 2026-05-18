@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Check, Loader, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/use-auth';
 import { reviewTutorApplicationAction, type TutorApplication } from '@/server/actions/admin-actions';
 import {
   AlertDialog,
@@ -20,13 +21,23 @@ import {
 } from "@/components/ui/alert-dialog"
 
 export default function TutorActions({ application }: { application: TutorApplication }) {
+    const { user } = useAuth();
     const [isPending, startTransition] = useTransition();
     const { toast } = useToast();
     const router = useRouter();
 
     const handleReview = (decision: 'APPROVED' | 'REJECTED') => {
+        if (!user) {
+            toast({ variant: 'destructive', title: 'Not signed in', description: 'Log in as admin to review applications.' });
+            return;
+        }
         startTransition(async () => {
-            const result = await reviewTutorApplicationAction({ tutorId: application.userId, decision });
+            const idToken = await user.getIdToken();
+            const result = await reviewTutorApplicationAction({
+                idToken,
+                tutorId: application.userId,
+                decision,
+            });
             if (result.success) {
                 toast({
                     title: `Application ${decision.toLowerCase()}`,

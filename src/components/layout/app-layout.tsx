@@ -47,6 +47,8 @@ import {
   PoundSterling,
   Video,
   ClipboardList,
+  Fuel,
+  Sparkles,
 } from "lucide-react";
 import Logo from "../logo";
 import { Button } from "../ui/button";
@@ -88,6 +90,8 @@ const studentNavItems = [
   { href: "/saved-resources", label: "Saved Resources", icon: Bookmark },
   { href: "/create", label: "Create Resource", icon: PlusCircle },
   { href: "/search", label: "Find Resources", icon: Search },
+  { href: "/contribute", label: "Submit video / paper", icon: FileText },
+  { href: "/contribute", label: "Submit video / paper", icon: FileText },
 ];
 
 const adminNavItems = [
@@ -116,6 +120,7 @@ const schoolTutorNavItems = [
   { href: "/teacher/analytics", label: "Analytics", icon: BarChart },
   { href: "/teacher/communications", label: "Communications", icon: MessageSquareText },
   { href: "/ai-tutor", label: "AI Teaching Assistant", icon: Bot },
+  { href: "/create/ai-course", label: "AI lesson builder", icon: Sparkles },
 ];
 
 const privateTutorNavItems = [
@@ -125,6 +130,7 @@ const privateTutorNavItems = [
   { href: "/tutor/classroom", label: "Classroom", icon: Video },
   { href: "/tutor/earnings", label: "Earnings", icon: PoundSterling },
   { href: "/tutor/profile", label: "Authority profile", icon: UserCog },
+  { href: "/checkout", label: "Top up ACUs", icon: Fuel },
   { href: "/ai-tutor", label: "AI Teaching Assistant", icon: Bot },
   { href: "/tutors", label: "Marketplace listing", icon: GraduationCap },
 ];
@@ -140,6 +146,7 @@ const schoolNavItems = [
   { href: "/school/assessments", label: "Assessments", icon: FileText },
   { href: "/school/reports", label: "Executive reports", icon: BarChart },
   { href: "/school/resources", label: "Knowledge hub", icon: BookCopy },
+  { href: "/checkout", label: "Top up ACUs", icon: Fuel },
   { href: "/school/settings", label: "Settings", icon: Settings },
 ];
 
@@ -159,6 +166,10 @@ const studentShellPrefixes = [
   '/saved-resources',
   '/search',
   '/profile-setup',
+  '/tutors',
+  '/resources',
+  '/contribute',
+  '/past-papers',
 ];
 
 function isStudentShellPath(pathname: string): boolean {
@@ -264,25 +275,43 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         const isTeacherDashboard = pathname.startsWith('/teacher');
         const isSchoolDashboard = pathname.startsWith('/school');
         const isParentDashboard = pathname.startsWith('/parent');
-        const isTutorDashboard = pathname.startsWith('/tutor');
+        /** `/tutors` must not match — only private tutor shell under `/tutor` or `/tutor/…`. */
+        const isTutorDashboard =
+          pathname === '/tutor' || pathname.startsWith('/tutor/');
         /** Billing / account live outside role dashboards; allow checkout without bouncing back. */
         const parentAllowedOutsideParentRoutes =
-          pathname.startsWith('/checkout') || pathname === '/account';
+          pathname.startsWith('/checkout') ||
+          pathname === '/account' ||
+          pathname.startsWith('/account/') ||
+          pathname === '/profile-setup' ||
+          pathname.startsWith('/contribute') ||
+          pathname.startsWith('/search') ||
+          pathname.startsWith('/resources') ||
+          pathname.startsWith('/tutors');
         const tutorAllowedOutsideTutorRoutes =
           pathname.startsWith('/checkout') ||
           pathname === '/account' ||
+          pathname.startsWith('/top-up') ||
           pathname.startsWith('/ai-tutor') ||
           pathname.startsWith('/tutors');
         const teacherAllowedOutsideTeacherRoutes =
-          pathname.startsWith('/checkout') ||
           pathname === '/account' ||
-          pathname.startsWith('/ai-tutor');
+          pathname.startsWith('/account/') ||
+          pathname === '/profile-setup' ||
+          pathname.startsWith('/create/') ||
+          pathname.startsWith('/ai-tutor') ||
+          pathname.startsWith('/contribute') ||
+          pathname.startsWith('/search') ||
+          pathname.startsWith('/resources');
 
         const adminAllowedOutsideAdmin =
           pathname.startsWith('/blog') ||
           pathname.startsWith('/create') ||
           pathname.startsWith('/checkout') ||
-          pathname.startsWith('/account');
+          pathname.startsWith('/account') ||
+          pathname.startsWith('/contribute') ||
+          pathname.startsWith('/search') ||
+          pathname.startsWith('/resources');
 
         if (role === 'ADMIN' && !isAdminDashboard && !adminAllowedOutsideAdmin) {
           router.replace('/admin/dashboard');
@@ -290,7 +319,17 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         else if (role === 'SCHOOL_ADMIN') {
           const schoolOnboarding = pathname === '/school/onboarding';
           const schoolAllowedOutside =
-            pathname.startsWith('/checkout') || pathname === '/account';
+            pathname.startsWith('/checkout') ||
+            pathname.startsWith('/top-up') ||
+            pathname === '/account' ||
+            pathname.startsWith('/account/') ||
+            pathname === '/profile-setup' ||
+            pathname.startsWith('/contribute') ||
+            pathname.startsWith('/search') ||
+            pathname.startsWith('/resources') ||
+            pathname.startsWith('/create') ||
+            pathname.startsWith('/saved-resources') ||
+            pathname.startsWith('/past-papers');
           if (!isSchoolDashboard && !schoolOnboarding && !schoolAllowedOutside) {
             router.replace('/school/dashboard');
           } else if (pathname === '/') {
@@ -298,7 +337,11 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           }
         }
         else if (role === 'SCHOOL_TUTOR') {
-          if (
+          if (pathname === '/') {
+            router.replace('/teacher/dashboard');
+          } else if (isTeacherDashboard || teacherAllowedOutsideTeacherRoutes) {
+            // Allow profile edit, AI lesson builder, account, etc.
+          } else if (
             isAdminDashboard ||
             isSchoolDashboard ||
             isParentDashboard ||
@@ -306,12 +349,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             isStudentShellPath(pathname)
           ) {
             router.replace('/teacher/dashboard');
-          } else if (
-            !isTeacherDashboard &&
-            !teacherAllowedOutsideTeacherRoutes
-          ) {
-            router.replace('/teacher/dashboard');
-          } else if (pathname === '/') {
+          } else {
             router.replace('/teacher/dashboard');
           }
         }
@@ -488,9 +526,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                           router.push(
                             resolvedRole === 'PRIVATE_TUTOR'
                               ? '/tutor/profile'
-                              : resolvedRole === 'SCHOOL_TUTOR'
-                                ? '/teacher/dashboard'
-                                : '/profile-setup',
+                              : '/profile-setup',
                           )
                         }
                       >

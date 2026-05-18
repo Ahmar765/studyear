@@ -5,36 +5,17 @@ import { adminDb } from '@/lib/firebase/admin-app';
 import { fetchSchoolPortalContext } from '@/server/services/school-portal-live-data';
 import { buildSchoolCommandCentrePayload } from '@/server/services/school-portal-intelligence';
 import { ensureSchoolStaffJoinCode } from '@/server/lib/school-staff-link';
+import { resolveSchoolAdmin } from '@/server/lib/school-admin';
 import type { SchoolCommandCentrePayload, SchoolOnboardingProfile } from '@/types/school-portal';
 import * as admin from 'firebase-admin';
-
-async function requireSchoolAdmin(idToken?: string | null) {
-  const user = await getVerifiedUser(idToken);
-  if (!user) throw new Error('Not authenticated.');
-  if (user.role !== 'SCHOOL_ADMIN') throw new Error('School administrator access only.');
-
-  const staffSnap = await adminDb
-    .collection('school_staff')
-    .where('userId', '==', user.uid)
-    .where('role', '==', 'SCHOOL_ADMIN')
-    .limit(1)
-    .get();
-
-  if (staffSnap.empty) throw new Error('No school is linked to this account.');
-  const schoolId = staffSnap.docs[0]!.data().schoolId as string;
-  return { uid: user.uid, schoolId };
-}
 
 export async function getSchoolCommandCentreAction(
   idToken?: string | null,
 ): Promise<{ success: boolean; data?: SchoolCommandCentrePayload; error?: string }> {
   try {
-    const user = await getVerifiedUser(idToken);
-    if (!user || user.role !== 'SCHOOL_ADMIN') {
-      return { success: false, error: 'School administrator access only.' };
-    }
+    const schoolAdmin = await resolveSchoolAdmin(idToken);
 
-    const ctx = await fetchSchoolPortalContext(user.uid);
+    const ctx = await fetchSchoolPortalContext(schoolAdmin.uid);
     if (!ctx) {
       return { success: false, error: 'No school workspace found for this account.' };
     }
@@ -58,7 +39,7 @@ export async function getSchoolOnboardingStateAction(
   error?: string;
 }> {
   try {
-    const { schoolId } = await requireSchoolAdmin(idToken);
+    const { schoolId } = await resolveSchoolAdmin(idToken);
     const doc = await adminDb.collection('school_accounts').doc(schoolId).get();
     const d = doc.data() ?? {};
     return {
@@ -82,7 +63,7 @@ export async function saveSchoolOnboardingStepAction(
   complete?: boolean,
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const { schoolId } = await requireSchoolAdmin(idToken);
+    const { schoolId } = await resolveSchoolAdmin(idToken);
     const ref = adminDb.collection('school_accounts').doc(schoolId);
     const existing = (await ref.get()).data() ?? {};
     const prevProfile = (existing.onboardingProfile as SchoolOnboardingProfile) ?? {};

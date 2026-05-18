@@ -27,6 +27,7 @@ import './ai/flows/study-plan-generation.ts';
 import './ai/flows/diagnostic-report-generation.ts';
 import './ai/flows/explain-topic.ts';
 import './ai/flows/intervention-generation.ts';
+import './ai/flows/parent-advisor-generation.ts';
 import './ai/flows/recovery-plan-generation.ts';
 import './ai/flows/image-generation.ts';
 import './ai/flows/chart-generation.ts';

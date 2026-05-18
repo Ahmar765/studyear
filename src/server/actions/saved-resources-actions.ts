@@ -2,6 +2,7 @@
 
 import { adminDb } from "@/lib/firebase/admin-app";
 import { verifyIdTokenString } from "@/server/lib/auth";
+import { toPlainJson } from "@/server/lib/serialize-firestore";
 import * as admin from "firebase-admin";
 
 export type SavedResourceListItem = {
@@ -116,7 +117,7 @@ export async function fetchSavedResourceById(
         ? ts.toDate().toLocaleDateString()
         : "",
       linkedEntityId,
-      content: data.content ?? null,
+      content: toPlainJson(data.content ?? null),
       sourceInput:
         data.sourceInput != null ? String(data.sourceInput) : null,
     };

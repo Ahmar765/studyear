@@ -28,10 +28,16 @@ const MessageBlockSchema = z.object({
   body: z.string().optional(),
 });
 
+const BusinessDetailsSchema = z.object({
+  companyName: z.string().optional(),
+  registeredAddress: z.string().optional(),
+});
+
 const CommunicationsSchema = z.object({
   supportEmail: z.string().email().optional(),
   contactEmail: z.string().email().optional(),
   noreplyEmail: z.string().email().optional(),
+  businessDetails: BusinessDetailsSchema.optional(),
   forgotPassword: MessageBlockSchema.optional(),
   contactForm: MessageBlockSchema.optional(),
   signupWelcome: MessageBlockSchema.optional(),

@@ -13,6 +13,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Bot, User as UserIcon, Send, Loader, Sparkles, BookOpen, AlertTriangle, UserCheck, Lightbulb, CheckCircle, Search, HelpCircle } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
+import { useEffectiveRole } from '@/hooks/use-effective-role';
 import { Form, FormControl, FormField, FormItem } from '@/components/ui/form';
 import { AiTutorAssistanceInput, AiTutorAssistanceOutput } from '@/server/ai/flows/ai-tutor-assistance';
 import { Badge } from '@/components/ui/badge';
@@ -137,6 +138,8 @@ export default function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isPending, startTransition] = useTransition();
   const { user } = useAuth();
+  const { role: effectiveRole } = useEffectiveRole();
+  const isSchoolTeacher = effectiveRole === 'SCHOOL_TUTOR';
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
 
@@ -175,12 +178,27 @@ export default function ChatInterface() {
         };
         setMessages(prev => [...prev, responseMessage]);
       } else {
+        const raw = result.error || 'Sorry, I couldn\'t get a response. Please try again later.';
+        const isInsufficientAcu =
+          raw.includes('INSUFFICIENT_ACU_BALANCE') ||
+          raw.includes('INSUFFICIENT_SCHOOL_ACU_BALANCE') ||
+          raw.toLowerCase().includes('insufficient');
+        const isSchoolNotLinked = raw.includes('SCHOOL_NOT_LINKED');
+        const friendly = isSchoolNotLinked
+          ? 'Link your school on the Command Centre to use AI tools with your school’s shared ACU pool.'
+          : isInsufficientAcu && isSchoolTeacher
+            ? 'Your school’s ACU pool does not have enough credits for this message. Ask your school administrator to top up under School → ACU command.'
+            : isInsufficientAcu
+              ? 'You need more ACUs to run the AI tutor (this message costs 5 ACUs). Use Top up ACUs in the sidebar or header, then try again.'
+              : raw.includes('Firestore') || raw.includes('balanceBefore')
+                ? 'We could not update your ACU wallet. Please refresh the page or top up ACUs and try again.'
+                : raw;
         const errorMessage: AssistantMessage = {
              id: crypto.randomUUID(),
              role: 'assistant',
              content: {
-                 escalated: true,
-                 response: result.error || 'Sorry, I couldn\'t get a response. Please try again later.'
+                 escalated: isInsufficientAcu || raw.includes('FEATURE_NOT_INCLUDED'),
+                 response: friendly,
              }
         }
         setMessages(prev => [...prev, errorMessage]);

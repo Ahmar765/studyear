@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { SchoolStaffJoinCodePanel } from "@/components/school/school-staff-join-code-panel";
+import { StaffCohortAssignDialog } from "@/components/school/staff-cohort-assign-dialog";
 
 export default function SchoolStaffPage() {
   const { user, loading: authLoading } = useAuth();
@@ -107,7 +108,7 @@ export default function SchoolStaffPage() {
         <div className="space-y-2">
           <h2 className="text-3xl font-bold tracking-tight">Staff Management</h2>
           <p className="text-muted-foreground">
-            Onboard teachers and other staff members and assign them to student cohorts.
+            Onboard teachers and assign year-group cohorts so each teacher sees the right classes.
           </p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
@@ -219,6 +220,8 @@ export default function SchoolStaffPage() {
                   <TableHead>Name</TableHead>
                   <TableHead>Role</TableHead>
                   <TableHead>Email</TableHead>
+                  <TableHead>Cohorts</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -237,6 +240,18 @@ export default function SchoolStaffPage() {
                       <Badge variant="secondary">{member.role.replace("SCHOOL_", "")}</Badge>
                     </TableCell>
                     <TableCell>{member.email}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground max-w-[12rem]">
+                      {member.role === "SCHOOL_TUTOR"
+                        ? member.assignedYearGroups.length
+                          ? member.assignedYearGroups.join(", ")
+                          : "All year groups"
+                        : "—"}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {member.role === "SCHOOL_TUTOR" ? (
+                        <StaffCohortAssignDialog member={member} onSaved={load} />
+                      ) : null}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

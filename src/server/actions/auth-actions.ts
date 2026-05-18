@@ -8,6 +8,8 @@ import { createSession, endActiveSession } from "@/server/services/session";
 import type { UserRole, SubscriptionType } from "@/server/schemas";
 import { deriveParentLinkCode } from "@/lib/parent-link-code";
 import { generateSchoolStaffJoinCode } from "@/lib/school-staff-join-code";
+import { ensurePlatformAdminAccess } from "@/server/lib/platform-admin";
+import { sendWelcomeEmail } from "@/server/lib/mail";
 
 const allowedRoles: UserRole[] = ["STUDENT", "PARENT", "PRIVATE_TUTOR", "SCHOOL_ADMIN", "SCHOOL_TUTOR", "ADMIN"];
 
@@ -150,6 +152,11 @@ export async function signup(uid: string, email: string, role: string, displayNa
         if (!isAdmin) {
             await adminAuth.setCustomUserClaims(uid, { role: userRole });
         }
+        await ensurePlatformAdminAccess(uid, email);
+
+        void sendWelcomeEmail(email, name).catch((err) =>
+          console.error('[signup] welcome email failed:', err),
+        );
 
         const { sessionId } = await createSession(uid, { platform: "web", userAgent: "unknown" });
         return { message: "Success", error: null, sessionId };
@@ -192,6 +199,7 @@ export async function handleEmailLogin(uid: string, email: string | null) {
     if (email) {
         await tryPromoteToAdmin(uid, email);
         await tryPromoteDevSchoolAdmin(uid, email);
+        await ensurePlatformAdminAccess(uid, email);
     }
 
     const userDoc = await adminDb.doc(`users/${uid}`).get();
@@ -218,6 +226,42 @@ interface StudentProfileUpdateData {
     };
     subjects: { name: string; targetGrade: string; currentGrade?: string; }[];
 }
+
+export async function updateBasicUserProfile(
+  userId: string,
+  data: {
+    fullName: string;
+    profileImageUrl?: string | null;
+    coverImageUrl?: string | null;
+    dob?: string | null;
+  },
+  options?: { markOnboardingComplete?: boolean },
+) {
+  try {
+    const now = admin.firestore.FieldValue.serverTimestamp();
+    const patch: Record<string, unknown> = {
+      name: data.fullName.trim(),
+      profileImageUrl: data.profileImageUrl ?? null,
+      coverImageUrl: data.coverImageUrl ?? null,
+      updatedAt: now,
+    };
+    if (data.dob !== undefined) {
+      patch.dob = data.dob?.trim() || null;
+    }
+    if (options?.markOnboardingComplete !== false) {
+      patch.onboardingComplete = true;
+    }
+    await adminDb.doc(`users/${userId}`).set(patch, { merge: true });
+    return { success: true, error: null };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { success: false, error: message };
+  }
+}
+
+/** @deprecated Use updateBasicUserProfile */
+export const updateAdminUserProfile = updateBasicUserProfile;
+export const updateParentUserProfile = updateBasicUserProfile;
 
 export async function updateUserProfile(userId: string, data: StudentProfileUpdateData) {
     try {

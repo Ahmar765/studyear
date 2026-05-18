@@ -14,6 +14,7 @@ import {
   markStaffInviteAccepted,
 } from '@/server/lib/school-staff-link';
 import { normalizeSchoolStaffJoinCode } from '@/lib/school-staff-join-code';
+import { getSchoolAcuPoolForStaff } from '@/server/lib/school-acu-billing';
 import type { SchoolTutorDashboardPayload } from '@/types/school-tutor-dashboard';
 import * as admin from 'firebase-admin';
 
@@ -69,6 +70,33 @@ export async function getTeacherStudentsAction(
   }
 }
 
+export async function getSchoolAcuPoolForTeacherAction(
+  idToken?: string | null,
+): Promise<{
+  success: boolean;
+  linked?: boolean;
+  schoolName?: string;
+  balance?: number;
+  error?: string;
+}> {
+  try {
+    const user = await getVerifiedUser(idToken);
+    if (!user) return { success: false, error: 'Not authenticated.' };
+    if (user.role !== 'SCHOOL_TUTOR') {
+      return { success: false, error: 'School teachers only.' };
+    }
+    const pool = await getSchoolAcuPoolForStaff(user.uid);
+    return {
+      success: true,
+      linked: pool.linked,
+      schoolName: pool.schoolName,
+      balance: pool.balance,
+    };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : 'Unknown error' };
+  }
+}
+
 export async function getSchoolTutorDashboardDataAction(
   idToken?: string | null,
 ): Promise<{ success: boolean; data?: SchoolTutorDashboardPayload; error?: string }> {
@@ -87,6 +115,8 @@ export async function getSchoolTutorDashboardDataAction(
         staffUserId: user.uid,
         subjects: [],
         yearGroups: [],
+        assignedYearGroups: [],
+        assignedClassNames: [],
         students: [],
         interventions: [],
         assessments: [],

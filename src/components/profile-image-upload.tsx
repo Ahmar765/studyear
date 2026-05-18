@@ -5,8 +5,8 @@ import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { getFirebaseAuth } from '@/lib/firebase/client-app';
 import { useToast } from '@/hooks/use-toast';
+import { uploadProfileImage } from '@/lib/upload-image-client';
 import { ImagePlus, Loader2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -49,33 +49,13 @@ export function ProfileImageUpload({
       return;
     }
 
-    const user = getFirebaseAuth().currentUser;
-    if (!user) {
-      toast({ variant: 'destructive', title: 'Sign in required', description: 'Please sign in to upload images.' });
-      return;
-    }
-
     setUploading(true);
     try {
-      const token = await user.getIdToken();
-      const fd = new FormData();
-      fd.append('file', file);
-      fd.append('kind', kind === 'cover' ? 'cover' : 'profile');
-
-      const res = await fetch('/api/upload/image', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: fd,
-      });
-
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(typeof data.error === 'string' ? data.error : 'Upload failed');
+      const result = await uploadProfileImage(file, kind === 'cover' ? 'cover' : 'profile');
+      if (result.error || !result.url) {
+        throw new Error(result.error ?? 'Upload failed');
       }
-      if (!data.url || typeof data.url !== 'string') {
-        throw new Error('Invalid response from server');
-      }
-      onChange(data.url);
+      onChange(result.url);
       toast({ title: 'Image uploaded', description: 'Saved to your profile.' });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Upload failed';

@@ -1,29 +1,32 @@
 'use client';
 
-import { SchoolTutorSubPage, SchoolPlaceholder } from '@/components/school-tutor/school-tutor-sub-page';
+import { SchoolTutorSubPage } from '@/components/school-tutor/school-tutor-sub-page';
+import { TeacherLiveClassroom } from '@/components/school-tutor/teacher-live-classroom';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { Video } from 'lucide-react';
+import { Bot, Video } from 'lucide-react';
 
 export default function TeacherClassroomPage() {
   return (
     <SchoolTutorSubPage
       title="Classroom"
-      description="Launch live teaching sessions and review at-risk learners before class."
+      description="Launch live video lessons with your class, then review at-risk learners before you teach."
       icon={Video}
     >
       {(data) => (
-        <div className="space-y-6">
-          <SchoolPlaceholder
-            title="Live classroom"
-            body="Connect your video provider to run synchronous lessons. Until then, use the AI Teaching Assistant for guided sessions."
-          />
+        <div className="space-y-8">
           <div className="flex flex-wrap gap-3">
-            <Button asChild>
-              <Link href="/ai-tutor">Open AI Teaching Assistant</Link>
+            <Button asChild variant="outline">
+              <Link href="/ai-tutor">
+                <Bot className="mr-2 h-4 w-4" />
+                Explain with AI
+              </Link>
             </Button>
           </div>
+
+          <TeacherLiveClassroom />
+
           <section className="space-y-3">
             <h2 className="font-semibold">Students to brief before session</h2>
             <ul className="space-y-2">

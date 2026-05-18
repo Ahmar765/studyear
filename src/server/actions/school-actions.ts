@@ -10,16 +10,18 @@ import {
 import * as admin from 'firebase-admin';
 
 async function getSchoolIdForAdmin(adminUserId: string): Promise<string | null> {
-    const staffSnapshot = await adminDb.collection('school_staff')
+    const staffSnapshot = await adminDb
+        .collection('school_staff')
         .where('userId', '==', adminUserId)
-        .where('role', '==', 'SCHOOL_ADMIN')
-        .limit(1)
         .get();
-        
+
     if (staffSnapshot.empty) {
         return null;
     }
-    return staffSnapshot.docs[0].data().schoolId;
+    const doc =
+        staffSnapshot.docs.find((d) => (d.data().role as string) === 'SCHOOL_ADMIN') ??
+        staffSnapshot.docs[0];
+    return (doc?.data().schoolId as string) ?? null;
 }
 
 export interface SchoolStudent {
@@ -73,10 +75,13 @@ export async function getSchoolStudentsAction(idToken?: string | null): Promise<
 
 export interface SchoolStaffMember {
     id: string;
+    staffLinkId: string;
     name: string;
     profileImageUrl?: string;
     role: 'SCHOOL_TUTOR' | 'SCHOOL_ADMIN';
     email: string;
+    assignedYearGroups: string[];
+    assignedClassNames: string[];
 }
 
 export async function getSchoolStaffAction(idToken?: string | null): Promise<{ staff: SchoolStaffMember[], error?: string }> {
@@ -98,10 +103,17 @@ export async function getSchoolStaffAction(idToken?: string | null): Promise<{ s
             const userData = usersMap.get(linkData.userId) || {};
             return {
                 id: linkData.userId,
+                staffLinkId: doc.id,
                 name: userData.name || 'Unknown',
                 profileImageUrl: userData.profileImageUrl,
                 role: linkData.role,
                 email: userData.email,
+                assignedYearGroups: Array.isArray(linkData.assignedYearGroups)
+                    ? (linkData.assignedYearGroups as string[])
+                    : [],
+                assignedClassNames: Array.isArray(linkData.assignedClassNames)
+                    ? (linkData.assignedClassNames as string[])
+                    : [],
             };
         });
 
@@ -568,6 +580,68 @@ export async function getSchoolStaffJoinCodeAction(
         const msg = error instanceof Error ? error.message : String(error);
         console.error("Error fetching staff join code:", error);
         return { code: null, error: msg };
+    }
+}
+
+export async function getSchoolCohortOptionsAction(
+    idToken?: string | null,
+): Promise<{ yearGroups: string[]; classes: string[]; error?: string }> {
+    try {
+        const { schoolId } = await requireSchoolAdminWithSchool(idToken);
+        const doc = await adminDb.collection('school_accounts').doc(schoolId).get();
+        const data = doc.data() ?? {};
+        const profile = (data.profile as Record<string, unknown>) ?? data;
+        const yearGroups = Array.isArray(profile.yearGroups)
+            ? (profile.yearGroups as string[])
+            : [];
+        const classes = Array.isArray(profile.classes) ? (profile.classes as string[]) : [];
+        const fromStudents = await adminDb
+            .collection('student_profiles')
+            .where('schoolAccountId', '==', schoolId)
+            .limit(200)
+            .get();
+        const yearSet = new Set(yearGroups);
+        fromStudents.docs.forEach((d) => {
+            const yg = (d.data().yearGroup as string)?.trim();
+            if (yg) yearSet.add(yg);
+        });
+        return { yearGroups: [...yearSet].sort(), classes };
+    } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : String(error);
+        return { yearGroups: [], classes: [], error: msg };
+    }
+}
+
+export async function updateSchoolStaffAssignmentsAction(
+    idToken: string | null | undefined,
+    input: {
+        staffLinkId: string;
+        assignedYearGroups: string[];
+        assignedClassNames: string[];
+    },
+): Promise<{ success: boolean; error?: string }> {
+    try {
+        const { schoolId } = await requireSchoolAdminWithSchool(idToken);
+        const linkRef = adminDb.collection('school_staff').doc(input.staffLinkId);
+        const linkSnap = await linkRef.get();
+        if (!linkSnap.exists) {
+            return { success: false, error: 'Staff link not found.' };
+        }
+        if ((linkSnap.data()?.schoolId as string) !== schoolId) {
+            return { success: false, error: 'This staff member belongs to another school.' };
+        }
+        if (linkSnap.data()?.role !== 'SCHOOL_TUTOR') {
+            return { success: false, error: 'Cohort assignment applies to teachers only.' };
+        }
+        await linkRef.update({
+            assignedYearGroups: input.assignedYearGroups.map((s) => s.trim()).filter(Boolean),
+            assignedClassNames: input.assignedClassNames.map((s) => s.trim()).filter(Boolean),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        return { success: true };
+    } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : String(error);
+        return { success: false, error: msg };
     }
 }
 

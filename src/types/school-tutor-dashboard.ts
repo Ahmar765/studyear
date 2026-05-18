@@ -6,6 +6,7 @@ export interface SchoolTutorStaffProfile {
   department?: string;
   subjects: string[];
   yearGroups: string[];
+  assignedYearGroups?: string[];
   staffId?: string;
   tutorType?: string;
   schoolName: string;

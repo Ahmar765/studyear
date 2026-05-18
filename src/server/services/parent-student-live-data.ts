@@ -179,6 +179,57 @@ async function fetchUpcomingStudyTasks(studentId: string): Promise<LiveStudyTask
   }
 }
 
+async function fetchStudyActivity(studentId: string): Promise<NonNullable<RawStudentRow['studyActivity']>> {
+  const since30 = new Date();
+  since30.setDate(since30.getDate() - 30);
+
+  const [tasksSnap, quizSnap, dashboardSnap] = await Promise.all([
+    adminDb.collection('study_tasks').where('userId', '==', studentId).limit(120).get(),
+    adminDb.collection('quiz_attempts').where('studentId', '==', studentId).limit(80).get(),
+    adminDb.collection('student_dashboard_states').doc(studentId).get(),
+  ]);
+
+  let pendingTasks = 0;
+  let completedTasks30d = 0;
+
+  tasksSnap.docs.forEach((doc) => {
+    const data = doc.data();
+    const status = String(data.status ?? 'pending');
+    const scheduled = tsToIso(data.scheduledAt);
+    const scheduledMs = scheduled ? new Date(scheduled).getTime() : 0;
+    if (status === 'completed' || status === 'done') {
+      const completedAt = tsToIso(data.updatedAt) ?? tsToIso(data.completedAt) ?? scheduled;
+      const completedMs = completedAt ? new Date(completedAt).getTime() : 0;
+      if (completedMs >= since30.getTime()) completedTasks30d += 1;
+    } else if (status === 'pending') {
+      pendingTasks += 1;
+    }
+  });
+
+  const quizScores: number[] = [];
+  quizSnap.docs.forEach((doc) => {
+    const data = doc.data();
+    const created = tsToIso(data.createdAt);
+    if (!created || new Date(created) < since30) return;
+    const score = coerceScorePercent(data.scorePercent);
+    if (score !== null) quizScores.push(score);
+  });
+
+  const avgQuizScore30d = quizScores.length
+    ? Math.round(quizScores.reduce((a, b) => a + b, 0) / quizScores.length)
+    : 0;
+
+  return {
+    pendingTasks,
+    completedTasks30d,
+    quizAttempts30d: quizScores.length,
+    avgQuizScore30d,
+    dashboardRiskLevel: dashboardSnap.exists
+      ? String(dashboardSnap.data()?.riskLevel ?? '').trim() || undefined
+      : undefined,
+  };
+}
+
 export async function fetchLiveStudentRow(studentId: string, partial: Partial<RawStudentRow>): Promise<RawStudentRow> {
   const [userSnap, profileSnap, dashboardSnap, predictionsSnap] = await Promise.all([
     adminDb.collection('users').doc(studentId).get(),
@@ -190,10 +241,11 @@ export async function fetchLiveStudentRow(studentId: string, partial: Partial<Ra
   const profile = profileSnap.data() as StudentProfileData | undefined;
   const dashboard = dashboardSnap.exists ? dashboardSnap.data() : null;
 
-  const [subjects, savedResources, studyTasks] = await Promise.all([
+  const [subjects, savedResources, studyTasks, studyActivity] = await Promise.all([
     buildSubjectProgress(studentId, profile),
     fetchSavedResources(studentId),
     fetchUpcomingStudyTasks(studentId),
+    fetchStudyActivity(studentId),
   ]);
 
   let predictedGrade: string | undefined;
@@ -234,5 +286,6 @@ export async function fetchLiveStudentRow(studentId: string, partial: Partial<Ra
     strongSubjects: strength.strongSubjects,
     dashboardUpdatedAt: tsToIso(dashboard?.updatedAt),
     predictedGrade,
+    studyActivity,
   };
 }

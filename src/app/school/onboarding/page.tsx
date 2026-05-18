@@ -1,7 +1,7 @@
 'use client';
 
 import { useAuth } from '@/hooks/use-auth';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useState, useTransition } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -24,28 +24,34 @@ const EMPTY: SchoolOnboardingProfile = {};
 export default function SchoolOnboardingPage() {
   const { user } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isEditMode = searchParams.get('edit') === '1';
   const { toast } = useToast();
   const [isPending, startTransition] = useTransition();
   const [step, setStep] = useState(0);
   const [profile, setProfile] = useState<SchoolOnboardingProfile>(EMPTY);
   const [schoolName, setSchoolName] = useState('');
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!user) return;
     const token = await user.getIdToken();
     const res = await getSchoolOnboardingStateAction(token);
     if (res.success) {
-      if (res.onboardingComplete) {
+      setLoadError(null);
+      if (res.onboardingComplete && !isEditMode) {
         router.replace('/school/dashboard');
         return;
       }
       setStep(res.onboardingStep ?? 0);
       setProfile(res.profile ?? EMPTY);
       setSchoolName(res.schoolName ?? '');
+    } else {
+      setLoadError(res.error ?? 'Could not load school workspace.');
     }
     setLoading(false);
-  }, [user, router]);
+  }, [user, router, isEditMode]);
 
   useEffect(() => {
     void load();
@@ -65,8 +71,13 @@ export default function SchoolOnboardingPage() {
       );
       if (res.success) {
         if (complete) {
-          toast({ title: 'Workspace deployed', description: 'Your AI operations centre is live.' });
-          router.replace('/school/dashboard');
+          toast({
+            title: isEditMode ? 'Workspace updated' : 'Workspace deployed',
+            description: isEditMode
+              ? 'Your school profile has been saved.'
+              : 'Your AI operations centre is live.',
+          });
+          router.replace(isEditMode ? '/school/settings' : '/school/dashboard');
         } else {
           setStep(nextStep);
         }
@@ -92,11 +103,21 @@ export default function SchoolOnboardingPage() {
             <Building2 className="h-3.5 w-3.5" />
             Enterprise school deployment
           </p>
-          <h1 className="text-3xl font-bold tracking-tight">Build your school AI workspace</h1>
+          <h1 className="text-3xl font-bold tracking-tight">
+            {isEditMode ? 'Edit school AI workspace' : 'Build your school AI workspace'}
+          </h1>
           <p className="text-muted-foreground">
-            Deploy institutional infrastructure — not just another admin account.
+            {isEditMode
+              ? 'Update structure, safeguarding, and deployment settings for your institution.'
+              : 'Deploy institutional infrastructure — not just another admin account.'}
           </p>
         </header>
+
+        {loadError ? (
+          <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
+            {loadError}
+          </div>
+        ) : null}
 
         <div className="space-y-2">
           <div className="flex justify-between text-xs text-muted-foreground">

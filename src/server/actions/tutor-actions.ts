@@ -91,6 +91,10 @@ export async function getTutorDashboardDataAction(
 
 const OnboardingSchema = z.object({
   step: z.number().min(1).max(5),
+  fullName: z.string().min(1).max(120).optional(),
+  dob: z.string().max(32).optional(),
+  profileImageUrl: z.string().url().optional().nullable(),
+  coverImageUrl: z.string().url().optional().nullable(),
   tutorType: z
     .enum([
       'ACADEMIC',
@@ -159,6 +163,18 @@ export async function saveTutorOnboardingAction(
     }
 
     await ref.set(update, { merge: true });
+
+    const userPatch: Record<string, unknown> = {
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+    if (parsed.fullName?.trim()) userPatch.name = parsed.fullName.trim();
+    if (parsed.dob !== undefined) userPatch.dob = parsed.dob.trim() || null;
+    if (parsed.profileImageUrl !== undefined) userPatch.profileImageUrl = parsed.profileImageUrl;
+    if (parsed.coverImageUrl !== undefined) userPatch.coverImageUrl = parsed.coverImageUrl;
+    if (Object.keys(userPatch).length > 1) {
+      await adminDb.collection('users').doc(user.uid).set(userPatch, { merge: true });
+    }
+
     return { success: true };
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Save failed';
@@ -173,18 +189,35 @@ export async function getTutorOnboardingStatusAction(
   step?: number;
   onboardingComplete?: boolean;
   profile?: RawTutorProfile;
+  account?: {
+    fullName: string;
+    dob: string;
+    profileImageUrl: string;
+    coverImageUrl: string;
+  };
   error?: string;
 }> {
   try {
     const user = await getVerifiedUser(idToken);
-    const snap = await adminDb.collection('tutor_profiles').doc(user.uid).get();
+    if (!user) return { success: false, error: 'Not authenticated.' };
+    const [snap, userSnap] = await Promise.all([
+      adminDb.collection('tutor_profiles').doc(user.uid).get(),
+      adminDb.collection('users').doc(user.uid).get(),
+    ]);
     if (!snap.exists) return { success: false, error: 'Profile not found' };
     const data = snap.data()!;
+    const u = userSnap.data() ?? {};
     return {
       success: true,
       step: (data.onboardingStep as number) ?? 1,
       onboardingComplete: data.onboardingComplete === true,
       profile: profileFromDoc(user.uid, data),
+      account: {
+        fullName: (u.name as string) ?? '',
+        dob: (u.dob as string) ?? '',
+        profileImageUrl: (u.profileImageUrl as string) ?? '',
+        coverImageUrl: (u.coverImageUrl as string) ?? '',
+      },
     };
   } catch (e) {
     return { success: false, error: e instanceof Error ? e.message : 'Unknown error' };

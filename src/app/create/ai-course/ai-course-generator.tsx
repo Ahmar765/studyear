@@ -12,6 +12,9 @@ import { Sparkles, Bot, BookOpen, CheckCircle, HelpCircle, Lightbulb, Activity, 
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/use-auth";
+import { useAcuWallet } from "@/hooks/use-acu-wallet";
+import { useEffectiveRole } from "@/hooks/use-effective-role";
+import { ACU_FEATURE_COSTS } from "@/data/acu-costs";
 import { generateCourseAction, getSimilarContentAction } from "@/server/actions/ai-course-actions";
 import { GenerateCourseOutput } from "@/server/ai/flows/course-generation";
 import { Separator } from "@/components/ui/separator";
@@ -61,6 +64,10 @@ export default function AiCourseGenerator({ levels, subjectsByLevel, examBoards 
   const [optionalExamBoard, setOptionalExamBoard] = useState<string>(EXAM_BOARD_ANY);
   const { toast } = useToast();
   const { user } = useAuth();
+  const { wallet } = useAcuWallet();
+  const { role: effectiveRole } = useEffectiveRole();
+  const courseAcuCost = ACU_FEATURE_COSTS.AI_COURSE_GENERATOR;
+  const isSchoolTeacher = effectiveRole === 'SCHOOL_TUTOR';
   
   const isPending = isGeneratingCourse || isFetchingSimilar;
 
@@ -94,10 +101,20 @@ export default function AiCourseGenerator({ levels, subjectsByLevel, examBoards 
           }
         });
       } else {
+        const raw = result.error || "An unexpected error occurred while generating the course.";
+        const friendly = raw.includes("FEATURE_NOT_INCLUDED")
+          ? `This tool uses ${courseAcuCost} ACUs per course — no subscription plan required. Top up ACUs and try again.`
+          : raw.includes("INSUFFICIENT_SCHOOL_ACU_BALANCE") || (raw.includes("INSUFFICIENT") && isSchoolTeacher)
+            ? `Your school needs at least ${courseAcuCost} ACUs in its shared pool. Ask your school administrator to top up.`
+            : raw.includes("INSUFFICIENT")
+              ? `You need at least ${courseAcuCost} ACUs to generate a course. Top up your wallet and try again.`
+              : raw.includes("SCHOOL_NOT_LINKED")
+                ? "Link your school on the Command Centre to use your school's ACU pool for lesson building."
+                : raw;
         toast({
           variant: "destructive",
-          title: "Error",
-          description: result.error || "An unexpected error occurred while generating the course.",
+          title: "Could not generate course",
+          description: friendly,
         });
       }
     });
@@ -112,7 +129,14 @@ export default function AiCourseGenerator({ levels, subjectsByLevel, examBoards 
           <CardHeader>
             <CardTitle>Generate a Course</CardTitle>
             <CardDescription>
-              Let our AI create a structured course for any topic.
+              Uses {courseAcuCost} ACUs per course — no premium plan required.
+              {wallet != null ? (
+                <>
+                  {' '}
+                  {isSchoolTeacher ? 'School pool' : 'Your balance'}:{' '}
+                  <strong>{Number(wallet.balance).toLocaleString()} ACUs</strong>.
+                </>
+              ) : null}
             </CardDescription>
           </CardHeader>
           <CardContent>

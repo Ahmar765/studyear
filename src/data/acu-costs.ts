@@ -48,3 +48,17 @@ export const ACU_FEATURE_COSTS = {
 export type FeatureKey = keyof typeof ACU_FEATURE_COSTS;
 /** Alias used by the AI gateway contracts */
 export type AIFeatureKey = FeatureKey;
+
+/**
+ * Unlocked by ACU balance only — no premium subscription tier required.
+ * School teachers still debit the linked school's ACU pool.
+ */
+export const ACU_ONLY_FEATURES = new Set<FeatureKey>(['AI_COURSE_GENERATOR']);
+
+export function isAcuOnlyFeature(featureKey: FeatureKey): boolean {
+  return ACU_ONLY_FEATURES.has(featureKey);
+}
+
+export function getAcuFeatureCost(featureKey: FeatureKey): number {
+  return ACU_FEATURE_COSTS[featureKey];
+}

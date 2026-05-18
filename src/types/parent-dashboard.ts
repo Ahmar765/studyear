@@ -94,6 +94,7 @@ export interface HomeworkItem {
 }
 
 export interface GradeProbability {
+  studentId: string;
   grade: string;
   likelihood: number;
 }
@@ -163,12 +164,19 @@ export interface ParentDashboardPayload {
   family: FamilyIntelligence | null;
   weeklyBriefing: WeeklyBriefing;
   features: {
-    aiIntervention: boolean;
-    liveAlerts: boolean;
-    pathwayEngine: boolean;
+    earlyWarnings: boolean;
+    verifiedStudyHours: boolean;
+    weeklyBriefing: boolean;
+    performanceOverview: boolean;
+    homeworkCentre: boolean;
+    studyBehaviourEngine: boolean;
     emotionalIntelligence: boolean;
+    pathwayEngine: boolean;
+    microWeaknesses: boolean;
     parentAdvisor: boolean;
+    aiIntervention: boolean;
     familyIntelligence: boolean;
+    fullLiveAlerts: boolean;
   };
 }
 

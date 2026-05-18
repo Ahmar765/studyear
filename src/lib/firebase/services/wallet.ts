@@ -16,9 +16,17 @@ export function getAcuWallet(uid: string, callback: (wallet: AcuWallet | null) =
       walletDocRef,
       (walletDocSnap) => {
         if (walletDocSnap.exists) {
+          const raw = walletDocSnap.data() as Record<string, unknown>;
+          const balance =
+            typeof raw.balance === 'number' && Number.isFinite(raw.balance)
+              ? raw.balance
+              : typeof raw.balanceACU === 'number' && Number.isFinite(raw.balanceACU)
+                ? raw.balanceACU
+                : 0;
           callback({
             id: walletDocSnap.id,
-            ...(walletDocSnap.data() as Omit<AcuWallet, 'id'>),
+            ...(raw as Omit<AcuWallet, 'id' | 'balance'>),
+            balance,
           });
         } else {
           callback({

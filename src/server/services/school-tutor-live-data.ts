@@ -2,7 +2,18 @@ import { adminDb } from '@/lib/firebase/admin-app';
 import type { StudentProfileData } from '@/lib/firebase/services/user';
 import { buildSubjectProgress } from '@/server/services/parent-student-live-data';
 import { resolveWeakestStrongestSubjects } from '@/server/lib/subject-strength';
+import { getTeacherSchoolLink } from '@/server/lib/school-staff-link';
 import * as admin from 'firebase-admin';
+
+function yearGroupMatchesAssignment(studentYear: string, assigned: string[]): boolean {
+  if (!assigned.length) return true;
+  const sy = studentYear.trim().toLowerCase();
+  if (!sy) return false;
+  return assigned.some((a) => {
+    const norm = a.trim().toLowerCase();
+    return norm === sy || sy.includes(norm) || norm.includes(sy);
+  });
+}
 
 export interface SchoolTutorContext {
   schoolId: string;
@@ -11,6 +22,9 @@ export interface SchoolTutorContext {
   department?: string;
   subjects: string[];
   yearGroups: string[];
+  /** Cohorts assigned by school admin; empty = all school students. */
+  assignedYearGroups: string[];
+  assignedClassNames: string[];
   students: Array<{
     id: string;
     name: string;
@@ -105,6 +119,9 @@ async function quizStats30d(studentId: string): Promise<{ count: number; avg: nu
 export async function fetchLiveSchoolTutorContext(staffUserId: string): Promise<SchoolTutorContext | null> {
   const { schoolId, department } = await getSchoolIdForStaffUser(staffUserId);
   if (!schoolId) return null;
+  const staffLink = await getTeacherSchoolLink(staffUserId);
+  const assignedYearGroups = staffLink.assignedYearGroups ?? [];
+  const assignedClassNames = staffLink.assignedClassNames ?? [];
 
   const [schoolSnap, profileSnap, tutorProfileSnap] = await Promise.all([
     adminDb.collection('school_accounts').doc(schoolId).get(),
@@ -210,6 +227,11 @@ export async function fetchLiveSchoolTutorContext(staffUserId: string): Promise<
     })
     .sort((a, b) => (a.dueDate ?? '').localeCompare(b.dueDate ?? ''));
 
+  const scopedStudents =
+    assignedYearGroups.length > 0
+      ? students.filter((s) => yearGroupMatchesAssignment(s.yearGroup, assignedYearGroups))
+      : students;
+
   return {
     schoolId,
     schoolName,
@@ -217,8 +239,10 @@ export async function fetchLiveSchoolTutorContext(staffUserId: string): Promise<
     department: department ?? (tutorData?.department as string | undefined),
     subjects,
     yearGroups,
-    students,
-    interventions,
+    assignedYearGroups,
+    assignedClassNames,
+    students: scopedStudents,
+    interventions: interventions.filter((i) => scopedStudents.some((s) => s.id === i.studentId)),
     assessments,
   };
 }

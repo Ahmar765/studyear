@@ -21,8 +21,11 @@ export default async function SearchPage() {
       <div className="flex flex-col items-center text-center space-y-2">
         <h2 className="text-3xl font-bold tracking-tight">Find Study Resources</h2>
         <p className="text-muted-foreground max-w-2xl">
-          Browse our global library of AI-generated and community-contributed study materials. Every time you or another student creates a resource, it's added here for everyone to benefit from.
+          Browse our global library of AI-generated and community-contributed study materials. Every time you or another student creates a resource, it&apos;s added here for everyone to benefit from.
         </p>
+        <Button asChild variant="outline" className="mt-2">
+          <Link href="/contribute">Submit a video or past paper for review</Link>
+        </Button>
       </div>
 
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-7xl mx-auto">
