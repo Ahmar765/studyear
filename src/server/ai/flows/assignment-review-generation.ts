@@ -1,5 +1,6 @@
 import { ai } from '..';
 import { toGoogleAiGenkitModel } from '@/server/ai/genkit-model';
+import { ReviewVisualSpecSchema } from '@/server/services/assignment-review-visuals';
 import { z } from 'zod';
 
 export const AssignmentSubmissionInputSchema = z.object({
@@ -31,6 +32,13 @@ export const AssignmentReviewOutputSchema = z.object({
   predictedGradeAfterImprovement: z.string().describe("The potential grade the student could achieve if they implement the feedback."),
   predictedScoreAfterImprovement: z.number().describe("The potential numerical score (1-100) after improvements."),
   nextActions: z.array(z.string()).describe("A list of 2-3 concrete next steps the student should take."),
+  recommendedVisuals: z
+    .array(ReviewVisualSpecSchema)
+    .max(4)
+    .default([])
+    .describe(
+      '0-4 visuals that would help the student improve: bar/line/pie charts with chartDescription, coordinate/function graphs with data, geometry diagrams, or educational images with prompt. Use for Maths, Science, Geography, Economics, or when the work mentions graphs/charts.',
+    ),
 });
 export type AssignmentReviewOutput = z.infer<typeof AssignmentReviewOutputSchema>;
 
@@ -63,7 +71,13 @@ Analyze the submission and generate a detailed review. Be specific, insightful, 
 6.  **improvementRecommendations**: Provide a list of specific, actionable recommendations for improvement.
 7.  **predictedCurrentGrade** & **predictedCurrentScore**: Estimate the grade and a score (1-100) for the work AS-IS.
 8.  **predictedGradeAfterImprovement** & **predictedScoreAfterImprovement**: Predict the grade and score the student could achieve if they successfully implement your feedback.
-9.  **nextActions**: Suggest 2-3 concrete next steps for the student.`,
+9.  **nextActions**: Suggest 2-3 concrete next steps for the student.
+10. **recommendedVisuals**: When helpful (especially STEM subjects or weak graph skills), include 1-4 items:
+    - Charts: set visualType (BAR_GRAPH, LINE_GRAPH, PIE_CHART, etc.), title, rationale, chartDescription (data story), optional xAxisLabel/yAxisLabel.
+    - Coordinate/function graphs: include structured \`data\` (e.g. points array or expression string).
+    - Geometry: visualType GEOMETRY_DIAGRAM with data.shape "triangle" or "circle".
+    - Concepts needing illustration: EDUCATIONAL_IMAGE with a detailed \`prompt\`.
+    Return an empty array if no visual would add value.`,
 });
 
 /**

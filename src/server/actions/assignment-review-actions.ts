@@ -9,7 +9,12 @@ import {
   AssignmentSubmissionInputSchema,
 } from "../ai/flows/assignment-review-generation";
 import { assignmentReviewErrorForUser } from "../lib/study-plan-errors";
+import { resolveAssignmentSubmissionText } from "../lib/assignment-submission-text";
 import { runStudYearAction } from "../services/pipeline";
+import {
+  generateAssignmentReviewVisuals,
+  type GeneratedReviewVisual,
+} from "../services/assignment-review-visuals";
 import { adminDb } from "@/lib/firebase/admin-app";
 import { Timestamp } from "firebase-admin/firestore";
 
@@ -28,13 +33,20 @@ const ActionSchema = z
     attachmentName: z.string().optional(),
   })
   .refine(
-    (d) => (d.pastedText?.trim().length ?? 0) >= 100 || Boolean(d.attachmentUrl?.trim()),
+    (d) =>
+      (d.pastedText?.trim().length ?? 0) >= 100 ||
+      Boolean(d.attachmentUrl?.trim()) ||
+      Boolean(d.attachmentName?.trim()),
     { message: 'Paste at least 100 characters or attach a file.' },
   );
 
 export type { AssignmentReviewOutput };
 
-export async function submitAssignmentForReviewAction(input: z.infer<typeof ActionSchema>): Promise<{ success: boolean; review?: AssignmentReviewOutput; error?: string; }> {
+export type AssignmentReviewResult = AssignmentReviewOutput & {
+  generatedVisuals?: GeneratedReviewVisual[];
+};
+
+export async function submitAssignmentForReviewAction(input: z.infer<typeof ActionSchema>): Promise<{ success: boolean; review?: AssignmentReviewResult; error?: string; }> {
     const validatedData = ActionSchema.safeParse(input);
     if (!validatedData.success) {
         return {
@@ -47,16 +59,29 @@ export async function submitAssignmentForReviewAction(input: z.infer<typeof Acti
 
     const pastedText = validatedData.data.pastedText?.trim() ?? '';
     const attachmentUrl = validatedData.data.attachmentUrl?.trim() || undefined;
+    const attachmentName = validatedData.data.attachmentName?.trim();
+
+    let submissionText: string;
+    try {
+        const resolved = await resolveAssignmentSubmissionText({
+          pastedText,
+          attachmentUrl,
+          attachmentName,
+        });
+        submissionText = resolved.text;
+    } catch (err: unknown) {
+        return {
+          success: false,
+          error: err instanceof Error ? err.message : 'Could not read your submission.',
+        };
+    }
 
     const aiPayload: AssignmentSubmissionInput = {
         title: validatedData.data.title.trim(),
         type: validatedData.data.type,
         subject: validatedData.data.subject.trim(),
         studyLevel: validatedData.data.studyLevel.trim(),
-        pastedText:
-          pastedText.length >= 100
-            ? pastedText
-            : `[See attached file: ${attachmentUrl ?? 'uploaded document'}]\n\n${pastedText}`.trim(),
+        pastedText: submissionText,
     };
 
     const aiParsed = AssignmentSubmissionInputSchema.safeParse(aiPayload);
@@ -64,6 +89,13 @@ export async function submitAssignmentForReviewAction(input: z.infer<typeof Acti
         return {
             success: false,
             error: assignmentReviewErrorForUser(aiParsed.error),
+        };
+    }
+
+    if (submissionText.length < 100) {
+        return {
+          success: false,
+          error: 'We need at least 100 characters of assignment text. Paste more content or attach a clearer file.',
         };
     }
     
@@ -97,18 +129,33 @@ export async function submitAssignmentForReviewAction(input: z.infer<typeof Acti
 
         const reviewData = result.result;
 
+        const generatedVisuals = await generateAssignmentReviewVisuals({
+          specs: reviewData.recommendedVisuals ?? [],
+          userId,
+          studentId,
+          subject: validatedData.data.subject.trim(),
+          studyLevel: validatedData.data.studyLevel.trim(),
+        });
+
         const reviewRef = adminDb.collection('assignment_reviews').doc(submissionRef.id);
         await reviewRef.set({
             submissionId: submissionRef.id,
             studentId,
             userId,
             ...reviewData,
+            generatedVisuals,
             createdAt: Timestamp.now(),
         });
 
         await submissionRef.update({ status: "COMPLETED", updatedAt: Timestamp.now() });
 
-        return { success: true, review: reviewData };
+        return {
+          success: true,
+          review: {
+            ...reviewData,
+            generatedVisuals,
+          },
+        };
     } catch (error: unknown) {
         const detail =
             error instanceof Error ? error.stack ?? error.message : String(error);
