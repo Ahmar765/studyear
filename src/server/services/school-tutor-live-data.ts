@@ -5,14 +5,30 @@ import { resolveWeakestStrongestSubjects } from '@/server/lib/subject-strength';
 import { getTeacherSchoolLink } from '@/server/lib/school-staff-link';
 import * as admin from 'firebase-admin';
 
-function yearGroupMatchesAssignment(studentYear: string, assigned: string[]): boolean {
+function cohortLabelMatches(studentLabel: string, assigned: string[]): boolean {
   if (!assigned.length) return true;
-  const sy = studentYear.trim().toLowerCase();
+  const sy = studentLabel.trim().toLowerCase();
   if (!sy) return false;
   return assigned.some((a) => {
     const norm = a.trim().toLowerCase();
     return norm === sy || sy.includes(norm) || norm.includes(sy);
   });
+}
+
+function teacherStudentInScope(
+  yearGroup: string,
+  className: string | undefined,
+  assignedYearGroups: string[],
+  assignedClassNames: string[],
+): boolean {
+  const hasYear = assignedYearGroups.length > 0;
+  const hasClass = assignedClassNames.length > 0;
+  if (!hasYear && !hasClass) return true;
+  const yearOk = !hasYear || cohortLabelMatches(yearGroup, assignedYearGroups);
+  const classOk =
+    !hasClass ||
+    (className ? cohortLabelMatches(className, assignedClassNames) : false);
+  return yearOk && classOk;
 }
 
 export interface SchoolTutorContext {
@@ -30,6 +46,7 @@ export interface SchoolTutorContext {
     name: string;
     avatarSrc?: string;
     yearGroup: string;
+    className?: string;
     progressScore: number;
     predictedGrade?: string;
     riskLevel?: string;
@@ -180,6 +197,7 @@ export async function fetchLiveSchoolTutorContext(staffUserId: string): Promise<
         name: user?.name ?? 'Student',
         avatarSrc: user?.avatarSrc,
         yearGroup: profile.yearGroup ?? 'N/A',
+        className: (profile.className as string | undefined)?.trim() || undefined,
         progressScore: Math.round((dash.progressScore as number) ?? 0),
         predictedGrade: dash.predictedGrade as string | undefined,
         riskLevel: dash.riskLevel as string | undefined,
@@ -227,10 +245,14 @@ export async function fetchLiveSchoolTutorContext(staffUserId: string): Promise<
     })
     .sort((a, b) => (a.dueDate ?? '').localeCompare(b.dueDate ?? ''));
 
-  const scopedStudents =
-    assignedYearGroups.length > 0
-      ? students.filter((s) => yearGroupMatchesAssignment(s.yearGroup, assignedYearGroups))
-      : students;
+  const scopedStudents = students.filter((s) =>
+    teacherStudentInScope(
+      s.yearGroup,
+      s.className,
+      assignedYearGroups,
+      assignedClassNames,
+    ),
+  );
 
   return {
     schoolId,

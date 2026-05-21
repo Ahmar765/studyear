@@ -14,9 +14,41 @@ import { runStudYearAction } from "../services/pipeline";
 import {
   generateAssignmentReviewVisuals,
   type GeneratedReviewVisual,
+  type GeneratedReviewVisual,
 } from "../services/assignment-review-visuals";
 import { adminDb } from "@/lib/firebase/admin-app";
 import { Timestamp } from "firebase-admin/firestore";
+import { storeGeneratedImageUrl, stripNonPersistableImageFields } from "../lib/visual-image-storage";
+
+async function persistReviewVisualImages(
+  visuals: GeneratedReviewVisual[],
+  userId: string,
+  submissionId: string,
+): Promise<{ client: GeneratedReviewVisual[]; firestore: GeneratedReviewVisual[] }> {
+  const client: GeneratedReviewVisual[] = [];
+  const firestore: GeneratedReviewVisual[] = [];
+
+  for (let index = 0; index < visuals.length; index++) {
+    const visual = visuals[index];
+    if (!visual.imageUrl) {
+      client.push(visual);
+      firestore.push(visual);
+      continue;
+    }
+    const stored = await storeGeneratedImageUrl(visual.imageUrl, {
+      userId,
+      id: `${submissionId}-visual-${index}`,
+      folder: `studyear/assignment-review/${userId}`,
+    });
+    client.push({
+      ...visual,
+      imageUrl: stored.displayUrl ?? stored.firestoreUrl ?? undefined,
+    });
+    firestore.push(stripNonPersistableImageFields(visual, stored.firestoreUrl));
+  }
+
+  return { client, firestore };
+}
 
 const assignmentTypes = ["HOMEWORK", "ASSIGNMENT", "ESSAY", "COURSEWORK", "REPORT", "DISSERTATION", "THESIS", "PERSONAL_STATEMENT", "OTHER"];
 
@@ -129,7 +161,7 @@ export async function submitAssignmentForReviewAction(input: z.infer<typeof Acti
 
         const reviewData = result.result;
 
-        const generatedVisuals = await generateAssignmentReviewVisuals({
+        const rawVisuals = await generateAssignmentReviewVisuals({
           specs: reviewData.recommendedVisuals ?? [],
           userId,
           studentId,
@@ -137,13 +169,16 @@ export async function submitAssignmentForReviewAction(input: z.infer<typeof Acti
           studyLevel: validatedData.data.studyLevel.trim(),
         });
 
+        const { client: clientVisuals, firestore: firestoreVisuals } =
+          await persistReviewVisualImages(rawVisuals, userId, submissionRef.id);
+
         const reviewRef = adminDb.collection('assignment_reviews').doc(submissionRef.id);
         await reviewRef.set({
             submissionId: submissionRef.id,
             studentId,
             userId,
             ...reviewData,
-            generatedVisuals,
+            generatedVisuals: firestoreVisuals,
             createdAt: Timestamp.now(),
         });
 
@@ -153,7 +188,7 @@ export async function submitAssignmentForReviewAction(input: z.infer<typeof Acti
           success: true,
           review: {
             ...reviewData,
-            generatedVisuals,
+            generatedVisuals: clientVisuals,
           },
         };
     } catch (error: unknown) {

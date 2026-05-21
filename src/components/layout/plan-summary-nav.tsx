@@ -25,7 +25,8 @@ export default function PlanSummaryNav() {
   const [schoolBalance, setSchoolBalance] = useState<number | null>(null);
 
   const acuMode = usesAcuBilling(effectiveRole);
-  const schoolPoolMode = effectiveRole === 'SCHOOL_TUTOR';
+  const schoolPoolMode =
+    effectiveRole === 'SCHOOL_TUTOR' || effectiveRole === 'SCHOOL_ADMIN';
   const loading =
     profileLoading ||
     (acuMode && walletLoading) ||
@@ -60,10 +61,21 @@ export default function PlanSummaryNav() {
 
   if (schoolPoolMode) {
     const balance = Number(schoolBalance ?? 0);
+    const isSchoolAdmin = effectiveRole === 'SCHOOL_ADMIN';
     return (
-      <div className="flex items-center gap-2 rounded-md border bg-background/50 px-3 py-1.5 text-sm font-medium">
-        <Fuel className="h-4 w-4 shrink-0 text-primary" />
-        <span>{balance.toLocaleString()} school ACUs</span>
+      <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 rounded-md border bg-background/50 px-3 py-1.5 text-sm font-medium">
+          <Fuel className="h-4 w-4 shrink-0 text-primary" />
+          <span>{balance.toLocaleString()} school ACUs</span>
+        </div>
+        {isSchoolAdmin ? (
+          <Button asChild size="sm">
+            <Link href="/top-up">
+              <PlusCircle className="mr-2 h-4 w-4" />
+              Top up
+            </Link>
+          </Button>
+        ) : null}
       </div>
     );
   }

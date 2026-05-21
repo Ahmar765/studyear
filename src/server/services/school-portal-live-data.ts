@@ -1,6 +1,8 @@
 import { adminDb } from '@/lib/firebase/admin-app';
 import type { StudentProfileData } from '@/lib/firebase/services/user';
 import * as admin from 'firebase-admin';
+import { resolveSchoolAcuBillingUserId } from '@/server/lib/school-acu-billing';
+import { readAcuBalance } from '@/server/lib/acu-wallet-balance';
 
 export interface SchoolPortalRawContext {
   schoolId: string;
@@ -88,6 +90,7 @@ export async function fetchSchoolPortalContext(adminUserId: string): Promise<Sch
     staffSnap.docs.find((d) => (d.data().role as string) === 'SCHOOL_ADMIN') ?? staffSnap.docs[0];
   const schoolId = staffDoc!.data().schoolId as string;
   if (!schoolId) return null;
+  const billingUserId = await resolveSchoolAcuBillingUserId(schoolId);
   const [schoolSnap, profileSnap, staffLinksSnap, interventionsSnap, assessmentsSnap, walletSnap] =
     await Promise.all([
       adminDb.collection('school_accounts').doc(schoolId).get(),
@@ -95,7 +98,9 @@ export async function fetchSchoolPortalContext(adminUserId: string): Promise<Sch
       adminDb.collection('school_staff').where('schoolId', '==', schoolId).get(),
       adminDb.collection('school_interventions').where('schoolId', '==', schoolId).limit(40).get(),
       adminDb.collection('school_assessments').where('schoolId', '==', schoolId).limit(20).get(),
-      adminDb.collection('acuWallets').doc(adminUserId).get(),
+      billingUserId
+        ? adminDb.collection('acuWallets').doc(billingUserId).get()
+        : Promise.resolve(null),
     ]);
 
   const schoolData = schoolSnap.data() ?? {};
@@ -168,8 +173,7 @@ export async function fetchSchoolPortalContext(adminUserId: string): Promise<Sch
     }
   }
 
-  const acuBalance =
-    typeof walletSnap.data()?.balance === 'number' ? walletSnap.data()!.balance : 0;
+  const acuBalance = walletSnap?.exists ? readAcuBalance(walletSnap.data()) : 0;
   const allUserIds = [...studentIds, adminUserId];
   const acuConsumed7d = await sumAcuForUsers(allUserIds, since7d);
 

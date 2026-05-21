@@ -4,15 +4,25 @@ import type { DecodedIdToken } from 'firebase-admin/auth';
 
 const ADMIN_EMAILS = new Set(['admin@studyear.com', 'admin@studyear.ai']);
 
-/** JWT claim first, then Firestore `users.role` (claims can be stale after promotion). */
+/** JWT claim first, then Firestore `users.role` / subscription (claims can be stale). */
 export async function isPlatformAdmin(
   uid: string,
   token?: DecodedIdToken | null,
 ): Promise<boolean> {
   const claimRole = (token as { role?: string } | null | undefined)?.role;
   if (claimRole === 'ADMIN') return true;
-  const snap = await adminDb.doc(`users/${uid}`).get();
-  return snap.data()?.role === 'ADMIN';
+
+  const [userSnap, subSnap] = await Promise.all([
+    adminDb.doc(`users/${uid}`).get(),
+    adminDb.doc(`subscriptions/${uid}`).get(),
+  ]);
+  if (userSnap.data()?.role === 'ADMIN') return true;
+  if (subSnap.data()?.type === 'ADMIN' && subSnap.data()?.status === 'ACTIVE') return true;
+
+  const email = userSnap.data()?.email?.trim().toLowerCase();
+  if (email && ADMIN_EMAILS.has(email)) return true;
+
+  return false;
 }
 
 /** Sync ADMIN role claims + subscription doc for platform admins on every login. */

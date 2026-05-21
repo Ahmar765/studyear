@@ -35,6 +35,7 @@ import {
   finalizeSubscriptionCheckoutSessionAction,
 } from '@/server/actions/billing-actions';
 import ParentLinkCodeCard from '@/components/student/parent-link-code-card';
+import { isDisplayableImageUrl } from '@/lib/format-safe-date';
 import { getSchoolAcuPoolForTeacherAction } from '@/server/actions/teacher-actions';
 
 
@@ -49,12 +50,11 @@ function AccountPageInner() {
   const { isImpersonating } = useImpersonation();
 
   const isStudentLike =
-    userProfile?.role === 'STUDENT' ||
-    userProfile?.role === 'PRIVATE_TUTOR' ||
-    userProfile?.role === 'SCHOOL_ADMIN';
+    userProfile?.role === 'STUDENT' || userProfile?.role === 'PRIVATE_TUTOR';
   const isParent = userProfile?.role === 'PARENT';
   const isSchoolAdmin = userProfile?.role === 'SCHOOL_ADMIN';
   const isSchoolTeacher = userProfile?.role === 'SCHOOL_TUTOR';
+  const usesSchoolAcuPool = isSchoolAdmin || isSchoolTeacher;
   const [schoolPool, setSchoolPool] = useState<{
     linked: boolean;
     schoolName?: string;
@@ -65,11 +65,11 @@ function AccountPageInner() {
 
   const loading =
     profileLoading ||
-    (!!userProfile && isStudentLike && walletLoading) ||
-    (!!userProfile && isSchoolTeacher && schoolPool === null);
+    (!!userProfile && (isStudentLike || isParent) && walletLoading) ||
+    (!!userProfile && usesSchoolAcuPool && schoolPool === null);
 
   useEffect(() => {
-    if (!user || !isSchoolTeacher) return;
+    if (!user || !usesSchoolAcuPool) return;
     void (async () => {
       const token = await user.getIdToken();
       const res = await getSchoolAcuPoolForTeacherAction(token);
@@ -83,10 +83,14 @@ function AccountPageInner() {
         setSchoolPool({ linked: false, balance: 0 });
       }
     })();
-  }, [user, isSchoolTeacher]);
+  }, [user, usesSchoolAcuPool]);
 
   useEffect(() => {
     if (searchParams.get('purchase') !== 'success') return;
+    if (userProfile?.role === 'ADMIN' || userProfile?.subscription === 'ADMIN') {
+      router.replace('/account');
+      return;
+    }
 
     let cancelled = false;
 
@@ -270,14 +274,18 @@ function AccountPageInner() {
 
         <Card className="overflow-hidden">
             <div className="relative h-48 w-full bg-muted">
-                {userProfile.coverImageUrl ? (
+                {isDisplayableImageUrl(userProfile.coverImageUrl) ? (
                   <Image
-                    src={userProfile.coverImageUrl}
+                    src={userProfile.coverImageUrl!}
                     alt=""
                     fill
                     className="object-cover"
                     sizes="(max-width: 896px) 100vw, 896px"
                     priority
+                    unoptimized={
+                      userProfile.coverImageUrl!.startsWith('data:') ||
+                      userProfile.coverImageUrl!.startsWith('blob:')
+                    }
                   />
                 ) : (
                   <div className="h-full w-full bg-gradient-to-br from-primary/30 via-muted to-violet-600/20" aria-hidden />
@@ -321,14 +329,16 @@ function AccountPageInner() {
         </Card>
         
         <div className={`grid gap-8 ${isPlatformAdmin ? '' : 'md:grid-cols-2'}`}>
-            {isStudentLike && !isPlatformAdmin ? (
+            {(isStudentLike || isParent) && !isPlatformAdmin ? (
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Fuel /> ACU wallet
                   </CardTitle>
                   <CardDescription>
-                    AI Credit Units power tutor sessions, diagnostics, generated courses, and most AI tools.
+                    {isParent
+                      ? 'ACUs power AI Parent Advisor, intervention mode, and other AI tools on your Command Centre.'
+                      : 'AI Credit Units power tutor sessions, diagnostics, generated courses, and most AI tools.'}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -336,15 +346,23 @@ function AccountPageInner() {
                   <p className="text-sm text-muted-foreground">ACUs available</p>
                 </CardContent>
                 <CardFooter>
-                  <Button asChild>
-                    <Link href="/top-up">
-                      <PlusCircle className="mr-2 h-4 w-4" /> Top up ACUs
-                    </Link>
-                  </Button>
+                  {isParent ? (
+                    <Button asChild variant="outline">
+                      <Link href="/checkout">
+                        <PlusCircle className="mr-2 h-4 w-4" /> Parent plans & ACUs
+                      </Link>
+                    </Button>
+                  ) : (
+                    <Button asChild>
+                      <Link href="/top-up">
+                        <PlusCircle className="mr-2 h-4 w-4" /> Top up ACUs
+                      </Link>
+                    </Button>
+                  )}
                 </CardFooter>
               </Card>
             ) : null}
-            {isSchoolTeacher && !isPlatformAdmin ? (
+            {usesSchoolAcuPool && !isPlatformAdmin ? (
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -352,8 +370,12 @@ function AccountPageInner() {
                   </CardTitle>
                   <CardDescription>
                     {schoolPool?.linked
-                      ? `Shared wallet for ${schoolPool.schoolName ?? 'your school'}. AI tools debit this balance — contact your school admin to top up.`
-                      : 'Link your school from the Command Centre to use the shared ACU pool.'}
+                      ? isSchoolAdmin
+                        ? `Shared wallet for ${schoolPool.schoolName ?? 'your school'}. Top up with the same £5 / £10 / £15 packs as students — credits land in this pool for all staff and students.`
+                        : `Shared wallet for ${schoolPool.schoolName ?? 'your school'}. AI tools debit this balance — contact your school admin to top up.`
+                      : isSchoolAdmin
+                        ? 'Complete school onboarding to activate your workspace ACU pool.'
+                        : 'Link your school from the Command Centre to use the shared ACU pool.'}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -362,9 +384,18 @@ function AccountPageInner() {
                   </p>
                   <p className="text-sm text-muted-foreground">ACUs available (school pool)</p>
                 </CardContent>
-                <CardFooter>
+                <CardFooter className="flex flex-wrap gap-2">
+                  {isSchoolAdmin ? (
+                    <Button asChild>
+                      <Link href="/top-up">
+                        <PlusCircle className="mr-2 h-4 w-4" /> Top up school ACUs
+                      </Link>
+                    </Button>
+                  ) : null}
                   <Button asChild variant="outline">
-                    <Link href="/teacher/dashboard">Command Centre</Link>
+                    <Link href={isSchoolAdmin ? '/school/dashboard' : '/teacher/dashboard'}>
+                      Command Centre
+                    </Link>
                   </Button>
                 </CardFooter>
               </Card>

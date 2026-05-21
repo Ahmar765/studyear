@@ -13,6 +13,11 @@ import {
 } from "../ai/flows/system-visual-generation";
 import * as admin from 'firebase-admin';
 import { VisualRequestSchema, type VisualRequest } from "@/server/schemas/visual-request";
+import {
+  persistableImageUrl,
+  storeGeneratedImageUrl,
+  stripNonPersistableImageFields,
+} from "@/server/lib/visual-image-storage";
 
 export async function createVisualResourceAction(input: VisualRequest): Promise<{ success: boolean; visual?: { svg?: string, imageUrl?: string }; error?: string; }> {
   const validation = VisualRequestSchema.safeParse(input);
@@ -68,6 +73,26 @@ Rules:
     });
     
     const visualRef = adminDb.collection('generated_visuals').doc();
+    const visualId = visualRef.id;
+
+    let displayImageUrl = result.result.imageUrl;
+    let firestoreImageUrl: string | null = null;
+    if (result.result.imageUrl) {
+      const stored = await storeGeneratedImageUrl(result.result.imageUrl, {
+        userId: validation.data.userId,
+        id: visualId,
+      });
+      displayImageUrl = stored.displayUrl ?? stored.firestoreUrl ?? undefined;
+      firestoreImageUrl = stored.firestoreUrl;
+      if (!firestoreImageUrl && result.result.imageUrl.startsWith('data:')) {
+        return {
+          success: false,
+          error:
+            'Image was generated but could not be saved. Configure Cloudinary (NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME and upload preset) so images can be stored.',
+        };
+      }
+    }
+
     await visualRef.set({
       studentId: validation.data.studentId,
       userId: validation.data.userId,
@@ -76,20 +101,31 @@ Rules:
       prompt: validation.data.prompt ?? null,
       data: validation.data.data ?? null,
       svg: result.result.svg ?? null,
-      imageUrl: result.result.imageUrl ?? null,
+      ...(firestoreImageUrl ? { imageUrl: firestoreImageUrl } : {}),
       acuCost: result.acu.chargedACUs,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
+
+    const libraryContent = stripNonPersistableImageFields(
+      { ...result.result, prompt: validation.data.prompt },
+      firestoreImageUrl,
+    );
 
     await savedResourceService.save({
       studentId: validation.data.studentId,
       type: validation.data.type,
       title: validation.data.title,
-      content: { ...result.result, prompt: validation.data.prompt },
-      linkedEntityId: visualRef.id,
+      content: libraryContent,
+      linkedEntityId: visualId,
     });
 
-    return { success: true, visual: result.result };
+    return {
+      success: true,
+      visual: {
+        svg: result.result.svg,
+        imageUrl: displayImageUrl,
+      },
+    };
 
   } catch (error: any) {
     console.error("Error in createVisualResourceAction:", error);
@@ -98,15 +134,6 @@ Rules:
 }
 
 export type SystemVisualContext = GenerateSystemVisualInput;
-
-/** Firestore string fields cap ~1MiB; skip persisting huge data URLs (use HTTPS URLs only for cache). */
-const FIRESTORE_SAFE_IMAGE_URL_MAX = 900_000;
-function persistableImageUrl(url: string | undefined): string | null {
-  if (!url || typeof url !== 'string') return null;
-  if (url.startsWith('data:')) return null;
-  if (url.length > FIRESTORE_SAFE_IMAGE_URL_MAX) return null;
-  return url;
-}
 
 export async function generateSystemVisualAction(context: SystemVisualContext): Promise<{ success: boolean; imageUrl?: string; error?: string }> {
     const { platform, module, user_role, intent } = context;

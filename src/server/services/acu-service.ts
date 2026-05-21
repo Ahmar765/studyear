@@ -5,7 +5,7 @@ import { readAcuBalance } from '@/server/lib/acu-wallet-balance';
 import type { AcuWallet } from '@/server/schemas';
 import { ACU_FEATURE_COSTS, FeatureKey } from '@/data/acu-costs';
 import { canUsePremiumFeature, requiresSubscriptionForFeature } from '@/data/entitlements';
-import { resolveAcuWalletUserId } from '@/server/lib/school-acu-billing';
+import { getSchoolAcuPoolForSchoolUser, resolveAcuWalletUserId } from '@/server/lib/school-acu-billing';
 import { getTeacherSchoolLink } from '@/server/lib/school-staff-link';
 import { getUserProfileServer } from './user';
 import type { SubscriptionType } from '../schemas';
@@ -64,10 +64,14 @@ export class ACUService {
     description?: string;
     metadata?: any;
   }) {
-    const walletRef = adminDb.collection('acuWallets').doc(params.userId);
+    const user = await getUserProfileServer(params.userId);
+    const walletUserId = user
+      ? await resolveAcuWalletUserId(params.userId, user.role)
+      : params.userId;
+    const walletRef = adminDb.collection('acuWallets').doc(walletUserId);
 
     return adminDb.runTransaction(async (transaction) => {
-        const wallet = await this.getOrCreateWallet(transaction, walletRef, params.userId);
+        const wallet = await this.getOrCreateWallet(transaction, walletRef, walletUserId);
         
         const balanceBefore = wallet.balance;
         const balanceAfter = balanceBefore + params.amount;
@@ -131,8 +135,10 @@ export class ACUService {
 
     const walletUserId = await resolveAcuWalletUserId(params.userId, user.role);
     const walletRef = adminDb.collection('acuWallets').doc(walletUserId);
-    const staffLink =
-      user.role === 'SCHOOL_TUTOR' ? await getTeacherSchoolLink(params.userId) : { linked: false };
+    const schoolPool =
+      user.role === 'SCHOOL_TUTOR' || user.role === 'SCHOOL_ADMIN'
+        ? await getSchoolAcuPoolForSchoolUser(params.userId)
+        : { linked: false as const };
     return adminDb.runTransaction(async (transaction) => {
         const wallet = await this.getOrCreateWallet(transaction, walletRef, walletUserId);
         
@@ -142,10 +148,12 @@ export class ACUService {
         
         const balanceBefore = wallet.balance;
         if (balanceBefore < cost) {
-          if (user.role === 'SCHOOL_TUTOR' && staffLink.linked) {
+          if (schoolPool.linked) {
             throw new HttpsError(
               'resource-exhausted',
-              'INSUFFICIENT_SCHOOL_ACU_BALANCE: Your school ACU pool is empty. Ask your school administrator to top up under School → ACU command.',
+              user.role === 'SCHOOL_ADMIN'
+                ? 'INSUFFICIENT_SCHOOL_ACU_BALANCE: Your school ACU pool is empty. Top up from Account or School → ACU command.'
+                : 'INSUFFICIENT_SCHOOL_ACU_BALANCE: Your school ACU pool is empty. Ask your school administrator to top up under School → ACU command.',
             );
           }
           throw new HttpsError('resource-exhausted', 'INSUFFICIENT_ACU_BALANCE');
@@ -173,8 +181,8 @@ export class ACUService {
             metadata: {
               ...(params.metadata && typeof params.metadata === 'object' ? params.metadata : {}),
               initiatedByUserId: params.userId,
-              ...(staffLink.linked && staffLink.schoolId
-                ? { schoolId: staffLink.schoolId, billedViaSchoolPool: walletUserId !== params.userId }
+              ...(schoolPool.linked && schoolPool.schoolId
+                ? { schoolId: schoolPool.schoolId, billedViaSchoolPool: walletUserId !== params.userId }
                 : {}),
             },
             createdAt: admin.firestore.FieldValue.serverTimestamp(),

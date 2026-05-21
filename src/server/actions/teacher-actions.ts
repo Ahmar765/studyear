@@ -82,8 +82,8 @@ export async function getSchoolAcuPoolForTeacherAction(
   try {
     const user = await getVerifiedUser(idToken);
     if (!user) return { success: false, error: 'Not authenticated.' };
-    if (user.role !== 'SCHOOL_TUTOR') {
-      return { success: false, error: 'School teachers only.' };
+    if (user.role !== 'SCHOOL_TUTOR' && user.role !== 'SCHOOL_ADMIN') {
+      return { success: false, error: 'School staff only.' };
     }
     const pool = await getSchoolAcuPoolForStaff(user.uid);
     return {

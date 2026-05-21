@@ -70,6 +70,7 @@ export async function resolveSchoolAdmin(
     name: `${label} (Workspace)`,
     approvalStatus: 'PENDING',
     staffJoinCode: generateSchoolStaffJoinCode(),
+    createdByUid: tokenUser.uid,
     onboardingStep: 0,
     onboardingComplete: false,
     createdAt: now,

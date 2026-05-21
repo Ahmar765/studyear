@@ -20,6 +20,7 @@ import {
 import { AlertCircle, Bookmark, Check, Download } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { resourceMetadata, ResourceType } from '@/data/academic';
+import { formatResourceSubject, isJunkFilterValue } from '@/lib/resource-labels';
 
 interface Resource {
     id: string;
@@ -34,7 +35,15 @@ interface Resource {
 
 const PAGE_SIZE = 12;
 
-export default function ResourceBrowser() {
+type ResourceBrowserProps = {
+    canonicalSubjects?: string[];
+    canonicalLevels?: string[];
+};
+
+export default function ResourceBrowser({
+    canonicalSubjects = [],
+    canonicalLevels = [],
+}: ResourceBrowserProps) {
     const searchParams = useSearchParams();
     const typeParam = searchParams.get('type');
     const type =
@@ -74,19 +83,32 @@ export default function ResourceBrowser() {
     }, [type]);
 
     const subjectOptions = useMemo(() => {
-        const s = new Set(resources.map((r) => r.subject).filter(Boolean));
-        return [...s].sort((a, b) => a.localeCompare(b));
-    }, [resources]);
+        const fromLibrary = new Set(
+            resources
+                .map((r) => formatResourceSubject(r.subject))
+                .filter((s) => s && !isJunkFilterValue(s)),
+        );
+        const merged = new Set([...canonicalSubjects, ...fromLibrary]);
+        return [...merged].sort((a, b) => a.localeCompare(b));
+    }, [resources, canonicalSubjects]);
 
     const levelOptions = useMemo(() => {
-        const s = new Set(resources.map((r) => r.level).filter(Boolean));
-        return [...s].sort((a, b) => a.localeCompare(b));
-    }, [resources]);
+        const fromLibrary = new Set(
+            resources.map((r) => r.level.trim()).filter((l) => l && !isJunkFilterValue(l)),
+        );
+        const merged = new Set([...canonicalLevels, ...fromLibrary]);
+        return [...merged].sort((a, b) => a.localeCompare(b));
+    }, [resources, canonicalLevels]);
 
     const filteredResources = useMemo(() => {
         const q = search.trim().toLowerCase();
         return resources.filter((r) => {
-            if (subjectFilter !== '__all__' && r.subject !== subjectFilter) return false;
+            if (
+                subjectFilter !== '__all__' &&
+                formatResourceSubject(r.subject) !== subjectFilter
+            ) {
+                return false;
+            }
             if (levelFilter !== '__all__' && r.level !== levelFilter) return false;
             if (!q) return true;
             const hay = `${r.title} ${r.topic} ${r.subject} ${r.level}`.toLowerCase();
@@ -238,7 +260,9 @@ export default function ResourceBrowser() {
                                         <CardContent className="flex-grow space-y-2">
                                             <div className="flex flex-wrap gap-2">
                                                 <Badge variant="outline">{resource.level || '—'}</Badge>
-                                                <Badge variant="secondary">{resource.subject || '—'}</Badge>
+                                                <Badge variant="secondary">
+                                                    {formatResourceSubject(resource.subject) || '—'}
+                                                </Badge>
                                             </div>
                                             <p className="text-xs text-muted-foreground pt-2">
                                                 Created: {formatCreated(resource.createdAt)}

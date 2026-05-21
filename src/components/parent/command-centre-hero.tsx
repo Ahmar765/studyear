@@ -111,7 +111,7 @@ export function CommandCentreHero({ data }: { data: ParentDashboardPayload }) {
                   key={alert.id}
                   className={cn(
                     'rounded-lg border px-3 py-2.5 text-sm transition-transform hover:scale-[1.01]',
-                    severityStyles[alert.severity],
+                    severityStyles[alert.severity] ?? severityStyles.info,
                   )}
                 >
                   {alert.message}

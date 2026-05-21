@@ -53,7 +53,12 @@ export type AIFeatureKey = FeatureKey;
  * Unlocked by ACU balance only — no premium subscription tier required.
  * School teachers still debit the linked school's ACU pool.
  */
-export const ACU_ONLY_FEATURES = new Set<FeatureKey>(['AI_COURSE_GENERATOR']);
+export const ACU_ONLY_FEATURES = new Set<FeatureKey>([
+  'AI_COURSE_GENERATOR',
+  'AI_ASSIGNMENT_REVIEW',
+  'AI_ESSAY_REVIEW',
+  'AI_DISSERTATION_REVIEW',
+]);
 
 export function isAcuOnlyFeature(featureKey: FeatureKey): boolean {
   return ACU_ONLY_FEATURES.has(featureKey);

@@ -341,11 +341,15 @@ export default function ProfileSetupForm({ studyLevels, examBoards, subjectsByLe
             if (!user) return;
             setIsSaving(true);
             try {
-                const result = await updateBasicUserProfile(user.uid, {
-                    fullName: profileData.fullName?.trim() || userProfile.name || '',
-                    profileImageUrl: profileData.profileImageUrl ?? null,
-                    coverImageUrl: profileData.coverImageUrl ?? null,
-                });
+                const result = await updateBasicUserProfile(
+                    user.uid,
+                    {
+                        fullName: profileData.fullName?.trim() || userProfile.name || '',
+                        profileImageUrl: profileData.profileImageUrl ?? null,
+                        coverImageUrl: profileData.coverImageUrl ?? null,
+                    },
+                    { markOnboardingComplete: false },
+                );
                 if (result.success) {
                     toast({ title: 'Profile saved', description: 'Your administrator profile has been updated.' });
                     router.push('/admin/dashboard');
@@ -567,7 +571,7 @@ export default function ProfileSetupForm({ studyLevels, examBoards, subjectsByLe
                 });
                 if (result.success) {
                     toast({ title: 'Profile saved', description: 'Your administrator profile has been updated.' });
-                    router.push('/school/dashboard');
+                    router.push('/account');
                 } else {
                     toast({ variant: 'destructive', title: 'Save failed', description: result.error });
                 }
@@ -649,7 +653,9 @@ export default function ProfileSetupForm({ studyLevels, examBoards, subjectsByLe
                   ? '/parent/dashboard'
                   : normalizedRole === 'SCHOOL_TUTOR'
                     ? '/teacher/dashboard'
-                    : '/dashboard';
+                    : normalizedRole === 'SCHOOL_ADMIN'
+                      ? '/school/dashboard'
+                      : '/dashboard';
         return (
              <div className="flex items-center justify-center min-h-screen bg-background p-4 py-8">
                 <Card className="w-full max-w-md text-center">

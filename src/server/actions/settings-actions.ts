@@ -130,7 +130,7 @@ export async function submitContactFormAction(input: {
   email: string;
   enquiryType: string;
   message: string;
-}): Promise<{ success: boolean; error?: string }> {
+}): Promise<{ success: boolean; emailSent?: boolean; error?: string }> {
   try {
     const fullName = input.fullName?.trim();
     const email = input.email?.trim().toLowerCase();
@@ -157,7 +157,7 @@ export async function submitContactFormAction(input: {
       console.warn('[contact] stored in Firestore but outbound email was not sent (check MAIL_* env).');
     }
 
-    return { success: true };
+    return { success: true, emailSent: mail.sent };
   } catch (error) {
     console.error('Contact form error:', error);
     return { success: false, error: 'Could not send your message. Please try again.' };

@@ -1,7 +1,6 @@
 
 'use client';
 
-import Link from "next/link";
 import { useState, useTransition } from "react";
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -15,15 +14,13 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Sparkles, Loader, FileCheck2, Lightbulb, TrendingUp, AlertTriangle, Lock, BarChart3, ImageIcon } from "lucide-react";
+import { Sparkles, Loader, FileCheck2, Lightbulb, TrendingUp, AlertTriangle, BarChart3, ImageIcon } from "lucide-react";
 import {
   type AssignmentReviewResult,
   submitAssignmentForReviewAction,
 } from "@/server/actions/assignment-review-actions";
 import { Separator } from "@/components/ui/separator";
 import { useUserProfile } from "@/hooks/use-user-profile";
-import { canUsePremiumFeature } from "@/data/entitlements";
-import type { SubscriptionType } from "@/server/schemas";
 import { AssignmentUploadZone } from "@/components/assignment-upload-zone";
 import Image from "next/image";
 
@@ -57,11 +54,6 @@ export default function AssignmentReviewForm({ subjectsByLevel, levels }: Assign
     const { user } = useAuth();
     const { userProfile, loading: profileLoading } = useUserProfile();
     const { toast } = useToast();
-
-    const subscription = (userProfile?.subscription ?? "FREE") as SubscriptionType;
-    const hasPremiumAssignmentReview =
-        userProfile?.role === "ADMIN" ||
-        canUsePremiumFeature(subscription, "AI_ASSIGNMENT_REVIEW");
 
     const form = useForm<z.infer<typeof FormSchema>>({
         resolver: zodResolver(FormSchema),
@@ -117,30 +109,6 @@ export default function AssignmentReviewForm({ subjectsByLevel, levels }: Assign
                 <Skeleton className="min-h-[480px] w-full rounded-lg" />
                 <Skeleton className="min-h-[480px] w-full rounded-lg" />
             </div>
-        );
-    }
-
-    if (user && !hasPremiumAssignmentReview) {
-        return (
-            <Card className="max-w-lg mx-auto border-accent/30">
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <Lock className="h-5 w-5" />
-                        Premium: AI Assignment Review
-                    </CardTitle>
-                    <CardDescription>
-                        Detailed AI feedback and predicted grades for homework, essays, dissertations, and other written work are included with Premium and Premium Plus.
-                    </CardDescription>
-                </CardHeader>
-                <CardContent className="flex flex-col gap-4">
-                    <p className="text-sm text-muted-foreground">
-                        Upgrade to unlock this tool. Each review still uses ACUs from your wallet.
-                    </p>
-                    <Button asChild>
-                        <Link href="/checkout">View plans & upgrade</Link>
-                    </Button>
-                </CardContent>
-            </Card>
         );
     }
 

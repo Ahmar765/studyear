@@ -135,6 +135,7 @@ export async function signup(uid: string, email: string, role: string, displayNa
             name: `${email.split('@')[1].split('.')[0]} (Pending)`, 
             approvalStatus: 'PENDING',
             staffJoinCode: generateSchoolStaffJoinCode(),
+            createdByUid: uid,
             createdAt: now,
         });
         const schoolStaffRef = adminDb.collection('school_staff').doc();

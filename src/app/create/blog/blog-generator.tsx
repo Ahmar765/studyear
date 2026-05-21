@@ -11,7 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Sparkles, Newspaper, Save } from "lucide-react";
 import { GenerateBlogPostOutput } from "@/server/ai/flows/blog-post-generation";
 import { createAiBlogPost } from "@/server/actions/blog-actions";
-import { saveBlogPostAction } from "@/server/actions/blog-post-actions";
+import { publishBlogPostAction, saveBlogPostAction } from "@/server/actions/blog-post-actions";
 import { useAuth } from "@/hooks/use-auth";
 import { useUserProfile } from "@/hooks/use-user-profile";
 import { SimpleMarkdown } from "@/components/blog/simple-markdown";
@@ -52,7 +52,7 @@ export default function BlogGenerator() {
     });
   };
 
-  const handleSaveDraft = () => {
+  const savePost = (andPublish: boolean) => {
     if (!user || !generatedPost) return;
     startSaveDraft(async () => {
       const result = await saveBlogPostAction({
@@ -64,14 +64,25 @@ export default function BlogGenerator() {
       if (!result.success || !result.id) {
         toast({
           variant: "destructive",
-          title: "Could not save draft",
+          title: "Could not save",
           description: result.error,
         });
         return;
       }
+      if (andPublish) {
+        const pub = await publishBlogPostAction(result.id);
+        if (!pub.success) {
+          toast({ variant: "destructive", title: "Publish failed", description: pub.error });
+          router.push(`/admin/blog/${result.id}/edit`);
+          return;
+        }
+        toast({ title: "Published", description: "Post is live on /blog." });
+        router.push("/admin/blog");
+        return;
+      }
       toast({
         title: "Draft saved",
-        description: "Opening the editor so you can publish when ready.",
+        description: "Opening the editor — use Save & publish when ready.",
       });
       router.push(`/admin/blog/${result.id}/edit`);
     });
@@ -137,16 +148,26 @@ export default function BlogGenerator() {
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <h1 className="text-3xl font-extrabold tracking-tight lg:text-4xl">{generatedPost.title}</h1>
                       {isAdmin ? (
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          size="sm"
-                          disabled={saveDraftPending}
-                          onClick={handleSaveDraft}
-                        >
-                          <Save className="mr-2 h-4 w-4" />
-                          {saveDraftPending ? "Saving…" : "Save draft"}
-                        </Button>
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            disabled={saveDraftPending}
+                            onClick={() => savePost(false)}
+                          >
+                            <Save className="mr-2 h-4 w-4" />
+                            {saveDraftPending ? "Saving…" : "Save draft"}
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            disabled={saveDraftPending}
+                            onClick={() => savePost(true)}
+                          >
+                            {saveDraftPending ? "Publishing…" : "Save & publish"}
+                          </Button>
+                        </div>
                       ) : null}
                     </div>
                      <div>

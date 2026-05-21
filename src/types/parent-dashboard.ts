@@ -99,6 +99,15 @@ export interface GradeProbability {
   likelihood: number;
 }
 
+export interface UniversityPathway {
+  studentId: string;
+  course: string;
+  fitScore: number;
+  rationale: string;
+  entryRequirements: string[];
+  nextSteps: string[];
+}
+
 export interface MicroWeakness {
   id: string;
   studentId: string;
@@ -158,6 +167,7 @@ export interface ParentDashboardPayload {
   verifiedHours: VerifiedStudyHours[];
   homework: HomeworkItem[];
   gradeProbabilities: GradeProbability[];
+  universityPathways: UniversityPathway[];
   microWeaknesses: MicroWeakness[];
   emotionalSignals: EmotionalSignal[];
   performance: PerformanceSeries[];

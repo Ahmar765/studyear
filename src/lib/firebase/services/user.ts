@@ -22,6 +22,8 @@ export interface StudentProfileData {
   userId: string;
   studyLevel?: string;
   yearGroup?: string;
+  /** Optional form/class label (e.g. 10A) — used for teacher cohort filtering when set. */
+  className?: string;
   course?: string;
   /** Stored on `student_profiles` from profile setup */
   dob?: string;

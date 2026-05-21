@@ -2,6 +2,7 @@
 
 import { adminDb } from '@/lib/firebase/admin-app';
 import { getVerifiedUser } from '@/server/lib/auth';
+import { resolveUserRole } from '@/server/lib/user-role';
 import { HttpsError } from '@/server/lib/errors';
 import {
   buildTutorDashboardPayload,
@@ -16,6 +17,30 @@ import type {
 } from '@/types/tutor-dashboard';
 import * as admin from 'firebase-admin';
 import { z } from 'zod';
+
+const optionalHttpsUrl = z
+  .string()
+  .optional()
+  .nullable()
+  .transform((v) => {
+    const t = (v ?? '').trim();
+    return t.length ? t : null;
+  })
+  .refine((v) => v === null || /^https?:\/\//i.test(v), {
+    message: 'Image URL must start with http:// or https://',
+  });
+
+async function requirePrivateTutor(idToken: string | null | undefined) {
+  const tokenUser = await getVerifiedUser(idToken);
+  if (!tokenUser) {
+    throw new HttpsError('unauthenticated', 'You must be signed in.');
+  }
+  const role = await resolveUserRole(tokenUser.uid, tokenUser);
+  if (role !== 'PRIVATE_TUTOR') {
+    throw new HttpsError('permission-denied', 'Private tutor access only.');
+  }
+  return { uid: tokenUser.uid, tokenUser };
+}
 
 export interface TutorListing {
   uid: string;
@@ -65,19 +90,16 @@ export async function getTutorDashboardDataAction(
   idToken?: string | null,
 ): Promise<{ success: boolean; data?: TutorDashboardPayload; error?: string }> {
   try {
-    const user = await getVerifiedUser(idToken);
-    if (user.role !== 'PRIVATE_TUTOR') {
-      throw new HttpsError('permission-denied', 'Tutor access only.');
-    }
+    const { uid } = await requirePrivateTutor(idToken);
 
-    const profileSnap = await adminDb.collection('tutor_profiles').doc(user.uid).get();
+    const profileSnap = await adminDb.collection('tutor_profiles').doc(uid).get();
     if (!profileSnap.exists) {
       throw new HttpsError('not-found', 'Tutor profile not found.');
     }
 
-    const profile = profileFromDoc(user.uid, profileSnap.data()!);
-    const live = await fetchLiveTutorContext(user.uid);
-    const userSnap = await adminDb.collection('users').doc(user.uid).get();
+    const profile = profileFromDoc(uid, profileSnap.data()!);
+    const live = await fetchLiveTutorContext(uid);
+    const userSnap = await adminDb.collection('users').doc(uid).get();
 
     return {
       success: true,
@@ -93,8 +115,8 @@ const OnboardingSchema = z.object({
   step: z.number().min(1).max(5),
   fullName: z.string().min(1).max(120).optional(),
   dob: z.string().max(32).optional(),
-  profileImageUrl: z.string().url().optional().nullable(),
-  coverImageUrl: z.string().url().optional().nullable(),
+  profileImageUrl: optionalHttpsUrl,
+  coverImageUrl: optionalHttpsUrl,
   tutorType: z
     .enum([
       'ACADEMIC',
@@ -129,13 +151,10 @@ export async function saveTutorOnboardingAction(
   values: z.infer<typeof OnboardingSchema>,
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const user = await getVerifiedUser(idToken);
-    if (user.role !== 'PRIVATE_TUTOR') {
-      throw new HttpsError('permission-denied', 'Tutor access only.');
-    }
+    const { uid } = await requirePrivateTutor(idToken);
 
     const parsed = OnboardingSchema.parse(values);
-    const ref = adminDb.collection('tutor_profiles').doc(user.uid);
+    const ref = adminDb.collection('tutor_profiles').doc(uid);
     const update: Record<string, unknown> = {
       onboardingStep: parsed.step,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -159,7 +178,7 @@ export async function saveTutorOnboardingAction(
     if (parsed.examSpecialist !== undefined) update.examSpecialist = parsed.examSpecialist;
     if (parsed.onboardingComplete) {
       update.onboardingComplete = true;
-      await adminDb.collection('users').doc(user.uid).update({ onboardingComplete: true });
+      await adminDb.collection('users').doc(uid).update({ onboardingComplete: true });
     }
 
     await ref.set(update, { merge: true });
@@ -172,11 +191,17 @@ export async function saveTutorOnboardingAction(
     if (parsed.profileImageUrl !== undefined) userPatch.profileImageUrl = parsed.profileImageUrl;
     if (parsed.coverImageUrl !== undefined) userPatch.coverImageUrl = parsed.coverImageUrl;
     if (Object.keys(userPatch).length > 1) {
-      await adminDb.collection('users').doc(user.uid).set(userPatch, { merge: true });
+      await adminDb.collection('users').doc(uid).set(userPatch, { merge: true });
     }
 
     return { success: true };
   } catch (e) {
+    if (e instanceof HttpsError) {
+      return { success: false, error: e.message };
+    }
+    if (e instanceof z.ZodError) {
+      return { success: false, error: e.errors.map((err) => err.message).join(', ') };
+    }
     const message = e instanceof Error ? e.message : 'Save failed';
     return { success: false, error: message };
   }
@@ -375,14 +400,11 @@ export async function updateTutorSessionStatusAction(
   values: z.infer<typeof UpdateSessionSchema>,
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const user = await getVerifiedUser(idToken);
-    if (user.role !== 'PRIVATE_TUTOR') {
-      throw new HttpsError('permission-denied', 'Tutor access only.');
-    }
+    const { uid } = await requirePrivateTutor(idToken);
     const parsed = UpdateSessionSchema.parse(values);
     const ref = adminDb.collection('tutor_sessions').doc(parsed.sessionId);
     const snap = await ref.get();
-    if (!snap.exists || snap.data()?.tutorId !== user.uid) {
+    if (!snap.exists || snap.data()?.tutorId !== uid) {
       throw new HttpsError('not-found', 'Session not found.');
     }
     await ref.update({

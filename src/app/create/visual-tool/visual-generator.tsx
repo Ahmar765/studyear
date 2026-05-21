@@ -26,9 +26,19 @@ type VisualResult = {
 } | null;
 
 const visualToolTypes = [
-    "EDUCATIONAL_IMAGE", "VISUAL_DRAWING", "BAR_GRAPH", "LINE_GRAPH", 
-    "PIE_CHART", "COORDINATE_GRAPH", "GEOMETRY_DIAGRAM", "FUNCTION_GRAPH"
-];
+  "EDUCATIONAL_IMAGE",
+  "VISUAL_DRAWING",
+  "BAR_GRAPH",
+  "LINE_GRAPH",
+  "PIE_CHART",
+  "SCATTER_PLOT",
+  "HISTOGRAM",
+  "PICTOGRAPH",
+  "COORDINATE_GRAPH",
+  "GEOMETRY_DIAGRAM",
+  "FUNCTION_GRAPH",
+  "GRAPH_THEORY_DIAGRAM",
+] as const;
 
 const FormSchema = z.object({
   type: z.enum([
@@ -78,8 +88,38 @@ export default function VisualGenerator() {
       return;
     }
 
+    if (["EDUCATIONAL_IMAGE", "VISUAL_DRAWING"].includes(values.type)) {
+      if (!values.prompt?.trim()) {
+        toast({ variant: 'destructive', title: 'Prompt required', description: 'Describe the image you want to create.' });
+        return;
+      }
+    }
+
+    const usesBarData =
+      values.type === 'BAR_GRAPH' ||
+      values.type === 'PIE_CHART' ||
+      values.type === 'PICTOGRAPH' ||
+      values.type === 'HISTOGRAM';
+    const usesLineData =
+      values.type === 'LINE_GRAPH' ||
+      values.type === 'SCATTER_PLOT' ||
+      values.type === 'GRAPH_THEORY_DIAGRAM';
+
+    if (usesBarData && !(values.barData?.length ?? 0)) {
+      toast({ variant: 'destructive', title: 'Add chart data', description: 'Add at least one label and value.' });
+      return;
+    }
+    if (usesLineData && !(values.lineData?.length ?? 0)) {
+      toast({ variant: 'destructive', title: 'Add chart data', description: 'Add at least one x/y point.' });
+      return;
+    }
+    if (values.type === 'COORDINATE_GRAPH' && !(values.coordinatePoints?.length ?? 0)) {
+      toast({ variant: 'destructive', title: 'Add points', description: 'Add at least one coordinate.' });
+      return;
+    }
+
     setResult(null);
-    let submissionData: any = {
+    const submissionData: Record<string, unknown> = {
       userId: user.uid,
       studentId: user.uid,
       type: values.type,
@@ -87,10 +127,10 @@ export default function VisualGenerator() {
     };
 
     if (["EDUCATIONAL_IMAGE", "VISUAL_DRAWING"].includes(values.type)) {
-      submissionData.prompt = values.prompt;
-    } else if (values.type === 'BAR_GRAPH' || values.type === 'PIE_CHART') {
+      submissionData.prompt = values.prompt?.trim();
+    } else if (usesBarData) {
       submissionData.data = values.barData;
-    } else if (values.type === 'LINE_GRAPH') {
+    } else if (usesLineData) {
       submissionData.data = values.lineData;
     } else if (values.type === 'COORDINATE_GRAPH') {
       submissionData.data = { points: values.coordinatePoints };
@@ -100,8 +140,18 @@ export default function VisualGenerator() {
       submissionData.data = { expression: values.functionExpression };
     }
 
+    const parsed = VisualRequestSchema.safeParse(submissionData);
+    if (!parsed.success) {
+      toast({
+        variant: 'destructive',
+        title: 'Invalid input',
+        description: parsed.error.flatten().formErrors.join(', ') || 'Check your entries and try again.',
+      });
+      return;
+    }
+
     startTransition(async () => {
-      const res = await createVisualResourceAction(submissionData);
+      const res = await createVisualResourceAction(parsed.data);
 
       if (res.success && res.visual) {
         setResult(res.visual);
@@ -114,7 +164,12 @@ export default function VisualGenerator() {
   
   const isImagePrompt = ["EDUCATIONAL_IMAGE", "VISUAL_DRAWING"].includes(watchType);
   const isBarOrPie = ["BAR_GRAPH", "PIE_CHART"].includes(watchType);
-  const isLine = watchType === "LINE_GRAPH";
+  const isLine =
+    watchType === "LINE_GRAPH" ||
+    watchType === "SCATTER_PLOT" ||
+    watchType === "GRAPH_THEORY_DIAGRAM";
+  const isBarOrPieExtended =
+    isBarOrPie || watchType === "PICTOGRAPH" || watchType === "HISTOGRAM";
   const isCoordinate = watchType === "COORDINATE_GRAPH";
   const isGeometry = watchType === "GEOMETRY_DIAGRAM";
   const isFunction = watchType === "FUNCTION_GRAPH";
@@ -158,7 +213,7 @@ export default function VisualGenerator() {
                 </div>
             )}
             
-            {isBarOrPie && (
+            {isBarOrPieExtended && (
                  <div className="space-y-4 p-4 border rounded-lg">
                     <h4 className="font-medium">Chart Data</h4>
                      {barFields.map((field, index) => (
@@ -244,7 +299,17 @@ export default function VisualGenerator() {
             <Skeleton className="aspect-video w-full" />
           ) : result ? (
             <div className="aspect-video relative rounded-md border bg-white flex items-center justify-center p-2">
-              {result.imageUrl && <Image src={result.imageUrl} alt="Generated AI Image" fill className="object-contain" />}
+              {result.imageUrl && (
+                <Image
+                  src={result.imageUrl}
+                  alt="Generated AI Image"
+                  fill
+                  className="object-contain"
+                  unoptimized={
+                    result.imageUrl.startsWith('data:') || result.imageUrl.startsWith('blob:')
+                  }
+                />
+              )}
               {result.svg && <div className="w-full h-full" dangerouslySetInnerHTML={{ __html: result.svg }} />}
             </div>
           ) : (

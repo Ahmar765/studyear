@@ -3,7 +3,8 @@
  */
 
 import { ai } from '@/server/ai';
-import {z} from 'zod';
+import { toGoogleAiGenkitModel } from '@/server/ai/genkit-model';
+import { z } from 'zod';
 
 export const InterventionInputSchema = z.object({
   studentId: z.string(),
@@ -64,8 +65,9 @@ const interventionGenerationFlow = ai.defineFlow(
     inputSchema: InterventionInputSchema,
     outputSchema: InterventionOutputSchema,
   },
-  async input => {
-    const {output} = await prompt(input);
-    return output!;
-  }
+  async (input) => {
+    const { output } = await prompt(input, { model: toGoogleAiGenkitModel() });
+    if (!output) throw new Error('Intervention generation did not return a response.');
+    return output;
+  },
 );

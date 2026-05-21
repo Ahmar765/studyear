@@ -81,12 +81,44 @@ export function resolveParentPlanType(type: string | undefined): ParentPlanTier 
   return null;
 }
 
+const PARENT_TIER_RANK: Record<ParentPlanTier, number> = {
+  PARENT_PRO: 1,
+  PARENT_PRO_PLUS: 2,
+  PARENT_ELITE: 3,
+};
+
+function pickHigherParentTier(
+  a: ParentPlanTier | null,
+  b: ParentPlanTier | null,
+): ParentPlanTier | null {
+  if (!a) return b;
+  if (!b) return a;
+  return PARENT_TIER_RANK[a] >= PARENT_TIER_RANK[b] ? a : b;
+}
+
+/** Active tier from Stripe `subscriptions` doc and/or `users.subscription` (whichever is higher). */
 export async function getActiveParentPlanTier(userId: string): Promise<ParentPlanTier | null> {
-  const snap = await adminDb.collection('subscriptions').doc(userId).get();
-  if (!snap.exists) return null;
-  const data = snap.data();
-  if (data?.status !== 'ACTIVE') return null;
-  return resolveParentPlanType(String(data?.type ?? ''));
+  const [subSnap, userSnap] = await Promise.all([
+    adminDb.collection('subscriptions').doc(userId).get(),
+    adminDb.collection('users').doc(userId).get(),
+  ]);
+
+  let tier: ParentPlanTier | null = null;
+
+  const subData = subSnap.data();
+  if (subSnap.exists && subData?.status === 'ACTIVE') {
+    tier = pickHigherParentTier(tier, resolveParentPlanType(String(subData?.type ?? '')));
+  }
+
+  const userData = userSnap.data();
+  if (userData?.role === 'PARENT') {
+    tier = pickHigherParentTier(
+      tier,
+      resolveParentPlanType(String(userData?.subscription ?? '')),
+    );
+  }
+
+  return tier;
 }
 
 export async function assertParentFeature(
@@ -125,6 +157,7 @@ export function applyParentPlanGates(payload: ParentDashboardPayload): ParentDas
   }
   if (!features.pathwayEngine) {
     payload.gradeProbabilities = [];
+    payload.universityPathways = [];
   }
   if (!features.microWeaknesses) {
     payload.microWeaknesses = [];

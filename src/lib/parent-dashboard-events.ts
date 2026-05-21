@@ -6,3 +6,8 @@ export function notifyParentStudentLinked() {
     window.dispatchEvent(new Event(PARENT_STUDENT_LINKED_EVENT));
   }
 }
+
+/** Same channel — dashboard refetches after link or unlink. */
+export function notifyParentDashboardRefresh() {
+  notifyParentStudentLinked();
+}

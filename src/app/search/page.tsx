@@ -9,19 +9,20 @@ import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { getResourceCountsAction } from "@/server/actions/resource-actions";
-import { resourceMetadata, ResourceType } from "@/data/academic";
+import { resourceMetadata } from "@/data/academic";
+import { PUBLIC_LIBRARY_RESOURCE_TYPES } from "@/data/public-library";
 import { ArrowRight } from "lucide-react";
 
 export default async function SearchPage() {
   const counts = await getResourceCountsAction();
-  const resourceTypes = Object.keys(resourceMetadata) as ResourceType[];
+  const resourceTypes = PUBLIC_LIBRARY_RESOURCE_TYPES;
 
   return (
     <div className="flex-1 space-y-8 p-4 md:p-8">
       <div className="flex flex-col items-center text-center space-y-2">
         <h2 className="text-3xl font-bold tracking-tight">Find Study Resources</h2>
         <p className="text-muted-foreground max-w-2xl">
-          Browse our global library of AI-generated and community-contributed study materials. Every time you or another student creates a resource, it&apos;s added here for everyone to benefit from.
+          Browse videos, past papers, quizzes, and flashcards shared on StudYear. Use subject and level filters on each category to match your course.
         </p>
         <Button asChild variant="outline" className="mt-2">
           <Link href="/contribute">Submit a video or past paper for review</Link>

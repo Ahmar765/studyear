@@ -1,4 +1,5 @@
 import { ai } from '..';
+import { toGoogleAiGenkitModel } from '@/server/ai/genkit-model';
 import { z } from 'zod';
 
 const ChartDataItemSchema = z.object({
@@ -45,7 +46,8 @@ const generateChartDataFlow = ai.defineFlow(
     outputSchema: GenerateChartOutputSchema,
   },
   async (input) => {
-    const {output} = await prompt(input);
-    return output!;
+    const { output } = await prompt(input, { model: toGoogleAiGenkitModel() });
+    if (!output) throw new Error('Chart data generation did not return a response.');
+    return output;
   }
 );

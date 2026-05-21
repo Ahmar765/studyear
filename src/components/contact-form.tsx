@@ -18,6 +18,7 @@ import {
 export default function ContactForm() {
   const { toast } = useToast();
   const [isPending, startTransition] = useTransition();
+  const [enquiryType, setEnquiryType] = useState('support');
   const [copy, setCopy] = useState({
     title: 'Message sent',
     description: 'Thank you for contacting us. We will get back to you shortly.',
@@ -39,12 +40,18 @@ export default function ContactForm() {
       const result = await submitContactFormAction({
         fullName: String(formData.get('fullName') ?? ''),
         email: String(formData.get('email') ?? ''),
-        enquiryType: String(formData.get('enquiryType') ?? 'support'),
+        enquiryType,
         message: String(formData.get('message') ?? ''),
       });
       if (result.success) {
-        toast({ title: copy.title, description: copy.description });
+        toast({
+          title: copy.title,
+          description: result.emailSent
+            ? copy.description
+            : `${copy.description} (Saved — email delivery is not configured on the server yet.)`,
+        });
         (e.target as HTMLFormElement).reset();
+        setEnquiryType('support');
       } else {
         toast({ variant: 'destructive', title: 'Could not send', description: result.error });
       }
@@ -53,6 +60,7 @@ export default function ContactForm() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
+      <input type="hidden" name="enquiryType" value={enquiryType} />
       <div className="space-y-2">
         <Label htmlFor="fullName">Full Name</Label>
         <Input id="fullName" name="fullName" required disabled={isPending} />
@@ -63,7 +71,7 @@ export default function ContactForm() {
       </div>
       <div className="space-y-2">
         <Label htmlFor="enquiryType">Enquiry Type</Label>
-        <Select name="enquiryType" required disabled={isPending}>
+        <Select value={enquiryType} onValueChange={setEnquiryType} required disabled={isPending}>
           <SelectTrigger id="enquiryType">
             <SelectValue placeholder="Select a reason..." />
           </SelectTrigger>

@@ -1,6 +1,7 @@
 import { Suspense } from 'react';
 import ResourceBrowser from './resource-browser';
 import { Skeleton } from '@/components/ui/skeleton';
+import { getLevels, getSubjects } from '@/server/actions/academic-actions';
 
 function Loading() {
     return (
@@ -19,10 +20,12 @@ function Loading() {
     )
 }
 
-export default function ResourcesPage() {
+export default async function ResourcesPage() {
+  const [subjects, levels] = await Promise.all([getSubjects(), getLevels()]);
+  const canonicalSubjects = subjects.map((s) => s.name);
   return (
     <Suspense fallback={<Loading />}>
-      <ResourceBrowser />
+      <ResourceBrowser canonicalSubjects={canonicalSubjects} canonicalLevels={levels} />
     </Suspense>
   );
 }

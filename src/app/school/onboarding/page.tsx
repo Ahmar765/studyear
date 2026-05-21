@@ -2,7 +2,7 @@
 
 import { useAuth } from '@/hooks/use-auth';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useCallback, useEffect, useState, useTransition } from 'react';
+import { useCallback, useEffect, useState, useTransition, Suspense } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,8 +21,8 @@ import Link from 'next/link';
 
 const EMPTY: SchoolOnboardingProfile = {};
 
-export default function SchoolOnboardingPage() {
-  const { user } = useAuth();
+function SchoolOnboardingInner() {
+  const { user, loading: authLoading } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const isEditMode = searchParams.get('edit') === '1';
@@ -36,6 +36,7 @@ export default function SchoolOnboardingPage() {
 
   const load = useCallback(async () => {
     if (!user) return;
+    setLoading(true);
     const token = await user.getIdToken();
     const res = await getSchoolOnboardingStateAction(token);
     if (res.success) {
@@ -54,8 +55,14 @@ export default function SchoolOnboardingPage() {
   }, [user, router, isEditMode]);
 
   useEffect(() => {
+    if (authLoading) return;
+    if (!user) {
+      setLoading(false);
+      router.replace('/login');
+      return;
+    }
     void load();
-  }, [load]);
+  }, [authLoading, user, load, router]);
 
   const progressPct = ((step + 1) / SCHOOL_ONBOARDING_STEPS.length) * 100;
 
@@ -66,7 +73,7 @@ export default function SchoolOnboardingPage() {
       const res = await saveSchoolOnboardingStepAction(
         token,
         nextStep,
-        { ...patch, schoolName: schoolName || patch.schoolName },
+        { ...patch, schoolName: schoolName.trim() || undefined },
         complete,
       );
       if (res.success) {
@@ -87,7 +94,7 @@ export default function SchoolOnboardingPage() {
     });
   };
 
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <Loader className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -373,5 +380,19 @@ export default function SchoolOnboardingPage() {
         </Card>
       </div>
     </div>
+  );
+}
+
+export default function SchoolOnboardingPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-[60vh] items-center justify-center">
+          <Loader className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      }
+    >
+      <SchoolOnboardingInner />
+    </Suspense>
   );
 }

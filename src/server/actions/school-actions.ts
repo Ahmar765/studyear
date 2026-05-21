@@ -44,13 +44,10 @@ export async function getSchoolStudentsAction(idToken?: string | null): Promise<
         if (studentProfilesSnapshot.empty) return { students: [] };
 
         const studentIds = studentProfilesSnapshot.docs.map(doc => doc.id);
-        const [usersSnapshot, dashboardsSnapshot] = await Promise.all([
-            adminDb.collection('users').where(admin.firestore.FieldPath.documentId(), 'in', studentIds).get(),
-            adminDb.collection('student_dashboard_states').where(admin.firestore.FieldPath.documentId(), 'in', studentIds).get(),
+        const [usersMap, dashboardsMap] = await Promise.all([
+            fetchUserDocsByIds(studentIds),
+            fetchDashboardDocsByIds(studentIds),
         ]);
-        
-        const usersMap = new Map(usersSnapshot.docs.map(doc => [doc.id, doc.data()]));
-        const dashboardsMap = new Map(dashboardsSnapshot.docs.map(doc => [doc.id, doc.data()]));
 
         const students: SchoolStudent[] = studentProfilesSnapshot.docs.map(doc => {
             const profileData = doc.data();
@@ -94,9 +91,8 @@ export async function getSchoolStaffAction(idToken?: string | null): Promise<{ s
         const staffLinksSnapshot = await adminDb.collection('school_staff').where('schoolId', '==', schoolId).get();
         if (staffLinksSnapshot.empty) return { staff: [] };
 
-        const staffIds = staffLinksSnapshot.docs.map(doc => doc.data().userId);
-        const usersSnapshot = await adminDb.collection('users').where(admin.firestore.FieldPath.documentId(), 'in', staffIds).get();
-        const usersMap = new Map(usersSnapshot.docs.map(doc => [doc.id, doc.data()]));
+        const staffIds = staffLinksSnapshot.docs.map(doc => doc.data().userId as string);
+        const usersMap = await fetchUserDocsByIds(staffIds);
 
         const staff: SchoolStaffMember[] = staffLinksSnapshot.docs.map(doc => {
             const linkData = doc.data();
@@ -144,26 +140,23 @@ export async function getAtRiskStudentsAction(idToken?: string | null): Promise<
         if (studentProfilesSnapshot.empty) return { students: [] };
         
         const studentIds = studentProfilesSnapshot.docs.map(doc => doc.id);
+        const dashboardsMap = await fetchDashboardDocsByIds(studentIds);
+        const atRiskEntries = [...dashboardsMap.entries()].filter(([, data]) => {
+            const risk = data.riskLevel as string | undefined;
+            return risk === 'HIGH' || risk === 'CRITICAL';
+        });
+        if (!atRiskEntries.length) return { students: [] };
 
-        const dashboardsSnapshot = await adminDb.collection('student_dashboard_states')
-            .where(admin.firestore.FieldPath.documentId(), 'in', studentIds)
-            .where('riskLevel', 'in', ['HIGH', 'CRITICAL'])
-            .get();
-            
-        if (dashboardsSnapshot.empty) return { students: [] };
-
-        const atRiskStudentIds = dashboardsSnapshot.docs.map(doc => doc.id);
-        const usersSnapshot = await adminDb.collection('users').where(admin.firestore.FieldPath.documentId(), 'in', atRiskStudentIds).get();
-        const usersMap = new Map(usersSnapshot.docs.map(doc => [doc.id, doc.data()]));
+        const atRiskStudentIds = atRiskEntries.map(([id]) => id);
+        const usersMap = await fetchUserDocsByIds(atRiskStudentIds);
         
-        const students: AtRiskStudent[] = dashboardsSnapshot.docs.map(doc => {
-            const dashboardData = doc.data();
-            const userData = usersMap.get(doc.id) || {};
+        const students: AtRiskStudent[] = atRiskEntries.map(([id, dashboardData]) => {
+            const userData = usersMap.get(id) || {};
             return {
-                id: doc.id,
+                id,
                 name: userData.name || 'Unknown',
                 profileImageUrl: userData.profileImageUrl,
-                riskLevel: dashboardData.riskLevel,
+                riskLevel: dashboardData.riskLevel as 'HIGH' | 'CRITICAL',
                 weakestSubject: dashboardData.weakSubjects?.[0]?.name || 'N/A',
             };
         });
@@ -192,6 +185,32 @@ function chunkIds<T>(items: T[], size: number): T[][] {
         out.push(items.slice(i, i + size));
     }
     return out;
+}
+
+async function fetchUserDocsByIds(ids: string[]): Promise<Map<string, admin.firestore.DocumentData>> {
+    const map = new Map<string, admin.firestore.DocumentData>();
+    for (const chunk of chunkIds(ids, 10)) {
+        if (!chunk.length) continue;
+        const snap = await adminDb
+            .collection('users')
+            .where(admin.firestore.FieldPath.documentId(), 'in', chunk)
+            .get();
+        snap.docs.forEach((doc) => map.set(doc.id, doc.data()));
+    }
+    return map;
+}
+
+async function fetchDashboardDocsByIds(ids: string[]): Promise<Map<string, admin.firestore.DocumentData>> {
+    const map = new Map<string, admin.firestore.DocumentData>();
+    for (const chunk of chunkIds(ids, 30)) {
+        if (!chunk.length) continue;
+        const snap = await adminDb
+            .collection('student_dashboard_states')
+            .where(admin.firestore.FieldPath.documentId(), 'in', chunk)
+            .get();
+        snap.docs.forEach((doc) => map.set(doc.id, doc.data()));
+    }
+    return map;
 }
 
 export interface SchoolProgressOverview {
@@ -590,22 +609,30 @@ export async function getSchoolCohortOptionsAction(
         const { schoolId } = await requireSchoolAdminWithSchool(idToken);
         const doc = await adminDb.collection('school_accounts').doc(schoolId).get();
         const data = doc.data() ?? {};
-        const profile = (data.profile as Record<string, unknown>) ?? data;
-        const yearGroups = Array.isArray(profile.yearGroups)
-            ? (profile.yearGroups as string[])
-            : [];
-        const classes = Array.isArray(profile.classes) ? (profile.classes as string[]) : [];
+        const onboarding = (data.onboardingProfile as Record<string, unknown>) ?? {};
+        const legacy = (data.profile as Record<string, unknown>) ?? {};
+        const yearGroups = [
+            ...(Array.isArray(onboarding.yearGroups) ? (onboarding.yearGroups as string[]) : []),
+            ...(Array.isArray(legacy.yearGroups) ? (legacy.yearGroups as string[]) : []),
+        ];
+        const classes = [
+            ...(Array.isArray(onboarding.classes) ? (onboarding.classes as string[]) : []),
+            ...(Array.isArray(legacy.classes) ? (legacy.classes as string[]) : []),
+        ];
+        const yearSet = new Set(yearGroups.map((s) => s.trim()).filter(Boolean));
+        const classSet = new Set(classes.map((s) => s.trim()).filter(Boolean));
         const fromStudents = await adminDb
             .collection('student_profiles')
             .where('schoolAccountId', '==', schoolId)
             .limit(200)
             .get();
-        const yearSet = new Set(yearGroups);
         fromStudents.docs.forEach((d) => {
             const yg = (d.data().yearGroup as string)?.trim();
             if (yg) yearSet.add(yg);
+            const cn = (d.data().className as string)?.trim();
+            if (cn) classSet.add(cn);
         });
-        return { yearGroups: [...yearSet].sort(), classes };
+        return { yearGroups: [...yearSet].sort(), classes: [...classSet].sort() };
     } catch (error: unknown) {
         const msg = error instanceof Error ? error.message : String(error);
         return { yearGroups: [], classes: [], error: msg };

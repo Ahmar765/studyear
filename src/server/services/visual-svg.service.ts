@@ -279,12 +279,12 @@ export function generateChartSvg(input: VisualRequest): { svg?: string } {
     case "FUNCTION_GRAPH":
       return createFunctionGraph(input);
     case "PIE_CHART":
+    case "PICTOGRAPH":
       return createPieChart(input);
-    // Cases for other chart types would go here
-    // case "SCATTER_PLOT":
-    //   return createScatterPlot(input);
-    // case "HISTOGRAM":
-    //   return createHistogram(input);
+    case "SCATTER_PLOT":
+    case "HISTOGRAM":
+    case "GRAPH_THEORY_DIAGRAM":
+      return createLineGraph(input);
     default:
       throw new Error(`Unsupported visual chart type: ${input.type}`);
   }

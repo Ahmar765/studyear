@@ -16,9 +16,12 @@ export function AcuWalletProvider({ children }: { children: ReactNode }) {
   const [wallet, setWallet] = useState<AcuWallet | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const isSchoolTeacher =
+  const isSchoolStaff =
     tokenRoleResolved &&
-    (userProfile?.role === 'SCHOOL_TUTOR' || effectiveRole === 'SCHOOL_TUTOR');
+    (userProfile?.role === 'SCHOOL_TUTOR' ||
+      userProfile?.role === 'SCHOOL_ADMIN' ||
+      effectiveRole === 'SCHOOL_TUTOR' ||
+      effectiveRole === 'SCHOOL_ADMIN');
 
   const loadSchoolPool = useCallback(async () => {
     if (!user) return;
@@ -50,7 +53,7 @@ export function AcuWalletProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    if (isSchoolTeacher) {
+    if (isSchoolStaff) {
       setLoading(true);
       void loadSchoolPool();
       const interval = setInterval(() => void loadSchoolPool(), 45_000);
@@ -66,7 +69,7 @@ export function AcuWalletProvider({ children }: { children: ReactNode }) {
     return () => {
       if (unsubscribe) unsubscribe();
     };
-  }, [user, authLoading, profileLoading, tokenRoleResolved, isSchoolTeacher, loadSchoolPool]);
+  }, [user, authLoading, profileLoading, tokenRoleResolved, isSchoolStaff, loadSchoolPool]);
 
   return (
     <AcuWalletContext.Provider value={{ wallet, loading }}>

@@ -1,7 +1,7 @@
 'use client';
 
+import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/use-auth';
-import { useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -42,7 +42,7 @@ const IDENTITY_OPTIONS: { id: TutorIdentityType; label: string; description: str
 
 const LEVEL_OPTIONS = ['KS3', 'GCSE', 'A-Level', 'University', 'Adult'];
 
-export default function TutorOnboardingPage() {
+function TutorOnboardingPageInner() {
   const { user } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -542,5 +542,19 @@ export default function TutorOnboardingPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function TutorOnboardingPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-zinc-950 to-slate-900 p-8">
+          <p className="text-slate-400">Loading tutor setup…</p>
+        </div>
+      }
+    >
+      <TutorOnboardingPageInner />
+    </Suspense>
   );
 }

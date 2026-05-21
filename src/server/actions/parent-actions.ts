@@ -19,7 +19,7 @@ import type { ParentDashboardPayload, ParentPlanTier, StudentData } from '@/type
 
 export type { StudentData, ParentDashboardPayload, ParentPlanTier };
 
-import { resolveParentPlanType } from '@/server/lib/parent-plan';
+import { getActiveParentPlanTier } from '@/server/lib/parent-plan';
 
 export interface SavedResourceSummary {
   id: string;
@@ -119,11 +119,9 @@ export async function getParentDashboardDataAction(
   }
 
   try {
-    const subscriptionSnap = await adminDb.collection('subscriptions').doc(parentUser.uid).get();
-    const subData = subscriptionSnap.data();
-    const planTier = resolveParentPlanType(subData?.type);
+    const planTier = await getActiveParentPlanTier(parentUser.uid);
 
-    if (!subscriptionSnap.exists || !planTier || subData?.status !== 'ACTIVE') {
+    if (!planTier) {
       throw new HttpsError(
         'failed-precondition',
         'A Parent Pro subscription is required to access the Academic Command Centre.',
@@ -261,4 +259,40 @@ export async function getStudentParentLinkCodeAction(
 
   const code = await ensureStudentParentLinkCode(user.uid);
   return { success: true, code };
+}
+
+/** Remove an approved parent–student link (parent-initiated). */
+export async function unlinkParentStudentAction(
+  idToken: string | null | undefined,
+  studentId: string,
+): Promise<{ success: boolean; error?: string }> {
+  const parentUser = await getVerifiedUser(idToken);
+  if (!parentUser) {
+    return { success: false, error: 'You must be logged in.' };
+  }
+
+  if (!(await assertParentRole(parentUser.uid))) {
+    return { success: false, error: 'Only parent accounts can manage child links.' };
+  }
+
+  const trimmed = studentId?.trim();
+  if (!trimmed) {
+    return { success: false, error: 'Select a child to unlink.' };
+  }
+
+  try {
+    const linkId = `${trimmed}_${parentUser.uid}`;
+    const linkRef = adminDb.collection('parent_student_links').doc(linkId);
+    const snap = await linkRef.get();
+    if (!snap.exists) {
+      return { success: false, error: 'This child is not linked to your account.' };
+    }
+
+    await linkRef.delete();
+    return { success: true };
+  } catch (error: unknown) {
+    console.error('Error unlinking student:', error);
+    const message = error instanceof Error ? error.message : 'Could not unlink child.';
+    return { success: false, error: message };
+  }
 }

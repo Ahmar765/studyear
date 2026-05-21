@@ -53,12 +53,15 @@ import { HttpsError } from '../lib/errors';
 import { resourceMetadata, ResourceType } from '@/data/academic';
 import { ACUService } from '../services/acu-service';
 import { getVerifiedUser } from '@/server/lib/auth';
-import { isPlatformAdmin } from '@/server/lib/platform-admin';
+import { ensurePlatformAdminAccess, isPlatformAdmin } from '@/server/lib/platform-admin';
 
 async function assertPlatformAdmin(tokenUser: Awaited<ReturnType<typeof getVerifiedUser>>) {
-    if (!tokenUser) throw new Error('Not authenticated.');
+    if (!tokenUser) throw new Error('You must be signed in.');
+    await ensurePlatformAdminAccess(tokenUser.uid, tokenUser.email);
     if (!(await isPlatformAdmin(tokenUser.uid, tokenUser))) {
-        throw new Error('Forbidden.');
+        throw new Error(
+            'Administrator access required. Sign out and sign in again if you were recently promoted.',
+        );
     }
 }
 
@@ -79,7 +82,7 @@ export async function searchUsersForImpersonationAction(
 ): Promise<{ users: ImpersonationSearchUserRow[]; error?: string }> {
     try {
         const u = await getVerifiedUser(idToken);
-        assertPlatformAdmin(u);
+        await assertPlatformAdmin(u);
         const q = query.trim().toLowerCase();
         if (q.length < 2) {
             return { users: [] };
@@ -240,6 +243,38 @@ function sumStripePaymentPence(snap: QuerySnapshot): number {
     return pence;
 }
 
+async function fetchPaymentDocsSince(since: Timestamp) {
+    try {
+        const snap = await adminDb.collection('payments').where('createdAt', '>=', since).get();
+        return snap.docs;
+    } catch {
+        const snap = await adminDb.collection('payments').limit(500).get();
+        const sinceMs = since.toMillis();
+        return snap.docs.filter((d) => {
+            const created = d.data().createdAt as Timestamp | undefined;
+            return created && created.toMillis() >= sinceMs;
+        });
+    }
+}
+
+async function fetchAiLogDocsSince(since: Timestamp) {
+    try {
+        const snap = await adminDb
+            .collection('aiUsageLogs')
+            .where('createdAt', '>=', since)
+            .limit(AI_USAGE_AGG_ROW_CAP)
+            .get();
+        return snap.docs;
+    } catch {
+        const snap = await adminDb.collection('aiUsageLogs').limit(AI_USAGE_AGG_ROW_CAP).get();
+        const sinceMs = since.toMillis();
+        return snap.docs.filter((d) => {
+            const created = d.data().createdAt as Timestamp | undefined;
+            return created && created.toMillis() >= sinceMs;
+        });
+    }
+}
+
 export async function getPlatformEconomicsOverviewAction(): Promise<{
     overview: PlatformEconomicsOverview | null;
     error: string | null;
@@ -248,23 +283,25 @@ export async function getPlatformEconomicsOverviewAction(): Promise<{
         const thirtyTs = Timestamp.fromMillis(Date.now() - 30 * 86400000);
         const ninetyTs = Timestamp.fromMillis(Date.now() - 90 * 86400000);
 
-        const [pay30, pay90, ai30] = await Promise.all([
-            adminDb.collection('payments').where('createdAt', '>=', thirtyTs).get(),
-            adminDb.collection('payments').where('createdAt', '>=', ninetyTs).get(),
-            adminDb
-                .collection('aiUsageLogs')
-                .where('createdAt', '>=', thirtyTs)
-                .limit(AI_USAGE_AGG_ROW_CAP)
-                .get(),
+        const [pay30Docs, pay90Docs, ai30Docs] = await Promise.all([
+            fetchPaymentDocsSince(thirtyTs),
+            fetchPaymentDocsSince(ninetyTs),
+            fetchAiLogDocsSince(thirtyTs),
         ]);
 
-        const p30 = sumStripePaymentPence(pay30);
-        const p90 = sumStripePaymentPence(pay90);
+        const p30 = pay30Docs.reduce((sum, doc) => {
+            const a = doc.data().amount;
+            return sum + (typeof a === 'number' ? a : 0);
+        }, 0);
+        const p90 = pay90Docs.reduce((sum, doc) => {
+            const a = doc.data().amount;
+            return sum + (typeof a === 'number' ? a : 0);
+        }, 0);
 
         let aiUsd = 0;
         let aiAcus = 0;
         let aiSuccessfulRequestsLast30d = 0;
-        ai30.forEach((doc) => {
+        ai30Docs.forEach((doc) => {
             const d = doc.data();
             if (typeof d.realCost === 'number') aiUsd += d.realCost;
             if (typeof d.chargedAcus === 'number') aiAcus += d.chargedAcus;
@@ -274,14 +311,14 @@ export async function getPlatformEconomicsOverviewAction(): Promise<{
         const overview: PlatformEconomicsOverview = {
             stripeGrossGbpLast30d: p30 / 100,
             stripeGrossGbpLast90d: p90 / 100,
-            stripePaymentCountLast30d: pay30.size,
-            stripePaymentCountLast90d: pay90.size,
+            stripePaymentCountLast30d: pay30Docs.length,
+            stripePaymentCountLast90d: pay90Docs.length,
             aiEstSpendUsdLast30d: Math.round(aiUsd * 10000) / 10000,
             aiEstSpendGbpLast30d: Math.round(aiUsd * USD_TO_GBP_ASSUMED * 100) / 100,
             aiAcusDebitedLast30d: aiAcus,
             aiAcuValueGbpLast30d: Math.round(aiAcus * GBP_PER_ACU_ENTRY_RATE * 100) / 100,
             aiSuccessfulRequestsLast30d,
-            aiLogsHitCap: ai30.size >= AI_USAGE_AGG_ROW_CAP,
+            aiLogsHitCap: ai30Docs.length >= AI_USAGE_AGG_ROW_CAP,
         };
 
         return { overview, error: null };
@@ -311,7 +348,12 @@ export async function getAiUsageLogsAction(limit = 80): Promise<{ logs: AIReques
 
 export async function getAcuTransactionsAction(): Promise<{ transactions: AcuTransaction[], error: string | null }> {
     try {
-        const snapshot = await adminDb.collection('acuTransactions').orderBy('createdAt', 'desc').limit(20).get();
+        let snapshot;
+        try {
+            snapshot = await adminDb.collection('acuTransactions').orderBy('createdAt', 'desc').limit(20).get();
+        } catch {
+            snapshot = await adminDb.collection('acuTransactions').limit(50).get();
+        }
         const transactions = snapshot.docs.map(doc => {
             const data = doc.data();
             const createdAt = data.createdAt as Timestamp | undefined;
@@ -675,6 +717,13 @@ export async function reviewTutorApplicationAction(
             reviewedAt: admin.firestore.FieldValue.serverTimestamp(),
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         });
+
+        if (parsed.decision === 'APPROVED') {
+            await adminDb.collection('users').doc(parsed.tutorId).set(
+                { tutorApproved: true, updatedAt: admin.firestore.FieldValue.serverTimestamp() },
+                { merge: true },
+            );
+        }
 
         return { success: true };
     } catch (error: unknown) {
@@ -1072,8 +1121,15 @@ export async function deleteUserAction(
     try {
         const { getVerifiedUser } = await import('@/server/lib/auth');
         const adminUser = await getVerifiedUser(adminIdToken);
-        if (!adminUser || !(await isPlatformAdmin(adminUser.uid, adminUser))) {
-            return { success: false, error: 'Administrator access required.' };
+        if (!adminUser) {
+            return { success: false, error: 'You must be signed in as an administrator.' };
+        }
+        await ensurePlatformAdminAccess(adminUser.uid, adminUser.email);
+        if (!(await isPlatformAdmin(adminUser.uid, adminUser))) {
+            return {
+                success: false,
+                error: 'Administrator access required. Sign out and sign in again if you were recently promoted.',
+            };
         }
         if (adminUser.uid === targetUserId) {
             return { success: false, error: 'You cannot delete your own account.' };
@@ -1130,7 +1186,12 @@ export async function deleteUserAction(
 
 export async function getRecentPaymentsAction(): Promise<{ payments: any[], error: string | null }> {
     try {
-        const snapshot = await adminDb.collection('payments').orderBy('createdAt', 'desc').limit(10).get();
+        let snapshot;
+        try {
+            snapshot = await adminDb.collection('payments').orderBy('createdAt', 'desc').limit(10).get();
+        } catch {
+            snapshot = await adminDb.collection('payments').limit(30).get();
+        }
         const payments = snapshot.docs.map(doc => {
             const data = doc.data();
             const createdAt = data.createdAt as Timestamp | undefined;

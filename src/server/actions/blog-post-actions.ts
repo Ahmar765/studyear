@@ -66,8 +66,19 @@ export async function listBlogPostsAdminAction(): Promise<{
   error: string | null;
 }> {
   try {
-    const snap = await adminDb.collection('blog_posts').orderBy('updatedAt', 'desc').limit(200).get();
-    const posts = snap.docs.map((d) => docToAdminRow(d.id, d.data()));
+    let snap;
+    try {
+      snap = await adminDb.collection('blog_posts').orderBy('updatedAt', 'desc').limit(200).get();
+    } catch {
+      snap = await adminDb.collection('blog_posts').limit(200).get();
+    }
+    const posts = snap.docs
+      .map((d) => docToAdminRow(d.id, d.data()))
+      .sort((a, b) => {
+        const ta = a.updatedAt ? Date.parse(a.updatedAt) : 0;
+        const tb = b.updatedAt ? Date.parse(b.updatedAt) : 0;
+        return tb - ta;
+      });
     return { posts, error: null };
   } catch (e: unknown) {
     console.error(e);

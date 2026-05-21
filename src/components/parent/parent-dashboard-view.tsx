@@ -5,6 +5,9 @@ import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { askParentAdvisorAction } from '@/server/actions/parent-advisor-actions';
 import { triggerInterventionAction } from '@/server/actions/intervention-actions';
+import { unlinkParentStudentAction } from '@/server/actions/parent-actions';
+import { notifyParentDashboardRefresh } from '@/lib/parent-dashboard-events';
+import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -46,6 +49,7 @@ import {
   TrendingUp,
   Zap,
   Loader,
+  Unlink,
 } from 'lucide-react';
 import Link from 'next/link';
 import { PARENT_ELITE_MONTHLY_ACUS, PARENT_PRO_PLUS_MONTHLY_ACUS } from '@/data/subscription-plans';
@@ -63,14 +67,27 @@ const planLabels: Record<ParentPlanTier, string> = {
   PARENT_ELITE: 'Parent Elite',
 };
 
+const PRO_INCLUDES = [
+  'Live child snapshots & stability score',
+  'Early warnings & weekly AI briefing',
+  'Verified study hours & homework centre',
+];
+const PRO_PLUS_INCLUDES = [
+  'AI Parent Advisor & intervention mode',
+  'Future pathway & university suggestions',
+  'Predictive grades & micro-weakness detection',
+  `${PARENT_PRO_PLUS_MONTHLY_ACUS.toLocaleString('en-GB')} ACUs per month`,
+];
+
 function ParentPlanBanner({ data }: { data: ParentDashboardPayload }) {
   const tier = data.planTier;
   const upgradeHint =
     tier === 'PARENT_PRO'
-      ? `Parent Pro+ unlocks AI advisor, intervention mode, predictive grades, and ${PARENT_PRO_PLUS_MONTHLY_ACUS.toLocaleString('en-GB')} ACUs/month.`
+      ? `Upgrade to Parent Pro+ for AI tools, university pathways, and monthly ACUs.`
       : tier === 'PARENT_PRO_PLUS'
         ? `Parent Elite adds family intelligence, full live alerts, and ${PARENT_ELITE_MONTHLY_ACUS.toLocaleString('en-GB')} ACUs/month.`
         : null;
+  const includes = tier === 'PARENT_PRO' ? PRO_INCLUDES : PRO_PLUS_INCLUDES;
 
   return (
     <Card className="parent-panel border-primary/25 bg-primary/5">
@@ -78,7 +95,12 @@ function ParentPlanBanner({ data }: { data: ParentDashboardPayload }) {
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Your subscription</p>
           <p className="text-lg font-semibold">{planLabels[tier]}</p>
-          {upgradeHint ? <p className="mt-1 max-w-xl text-sm text-muted-foreground">{upgradeHint}</p> : null}
+          <ul className="mt-2 max-w-xl space-y-0.5 text-sm text-muted-foreground">
+            {includes.map((item) => (
+              <li key={item}>✓ {item}</li>
+            ))}
+          </ul>
+          {upgradeHint ? <p className="mt-2 max-w-xl text-sm font-medium text-foreground">{upgradeHint}</p> : null}
         </div>
         {tier !== 'PARENT_ELITE' ? (
           <Button size="sm" asChild className="shrink-0">
@@ -106,10 +128,14 @@ function ChildSnapshotCard({
   child,
   selected,
   onSelect,
+  onUnlink,
+  unlinking,
 }: {
   child: ChildSnapshot;
   selected: boolean;
   onSelect: () => void;
+  onUnlink: () => void;
+  unlinking: boolean;
 }) {
   const riskColor =
     child.examRisk === 'low'
@@ -171,6 +197,20 @@ function ChildSnapshotCard({
           </p>
         </div>
       </div>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="mt-3 w-full text-xs text-muted-foreground hover:text-destructive"
+        disabled={unlinking}
+        onClick={(e) => {
+          e.stopPropagation();
+          onUnlink();
+        }}
+      >
+        {unlinking ? <Loader className="mr-1 h-3 w-3 animate-spin" /> : <Unlink className="mr-1 h-3 w-3" />}
+        Unlink child
+      </Button>
     </button>
   );
 }
@@ -182,6 +222,8 @@ export function ParentDashboardView({ data }: { data: ParentDashboardPayload }) 
   const [advisorAnswer, setAdvisorAnswer] = useState<string | null>(null);
   const [advisorActions, setAdvisorActions] = useState<string[]>([]);
   const [advisorPending, startAdvisor] = useTransition();
+  const [advisorQuestion, setAdvisorQuestion] = useState('');
+  const [unlinkingId, setUnlinkingId] = useState<string | null>(null);
   const [interventionPending, startIntervention] = useTransition();
   const [interventionResult, setInterventionResult] = useState<{
     studentMessage: string;
@@ -270,7 +312,9 @@ export function ParentDashboardView({ data }: { data: ParentDashboardPayload }) 
     const topic =
       childMicro[0]?.areas[0] ??
       childWarnings[0]?.title ??
-      selected.weakestSubject;
+      (selected.weakestSubject && selected.weakestSubject !== 'N/A'
+        ? selected.weakestSubject
+        : 'Core revision focus');
     startIntervention(async () => {
       const result = await triggerInterventionAction({
         studentId: selected.id,
@@ -299,6 +343,25 @@ export function ParentDashboardView({ data }: { data: ParentDashboardPayload }) 
     });
   };
 
+  const handleUnlinkChild = (childId: string, childName: string) => {
+    if (!user) return;
+    if (!window.confirm(`Unlink ${childName} from your Command Centre? You can link them again with their Parent Link Code.`)) {
+      return;
+    }
+    setUnlinkingId(childId);
+    void (async () => {
+      const token = await user.getIdToken();
+      const result = await unlinkParentStudentAction(token, childId);
+      setUnlinkingId(null);
+      if (result.success) {
+        toast({ title: 'Child unlinked', description: `${childName} was removed from your dashboard.` });
+        notifyParentDashboardRefresh();
+      } else {
+        toast({ variant: 'destructive', title: 'Could not unlink', description: result.error });
+      }
+    })();
+  };
+
   if (data.children.length === 0) return null;
 
   return (
@@ -318,6 +381,8 @@ export function ParentDashboardView({ data }: { data: ParentDashboardPayload }) 
               child={child}
               selected={child.id === selected?.id}
               onSelect={() => setSelectedId(child.id)}
+              onUnlink={() => handleUnlinkChild(child.id, child.name)}
+              unlinking={unlinkingId === child.id}
             />
           ))}
         </div>
@@ -620,17 +685,66 @@ export function ParentDashboardView({ data }: { data: ParentDashboardPayload }) 
                     <span className="font-semibold text-foreground">{selected.predictedGrade}</span>
                   </p>
                 )}
-                {data.gradeProbabilities
-                  .filter((g) => g.studentId === selected.id)
-                  .map((g) => (
-                  <div key={`${g.studentId}-${g.grade}`}>
-                    <div className="mb-1 flex justify-between text-sm">
-                      <span>{g.grade} likelihood</span>
-                      <span className="font-semibold">{g.likelihood}%</span>
+                {data.gradeProbabilities.filter((g) => g.studentId === selected.id).length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    Predictive grade bands appear once your child completes diagnostics or quizzes.
+                  </p>
+                ) : (
+                  data.gradeProbabilities
+                    .filter((g) => g.studentId === selected.id)
+                    .map((g) => (
+                      <div key={`${g.studentId}-${g.grade}`}>
+                        <div className="mb-1 flex justify-between text-sm">
+                          <span>{g.grade} likelihood</span>
+                          <span className="font-semibold">{g.likelihood}%</span>
+                        </div>
+                        <Progress value={g.likelihood} className="h-3" />
+                      </div>
+                    ))
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="parent-panel">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <GraduationCap className="h-4 w-4 text-violet-500" />
+                  University & career pathways
+                </CardTitle>
+                <CardDescription>
+                  AI-matched degree routes based on live subject strength for {selected.name}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {(data.universityPathways ?? [])
+                  .filter((p) => p.studentId === selected.id)
+                  .slice(0, 5)
+                  .map((path) => (
+                    <div key={`${path.studentId}-${path.course}`} className="rounded-lg border p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="font-semibold">{path.course}</p>
+                        <Badge variant="secondary">{path.fitScore}% fit</Badge>
+                      </div>
+                      <p className="mt-2 text-sm text-muted-foreground">{path.rationale}</p>
+                      <p className="mt-2 text-xs font-semibold uppercase text-muted-foreground">Entry requirements</p>
+                      <ul className="mt-1 list-disc space-y-0.5 pl-4 text-sm text-muted-foreground">
+                        {path.entryRequirements.map((r) => (
+                          <li key={r}>{r}</li>
+                        ))}
+                      </ul>
+                      <p className="mt-2 text-xs font-semibold uppercase text-muted-foreground">Next steps</p>
+                      <ul className="mt-1 list-disc space-y-0.5 pl-4 text-sm">
+                        {path.nextSteps.map((s) => (
+                          <li key={s}>{s}</li>
+                        ))}
+                      </ul>
                     </div>
-                    <Progress value={g.likelihood} className="h-3" />
-                  </div>
-                ))}
+                  ))}
+                {(data.universityPathways ?? []).filter((p) => p.studentId === selected.id).length === 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    Link a child and complete profile setup to see university pathway suggestions.
+                  </p>
+                )}
               </CardContent>
             </Card>
 
@@ -760,7 +874,26 @@ export function ParentDashboardView({ data }: { data: ParentDashboardPayload }) 
             <div className="rounded-lg bg-muted/50 p-3 text-sm">
               Ask anything about {selected?.name ?? 'your child'}&apos;s learning — personalised to live data.
             </div>
+            <Textarea
+              placeholder="Ask a question about your child's learning…"
+              value={advisorQuestion}
+              onChange={(e) => setAdvisorQuestion(e.target.value)}
+              disabled={advisorPending || !data.features.parentAdvisor}
+              rows={2}
+              className="text-sm"
+            />
             <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                disabled={
+                  advisorPending || !data.features.parentAdvisor || advisorQuestion.trim().length < 3
+                }
+                onClick={() => askAdvisor(advisorQuestion.trim())}
+              >
+                {advisorPending ? <Loader className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Ask advisor
+              </Button>
               {advisorQuestions.map((q) => (
                 <Button
                   key={q}
@@ -771,7 +904,6 @@ export function ParentDashboardView({ data }: { data: ParentDashboardPayload }) 
                   disabled={advisorPending || !data.features.parentAdvisor}
                   onClick={() => askAdvisor(q)}
                 >
-                  {advisorPending ? <Loader className="mr-1 h-3 w-3 animate-spin" /> : null}
                   {q}
                 </Button>
               ))}
@@ -792,8 +924,10 @@ export function ParentDashboardView({ data }: { data: ParentDashboardPayload }) 
         </Card>
       </div>
 
-      {data.features.aiIntervention && (
-        <Card className="parent-panel border-sky-500/40 bg-gradient-to-r from-sky-500/10 via-transparent to-violet-500/10">
+      <Card className="parent-panel relative border-sky-500/40 bg-gradient-to-r from-sky-500/10 via-transparent to-violet-500/10">
+          {!data.features.aiIntervention && (
+            <LockedOverlay label="AI intervention mode — Parent Pro+ and Elite" />
+          )}
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-sky-500" />
@@ -830,7 +964,11 @@ export function ParentDashboardView({ data }: { data: ParentDashboardPayload }) 
               </div>
             )}
             <div className="flex flex-wrap gap-2">
-              <Button type="button" onClick={runIntervention} disabled={interventionPending}>
+              <Button
+                type="button"
+                onClick={runIntervention}
+                disabled={interventionPending || !data.features.aiIntervention}
+              >
                 {interventionPending ? (
                   <Loader className="mr-2 h-4 w-4 animate-spin" />
                 ) : (
@@ -871,7 +1009,6 @@ export function ParentDashboardView({ data }: { data: ParentDashboardPayload }) 
             )}
           </CardContent>
         </Card>
-      )}
 
       <p className="text-center text-xs text-muted-foreground">
         Plan: {planLabels[data.planTier]} · StudYear protects outcomes, not just displays data

@@ -7,6 +7,8 @@ import { getVerifiedUser } from '../lib/auth';
 import * as admin from 'firebase-admin';
 import { z } from 'zod';
 import { savedResourceService } from '../services/resources';
+import { formatResourceSubject } from '@/lib/resource-labels';
+import { subjects } from '@/data/academic';
 
 export async function getResourceCountsAction(): Promise<Record<string, number>> {
   try {
@@ -99,7 +101,7 @@ export async function getResourcesByTypeAction(
         id: String(data.id ?? ""),
         title: String(data.title ?? "Untitled"),
         topic: String(data.topic ?? ""),
-        subject: String(data.subject ?? ""),
+        subject: formatResourceSubject(String(data.subject ?? "")),
         level: String(data.level ?? ""),
         createdAt: isoFromFirestoreTimestamp(data.createdAt),
         videoUrl:
@@ -188,6 +190,9 @@ export async function contributeResourceAction(formData: FormData): Promise<{ su
     }
 
     const { title, description, url, type, subjectId, examBoard, level } = validation.data;
+    const subjectName =
+      subjects.find((s) => s.replace(/ /g, '_').toUpperCase() === subjectId.toUpperCase()) ??
+      subjectId.replace(/_/g, ' ');
 
     try {
         const uploadRef = adminDb.collection('resource_uploads').doc();
@@ -199,8 +204,8 @@ export async function contributeResourceAction(formData: FormData): Promise<{ su
             url,
             videoUrl: type === 'VIDEO' ? url : null,
             fileUrl: type === 'PAST_PAPER' ? url : null,
-            subject: subjectId,
-            topic: examBoard,
+            subject: subjectName,
+            topic: title,
             examBoard,
             level,
             approvalStatus: 'PENDING',

@@ -211,7 +211,31 @@ export default function CheckoutPage() {
 
   const isParent = role === 'PARENT';
   const isSchoolTeacher = role === 'SCHOOL_TUTOR';
+  const isPlatformAdmin = role === 'ADMIN';
   const studentLike = isStudentLikeRole(role);
+
+  if (isPlatformAdmin) {
+    return (
+      <div className="flex-1 flex items-center justify-center p-4 md:p-8">
+        <Card className="max-w-lg w-full">
+          <CardHeader>
+            <CardTitle>Platform administrator</CardTitle>
+            <CardDescription>
+              Admins have unlimited AI access — no personal ACU wallet or Stripe top-up is required.
+            </CardDescription>
+          </CardHeader>
+          <CardFooter className="flex flex-wrap gap-2">
+            <Button asChild>
+              <Link href="/admin/dashboard">Admin dashboard</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/account">My account</Link>
+            </Button>
+          </CardFooter>
+        </Card>
+      </div>
+    );
+  }
 
   if (isSchoolTeacher) {
     return (

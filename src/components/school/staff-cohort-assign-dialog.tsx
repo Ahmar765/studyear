@@ -83,8 +83,9 @@ export function StaffCohortAssignDialog({
         <DialogHeader>
           <DialogTitle>Assign cohorts — {member.name}</DialogTitle>
           <DialogDescription>
-            Year groups filter which students appear on this teacher&apos;s dashboard. Leave empty to
-            show all school students.
+            Year groups match each student&apos;s study level / year on their profile. Class names
+            match the optional class field (e.g. 10A) when set. Leave both empty to show all school
+            students on this teacher&apos;s Command Centre.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-2">

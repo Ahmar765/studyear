@@ -91,7 +91,6 @@ const studentNavItems = [
   { href: "/create", label: "Create Resource", icon: PlusCircle },
   { href: "/search", label: "Find Resources", icon: Search },
   { href: "/contribute", label: "Submit video / paper", icon: FileText },
-  { href: "/contribute", label: "Submit video / paper", icon: FileText },
 ];
 
 const adminNavItems = [
@@ -291,6 +290,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         const tutorAllowedOutsideTutorRoutes =
           pathname.startsWith('/checkout') ||
           pathname === '/account' ||
+          pathname.startsWith('/account/') ||
+          pathname === '/profile-setup' ||
           pathname.startsWith('/top-up') ||
           pathname.startsWith('/ai-tutor') ||
           pathname.startsWith('/tutors');
@@ -307,8 +308,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         const adminAllowedOutsideAdmin =
           pathname.startsWith('/blog') ||
           pathname.startsWith('/create') ||
-          pathname.startsWith('/checkout') ||
-          pathname.startsWith('/account') ||
+          pathname === '/account' ||
+          pathname.startsWith('/account/') ||
+          pathname === '/profile-setup' ||
           pathname.startsWith('/contribute') ||
           pathname.startsWith('/search') ||
           pathname.startsWith('/resources');
@@ -368,10 +370,16 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           } else if (
             !onboardingComplete &&
             pathname !== '/tutor/onboarding' &&
+            !pathname.startsWith('/tutor/onboarding') &&
             !pathname.startsWith('/account')
           ) {
             router.replace('/tutor/onboarding');
-          } else if (!isTutorDashboard && !tutorAllowedOutsideTutorRoutes && pathname !== '/tutor/onboarding') {
+          } else if (
+            !isTutorDashboard &&
+            !tutorAllowedOutsideTutorRoutes &&
+            pathname !== '/tutor/onboarding' &&
+            !pathname.startsWith('/tutor/onboarding')
+          ) {
             router.replace('/tutor/dashboard');
           } else if (pathname === '/') {
             router.replace('/tutor/dashboard');
@@ -524,9 +532,11 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                         className="cursor-pointer"
                         onSelect={() =>
                           router.push(
-                            resolvedRole === 'PRIVATE_TUTOR'
-                              ? '/tutor/profile'
-                              : '/profile-setup',
+                            resolvedRole === 'ADMIN'
+                              ? '/profile-setup'
+                              : resolvedRole === 'PRIVATE_TUTOR'
+                                ? '/tutor/profile'
+                                : '/profile-setup',
                           )
                         }
                       >

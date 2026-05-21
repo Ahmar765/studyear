@@ -11,6 +11,7 @@ import { logActivityEvent } from '../services/activity';
 import { getUserProfileServer } from '../services/user';
 import { runStudYearAction } from '../services/pipeline';
 import { assertParentFeature, assertParentStudentLink } from '@/server/lib/parent-plan';
+import { HttpsError } from '@/server/lib/errors';
 
 
 const InterventionActionSchema = InterventionInputSchema.extend({
@@ -47,11 +48,15 @@ export async function triggerInterventionAction(input: z.infer<typeof Interventi
         
         return { success: true, output: result.result };
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error in triggerInterventionAction:", error);
     if (error instanceof z.ZodError) {
-      return { success: false, error: error.errors.map(e => e.message).join(', ') };
+      return { success: false, error: error.errors.map((e) => e.message).join(', ') };
     }
-    return { success: false, error: error.message || "An unexpected error occurred." };
+    if (error instanceof HttpsError) {
+      return { success: false, error: error.message };
+    }
+    const message = error instanceof Error ? error.message : 'An unexpected error occurred.';
+    return { success: false, error: message };
   }
 }

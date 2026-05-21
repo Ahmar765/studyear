@@ -1,4 +1,5 @@
 import { ai } from '@/server/ai';
+import { toGoogleAiGenkitModel } from '@/server/ai/genkit-model';
 import { z } from 'zod';
 
 export const ParentAdvisorInputSchema = z.object({
@@ -38,7 +39,7 @@ const parentAdvisorFlow = ai.defineFlow(
     outputSchema: ParentAdvisorOutputSchema,
   },
   async (input) => {
-    const { output } = await parentAdvisorPrompt(input);
+    const { output } = await parentAdvisorPrompt(input, { model: toGoogleAiGenkitModel() });
     if (!output) throw new Error('Parent advisor did not return a response.');
     return output;
   },

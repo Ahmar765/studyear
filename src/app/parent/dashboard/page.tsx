@@ -141,7 +141,11 @@ export default function ParentDashboardPage() {
             </Badge>
             {state.data && (
               <Badge className="bg-gradient-to-r from-violet-600 to-sky-600">
-                {state.data.planTier.replace('PARENT_', 'Parent ').replace('_', ' ')}
+                {state.data.planTier === 'PARENT_PRO'
+                  ? 'Parent Pro'
+                  : state.data.planTier === 'PARENT_PRO_PLUS'
+                    ? 'Parent Pro+'
+                    : 'Parent Elite'}
               </Badge>
             )}
           </div>

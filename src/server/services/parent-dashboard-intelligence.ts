@@ -8,6 +8,7 @@ import type {
   VerifiedStudyHours,
   HomeworkItem,
   GradeProbability,
+  UniversityPathway,
   MicroWeakness,
   EmotionalSignal,
   PerformanceSeries,
@@ -23,6 +24,7 @@ import {
   applyParentPlanGates,
   parentFeatureFlagsFromTier,
 } from '@/server/lib/parent-plan';
+import { universityCourses } from '@/data/academic';
 
 export interface RawStudentRow {
   id: string;
@@ -513,6 +515,70 @@ function buildGradeProbabilities(children: ChildSnapshot[], rows: RawStudentRow[
   return out;
 }
 
+const SUBJECT_UNIVERSITY_HINTS: Record<string, string[]> = {
+  Biology: ['Medicine', 'Nursing', 'Psychology', 'Healthcare Practice'],
+  Chemistry: ['Medicine', 'Dentistry', 'Engineering', 'Healthcare Practice'],
+  Physics: ['Engineering', 'Computer Science', 'Architecture', 'Mechanical Engineering'],
+  Mathematics: ['Computer Science', 'Economics', 'Engineering', 'Business'],
+  'Further Mathematics': ['Computer Science', 'Engineering', 'Economics'],
+  Computing: ['Computer Science', 'Engineering', 'Electrical Engineering'],
+  Economics: ['Economics', 'Business', 'Law'],
+  History: ['History', 'Law', 'English'],
+  Geography: ['Architecture', 'Engineering', 'Business'],
+  English: ['English', 'Law', 'Education (Teaching)'],
+  Psychology: ['Psychology', 'Psychiatry', 'Nursing'],
+  Law: ['Law', 'Business', 'History'],
+  'Business Studies': ['Business', 'Economics', 'Law'],
+};
+
+function buildUniversityPathways(children: ChildSnapshot[]): UniversityPathway[] {
+  const catalog = new Set(universityCourses);
+  const out: UniversityPathway[] = [];
+
+  for (const child of children) {
+    const ranked =
+      child.subjects?.length > 0
+        ? [...child.subjects].sort((a, b) => b.progressPercent - a.progressPercent)
+        : [];
+    const leadSubject =
+      ranked[0]?.name ??
+      (child.strongestSubject !== 'N/A' ? child.strongestSubject : 'Mathematics');
+    const leadProgress = ranked[0]?.progressPercent ?? child.academicHealth;
+
+    const hinted = SUBJECT_UNIVERSITY_HINTS[leadSubject] ?? [];
+    const picks = [
+      ...hinted.filter((c) => catalog.has(c)),
+      ...universityCourses.filter((c) => !hinted.includes(c)),
+    ].slice(0, 5);
+
+    for (const course of picks) {
+      const fitScore = clamp(
+        Math.round(leadProgress * 0.7 + child.weeklyGrowth * 2 + (child.examRisk === 'low' ? 12 : 0)),
+        35,
+        96,
+      );
+      out.push({
+        studentId: child.id,
+        course,
+        fitScore,
+        rationale: `${child.name}'s strength in ${leadSubject} (${leadProgress}% quiz mastery) aligns with ${course}. Trajectory: ${child.predictedGrade ?? 'building toward GCSE/A-level targets'}.`,
+        entryRequirements: [
+          `Strong performance in ${leadSubject} and related sciences`,
+          'GCSE grades meeting typical university offers',
+          'Relevant A-level or BTEC pathway in Year 12–13',
+        ],
+        nextSteps: [
+          'Research entry requirements on UCAS',
+          'Book a subject taster or open day',
+          'Align revision plan to required grades',
+        ],
+      });
+    }
+  }
+
+  return out;
+}
+
 function buildMicroWeaknesses(children: ChildSnapshot[], rows: RawStudentRow[]): MicroWeakness[] {
   const items: MicroWeakness[] = [];
 
@@ -710,6 +776,7 @@ export function buildParentDashboardPayload(
     verifiedHours: buildVerifiedHours(children, rows),
     homework: buildHomework(children, rows),
     gradeProbabilities: buildGradeProbabilities(children, rows),
+    universityPathways: buildUniversityPathways(children),
     microWeaknesses: buildMicroWeaknesses(children, rows),
     emotionalSignals: buildEmotional(children),
     performance: buildPerformance(children, rows),

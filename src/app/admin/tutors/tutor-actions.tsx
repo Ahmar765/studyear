@@ -10,7 +10,6 @@ import { useAuth } from '@/hooks/use-auth';
 import { reviewTutorApplicationAction, type TutorApplication } from '@/server/actions/admin-actions';
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -75,10 +74,15 @@ export default function TutorActions({ application }: { application: TutorApplic
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={() => handleReview('APPROVED')}>
+                        <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
+                        <Button
+                            type="button"
+                            disabled={isPending}
+                            onClick={() => handleReview('APPROVED')}
+                        >
+                            {isPending ? <Loader className="mr-2 h-4 w-4 animate-spin" /> : null}
                             Approve
-                        </AlertDialogAction>
+                        </Button>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
@@ -98,10 +102,16 @@ export default function TutorActions({ application }: { application: TutorApplic
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction className="bg-destructive hover:bg-destructive/90" onClick={() => handleReview('REJECTED')}>
+                        <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
+                        <Button
+                            type="button"
+                            variant="destructive"
+                            disabled={isPending}
+                            onClick={() => handleReview('REJECTED')}
+                        >
+                            {isPending ? <Loader className="mr-2 h-4 w-4 animate-spin" /> : null}
                             Reject
-                        </AlertDialogAction>
+                        </Button>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>

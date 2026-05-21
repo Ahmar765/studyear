@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import type { ChildSnapshot } from '@/types/parent-dashboard';
 import { resourceMetadata, type ResourceType } from '@/data/academic';
 import { BookOpen, Bookmark, TrendingDown, TrendingUp } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
+import { safeFormatDistanceToNow } from '@/lib/format-safe-date';
 
 function ResourceIcon({ type }: { type: string }) {
   const key = type.toUpperCase() as ResourceType;
@@ -25,7 +25,7 @@ export function LiveSubjectsPanel({ child }: { child: ChildSnapshot }) {
           From profile & quiz activity
           {child.dashboardUpdatedAt && (
             <span className="block text-xs">
-              Dashboard synced {formatDistanceToNow(new Date(child.dashboardUpdatedAt), { addSuffix: true })}
+              Dashboard synced {safeFormatDistanceToNow(child.dashboardUpdatedAt)}
             </span>
           )}
         </CardDescription>
@@ -100,7 +100,7 @@ export function SavedResourcesPanel({ child }: { child: ChildSnapshot }) {
                   <p className="font-medium leading-snug">{resource.title}</p>
                   <p className="text-xs text-muted-foreground">
                     {resourceMetadata[resource.type.toUpperCase() as ResourceType]?.title ?? resource.type} ·{' '}
-                    {formatDistanceToNow(new Date(resource.createdAt), { addSuffix: true })}
+                    {safeFormatDistanceToNow(resource.createdAt)}
                   </p>
                 </div>
               </li>
