@@ -1,7 +1,26 @@
 # Settings to manage and configure a Firebase App Hosting backend.
 # https://firebase.google.com/docs/app-hosting/configure
+#
+# Env vars: set in Firebase Console → App Hosting → Environment variables (recommended),
+# or uncomment `env` below. NEXT_PUBLIC_* must be available at BUILD + RUNTIME.
+# See docs/DEPLOY.md for the full list.
 
 runConfig:
-  # Automatically spin up more instances in response to increased traffic.
   maxInstances: 2
   cpu: 1
+
+# Example (use Secret Manager for passwords — do not commit real values):
+# env:
+#   - variable: NEXT_PUBLIC_FIREBASE_API_KEY
+#     value: "AIza..."
+#     availability: [BUILD, RUNTIME]
+#   - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
+#     value: "revision-rocket-4nuir"
+#     availability: [BUILD, RUNTIME]
+#   - variable: NEXT_PUBLIC_FIREBASE_APP_ID
+#     value: "1:..."
+#     availability: [BUILD, RUNTIME]
+#   - variable: GEMINI_API_KEY
+#     secret: geminiApiKey
+#   - variable: FIREBASE_SERVICE_ACCOUNT_JSON
+#     secret: firebaseServiceAccountJson

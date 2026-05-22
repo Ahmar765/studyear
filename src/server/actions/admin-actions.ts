@@ -54,6 +54,7 @@ import { resourceMetadata, ResourceType } from '@/data/academic';
 import { ACUService } from '../services/acu-service';
 import { getVerifiedUser } from '@/server/lib/auth';
 import { ensurePlatformAdminAccess, isPlatformAdmin } from '@/server/lib/platform-admin';
+import { ADMIN_SUBSCRIPTION_TYPES, isActiveParentPlan } from '@/data/admin-user-plans';
 
 async function assertPlatformAdmin(tokenUser: Awaited<ReturnType<typeof getVerifiedUser>>) {
     if (!tokenUser) throw new Error('You must be signed in.');
@@ -145,11 +146,7 @@ export async function endImpersonationAction(impersonationLogId: string): Promis
     }
 }
 
-const subscriptionTypes: SubscriptionType[] = [
-    "FREE", "STUDENT_PREMIUM", "STUDENT_PREMIUM_PLUS", "PARENT_PRO", "PARENT_PRO_PLUS", "PARENT_ELITE", 
-    "PRIVATE_TUTOR", "SCHOOL_STARTER", "SCHOOL_GROWTH", "SCHOOL_ENTERPRISE",
-    "SCHOOL_TUTOR", "SCHOOL_ADMIN", "ADMIN",
-];
+const subscriptionTypes: SubscriptionType[] = ADMIN_SUBSCRIPTION_TYPES;
 const roleTypes: UserRole[] = ["STUDENT", "PARENT", "PRIVATE_TUTOR", "SCHOOL_ADMIN", "SCHOOL_TUTOR", "ADMIN"];
 
 const UpdateUserSchema = z.object({
@@ -157,7 +154,11 @@ const UpdateUserSchema = z.object({
   subscription: z.enum(subscriptionTypes as [string, ...string[]]),
 });
 
-export async function updateUserAction(targetUid: string, data: z.infer<typeof UpdateUserSchema>): Promise<{ success: boolean; error?: string; }> {
+export async function updateUserAction(
+    targetUid: string,
+    data: z.infer<typeof UpdateUserSchema>,
+    idToken?: string | null,
+): Promise<{ success: boolean; error?: string; }> {
     if (!targetUid) {
         return { success: false, error: "Target User ID is required." };
     }
@@ -166,24 +167,48 @@ export async function updateUserAction(targetUid: string, data: z.infer<typeof U
     if (!validation.success) {
         return { success: false, error: validation.error.flatten().formErrors.join(', ') };
     }
-    
+
     try {
+        const caller = await getVerifiedUser(idToken);
+        if (!caller) {
+            return { success: false, error: 'Not authenticated.' };
+        }
+        if (!(await isPlatformAdmin(caller.uid, caller))) {
+            return { success: false, error: 'Platform admin access required.' };
+        }
+
+        const plan = validation.data.subscription as SubscriptionType;
+        const subscriptionActive =
+            plan !== 'FREE' &&
+            (validation.data.role !== 'PARENT' || isActiveParentPlan(plan));
+
         const batch = adminDb.batch();
         const userRef = adminDb.doc(`users/${targetUid}`);
         const subscriptionRef = adminDb.doc(`subscriptions/${targetUid}`);
 
-        batch.update(userRef, { role: validation.data.role, updatedAt: Timestamp.now() });
-        
-        batch.set(subscriptionRef, { 
-            type: validation.data.subscription,
-            status: 'ACTIVE',
+        batch.update(userRef, {
+            role: validation.data.role,
+            subscription: plan,
             updatedAt: Timestamp.now(),
-        }, { merge: true });
+        });
+
+        batch.set(
+            subscriptionRef,
+            {
+                type: plan,
+                status: subscriptionActive ? 'ACTIVE' : 'INACTIVE',
+                updatedAt: Timestamp.now(),
+                ...(subscriptionActive
+                    ? { adminGranted: true, grantedAt: Timestamp.now() }
+                    : {}),
+            },
+            { merge: true },
+        );
 
         await adminAuth.setCustomUserClaims(targetUid, { role: validation.data.role });
-        
+
         await batch.commit();
-        
+
         return { success: true };
     } catch (error: any) {
         console.error('Error updating user:', error);

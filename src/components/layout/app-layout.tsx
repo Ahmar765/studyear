@@ -215,7 +215,7 @@ function accountRoleLabel(role: string): string {
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { user, loading: authLoading, logout: firebaseLogout } = useAuth();
+  const { user, loading: authLoading, firebaseInitError, logout: firebaseLogout } = useAuth();
   const { userProfile, loading: profileLoading } = useUserProfile();
   const { role: effectiveRole, tokenRoleResolved } = useEffectiveRole();
   const { isImpersonating } = useImpersonation();
@@ -437,14 +437,24 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   }, [user]);
 
   const noLayoutPages = ['/login', '/signup', '/profile-setup', '/tutor/onboarding', '/school/onboarding', '/forgot-password', '/auth/impersonate'];
+  const publicMarketingPages = [
+    '/',
+    '/how-it-works',
+    '/about',
+    '/terms-of-service',
+    '/privacy-policy',
+    '/disclaimer',
+    '/cookies',
+    '/contact',
+  ];
+  const isPublicMarketingPage = publicMarketingPages.includes(pathname);
+
   if (noLayoutPages.includes(pathname)) {
     return <main>{children}</main>;
   }
 
-  if (loading && !noLayoutPages.includes(pathname)) {
-    return (
-      <SplashScreen />
-    );
+  if (loading && !isPublicMarketingPage) {
+    return <SplashScreen />;
   }
 
   const resolvedRole =
@@ -458,6 +468,16 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <SidebarProvider>
+      {firebaseInitError ? (
+        <div
+          className="border-b border-amber-500/40 bg-amber-500/10 px-4 py-2 text-center text-sm text-amber-950 dark:text-amber-100"
+          role="alert"
+        >
+          Firebase is not configured on this deployment. Marketing pages work, but sign-in and
+          dashboards need NEXT_PUBLIC_FIREBASE_* (and server admin credentials) in Firebase App
+          Hosting → Environment variables, then redeploy.
+        </div>
+      ) : null}
       <div className="flex min-h-screen">
         { showSidebar && (
           <Sidebar>

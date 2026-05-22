@@ -46,9 +46,7 @@ export default function ContactForm() {
       if (result.success) {
         toast({
           title: copy.title,
-          description: result.emailSent
-            ? copy.description
-            : `${copy.description} (Saved — email delivery is not configured on the server yet.)`,
+          description: copy.description,
         });
         (e.target as HTMLFormElement).reset();
         setEnquiryType('support');
