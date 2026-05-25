@@ -43,7 +43,16 @@ Also set:
 - `STRIPE_WEBHOOK_SECRET`
 - `STRIPE_PRICE_STUDENT_PREMIUM`, `STRIPE_PRICE_STUDENT_PREMIUM_PLUS`, etc.
 
-### Email (optional; contact form still saves to Firestore)
+### Email (signup welcome + admin ACU credits + contact form)
+
+Triggers when `MAIL_*` is set:
+
+- **New registration** — welcome email after `signup` (copy editable in Admin → Settings → Communications).
+- **Admin → Users → Adjust ACUs** — confirmation email to that user with amount and new balance.
+- **Stripe ACU checkout** — receipt email (existing).
+- **Contact form** — notification to your contact inbox (existing).
+
+### Email env (optional; contact form still saves to Firestore without mail)
 
 - `MAIL_SMTP_HOST`, `MAIL_SMTP_PORT`, `MAIL_SMTP_SECURE`
 - `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM_ADDRESS`, `MAIL_FROM_NAME`

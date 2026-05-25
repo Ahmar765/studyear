@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -76,6 +77,7 @@ export default function EditUserForm({ user, onUpdateSuccess }: EditUserFormProp
               ? `${user.name} is now on Parent Elite. Use View as User to test the Command Centre.`
               : `${user.name}'s profile has been updated.`,
         });
+        router.refresh();
         onUpdateSuccess();
       } else {
         toast({

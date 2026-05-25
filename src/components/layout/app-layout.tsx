@@ -96,6 +96,7 @@ const studentNavItems = [
 const adminNavItems = [
     { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/admin/users", label: "Users", icon: Users },
+    { href: "/admin/tutors", label: "Tutor applications", icon: GraduationCap },
     { href: "/admin/blog", label: "Blog", icon: Newspaper },
     { href: "/admin/content", label: "Content", icon: FileText },
     { href: "/admin/billing", label: "Revenue & billing", icon: UserCog },
@@ -359,6 +360,14 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             router.replace('/parent/dashboard');
         }
         else if (role === 'PRIVATE_TUTOR') {
+          const tutorApproved = (userProfile as { tutorApproved?: boolean } | null)?.tutorApproved;
+          // tutorApproved === true → approved; false → rejected; undefined → pending
+          const tutorAccountAllowed =
+            pathname.startsWith('/account') ||
+            pathname === '/account';
+          const isOnPendingPage = pathname === '/tutor/pending';
+          const isOnRejectedPage = pathname === '/tutor/rejected';
+
           if (
             isAdminDashboard ||
             isTeacherDashboard ||
@@ -366,15 +375,25 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             isParentDashboard ||
             isStudentShellPath(pathname)
           ) {
-            router.replace('/tutor/dashboard');
+            // Redirect to the right holding or main page
+            if (tutorApproved === false) router.replace('/tutor/rejected');
+            else if (tutorApproved !== true && onboardingComplete) router.replace('/tutor/pending');
+            else router.replace('/tutor/dashboard');
           } else if (
             !onboardingComplete &&
             pathname !== '/tutor/onboarding' &&
             !pathname.startsWith('/tutor/onboarding') &&
-            !pathname.startsWith('/account')
+            !tutorAccountAllowed
           ) {
             router.replace('/tutor/onboarding');
+          } else if (onboardingComplete && tutorApproved === false && !isOnRejectedPage && !tutorAccountAllowed) {
+            // Rejected — lock to rejection page
+            router.replace('/tutor/rejected');
+          } else if (onboardingComplete && tutorApproved !== true && !isOnPendingPage && !isOnRejectedPage && !tutorAccountAllowed) {
+            // Pending — lock to pending page
+            router.replace('/tutor/pending');
           } else if (
+            tutorApproved === true &&
             !isTutorDashboard &&
             !tutorAllowedOutsideTutorRoutes &&
             pathname !== '/tutor/onboarding' &&
@@ -382,7 +401,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           ) {
             router.replace('/tutor/dashboard');
           } else if (pathname === '/') {
-            router.replace('/tutor/dashboard');
+            if (tutorApproved === false) router.replace('/tutor/rejected');
+            else if (tutorApproved !== true && onboardingComplete) router.replace('/tutor/pending');
+            else router.replace('/tutor/dashboard');
           }
         }
         else if (role === 'STUDENT' && (isAdminDashboard || isTeacherDashboard || isSchoolDashboard || isParentDashboard || isTutorDashboard)) {

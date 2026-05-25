@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useState, useTransition } from "react";
+import React, { useEffect, useState, useTransition } from "react";
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Button } from "@/components/ui/button";
@@ -51,6 +51,13 @@ const FormSchema = z.object({
   barData: z.array(z.object({ label: z.string(), value: z.number() })).optional(),
   lineData: z.array(z.object({ x: z.number(), y: z.number() })).optional(),
   coordinatePoints: z.array(z.object({ x: z.number(), y: z.number() })).optional(),
+  graphVertices: z.array(z.object({ name: z.string().min(1, 'Name required') })).optional(),
+  graphEdges: z.array(
+    z.object({
+      from: z.string().min(1, 'From required'),
+      to: z.string().min(1, 'To required'),
+    }),
+  ).optional(),
   geometryShape: z.enum(['triangle', 'circle']).optional(),
   functionExpression: z.string().optional(),
 });
@@ -71,6 +78,8 @@ export default function VisualGenerator() {
       barData: [],
       lineData: [],
       coordinatePoints: [],
+      graphVertices: [{ name: 'A' }, { name: 'B' }, { name: 'C' }],
+      graphEdges: [{ from: 'A', to: 'B' }, { from: 'B', to: 'C' }],
       geometryShape: 'triangle',
       functionExpression: 'x*x',
     },
@@ -79,8 +88,20 @@ export default function VisualGenerator() {
   const { fields: barFields, append: appendBar, remove: removeBar } = useFieldArray({ control: form.control, name: "barData" });
   const { fields: lineFields, append: appendLine, remove: removeLine } = useFieldArray({ control: form.control, name: "lineData" });
   const { fields: pointFields, append: appendPoint, remove: removePoint } = useFieldArray({ control: form.control, name: "coordinatePoints" });
+  const { fields: vertexFields, append: appendVertex, remove: removeVertex } = useFieldArray({
+    control: form.control,
+    name: 'graphVertices',
+  });
+  const { fields: edgeFields, append: appendEdge, remove: removeEdge } = useFieldArray({
+    control: form.control,
+    name: 'graphEdges',
+  });
 
   const watchType = form.watch("type");
+
+  useEffect(() => {
+    setResult(null);
+  }, [watchType]);
 
   const handleSubmit = (values: FormValues) => {
     if (!user) {
@@ -102,8 +123,8 @@ export default function VisualGenerator() {
       values.type === 'HISTOGRAM';
     const usesLineData =
       values.type === 'LINE_GRAPH' ||
-      values.type === 'SCATTER_PLOT' ||
-      values.type === 'GRAPH_THEORY_DIAGRAM';
+      values.type === 'SCATTER_PLOT';
+    const usesGraphData = values.type === 'GRAPH_THEORY_DIAGRAM';
 
     if (usesBarData && !(values.barData?.length ?? 0)) {
       toast({ variant: 'destructive', title: 'Add chart data', description: 'Add at least one label and value.' });
@@ -111,6 +132,10 @@ export default function VisualGenerator() {
     }
     if (usesLineData && !(values.lineData?.length ?? 0)) {
       toast({ variant: 'destructive', title: 'Add chart data', description: 'Add at least one x/y point.' });
+      return;
+    }
+    if (usesGraphData && !(values.graphVertices?.length ?? 0)) {
+      toast({ variant: 'destructive', title: 'Add vertices', description: 'Add at least one vertex (node) for the graph.' });
       return;
     }
     if (values.type === 'COORDINATE_GRAPH' && !(values.coordinatePoints?.length ?? 0)) {
@@ -132,6 +157,17 @@ export default function VisualGenerator() {
       submissionData.data = values.barData;
     } else if (usesLineData) {
       submissionData.data = values.lineData;
+    } else if (usesGraphData) {
+      submissionData.data = {
+        vertices: (values.graphVertices ?? []).map((v) => ({
+          id: v.name.trim(),
+          name: v.name.trim(),
+        })),
+        edges: (values.graphEdges ?? []).map((e) => ({
+          from: e.from.trim(),
+          to: e.to.trim(),
+        })),
+      };
     } else if (values.type === 'COORDINATE_GRAPH') {
       submissionData.data = { points: values.coordinatePoints };
     } else if (values.type === 'GEOMETRY_DIAGRAM') {
@@ -164,10 +200,9 @@ export default function VisualGenerator() {
   
   const isImagePrompt = ["EDUCATIONAL_IMAGE", "VISUAL_DRAWING"].includes(watchType);
   const isBarOrPie = ["BAR_GRAPH", "PIE_CHART"].includes(watchType);
-  const isLine =
-    watchType === "LINE_GRAPH" ||
-    watchType === "SCATTER_PLOT" ||
-    watchType === "GRAPH_THEORY_DIAGRAM";
+  const isLineGraph = watchType === "LINE_GRAPH";
+  const isScatterPlot = watchType === "SCATTER_PLOT";
+  const isGraphTheory = watchType === "GRAPH_THEORY_DIAGRAM";
   const isBarOrPieExtended =
     isBarOrPie || watchType === "PICTOGRAPH" || watchType === "HISTOGRAM";
   const isCoordinate = watchType === "COORDINATE_GRAPH";
@@ -233,9 +268,76 @@ export default function VisualGenerator() {
                  </div>
             )}
 
-             {isLine && (
+             {isGraphTheory && (
                  <div className="space-y-4 p-4 border rounded-lg">
-                    <h4 className="font-medium">Line Graph Data</h4>
+                    <h4 className="font-medium">Graph (vertices &amp; edges)</h4>
+                    <p className="text-xs text-muted-foreground">
+                      Name each vertex, then list which pairs are connected. Edges are undirected lines—not a coordinate line chart.
+                    </p>
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium">Vertices</p>
+                      {vertexFields.map((field, index) => (
+                        <div key={field.id} className="flex items-end gap-2">
+                          <div className="flex-1 space-y-1">
+                            <Label className="text-xs">Name</Label>
+                            <Input {...form.register(`graphVertices.${index}.name`)} placeholder="e.g., A" />
+                          </div>
+                          <Button type="button" variant="ghost" size="icon" onClick={() => removeVertex(index)}>
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
+                      ))}
+                      <Button type="button" variant="outline" size="sm" onClick={() => appendVertex({ name: '' })}>
+                        Add vertex
+                      </Button>
+                    </div>
+                    <div className="space-y-2 border-t pt-3">
+                      <p className="text-sm font-medium">Edges</p>
+                      {edgeFields.map((field, index) => (
+                        <div key={field.id} className="flex items-end gap-2">
+                          <div className="flex-1 space-y-1">
+                            <Label className="text-xs">From</Label>
+                            <Input {...form.register(`graphEdges.${index}.from`)} placeholder="e.g., A" />
+                          </div>
+                          <div className="flex-1 space-y-1">
+                            <Label className="text-xs">To</Label>
+                            <Input {...form.register(`graphEdges.${index}.to`)} placeholder="e.g., B" />
+                          </div>
+                          <Button type="button" variant="ghost" size="icon" onClick={() => removeEdge(index)}>
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
+                      ))}
+                      <Button type="button" variant="outline" size="sm" onClick={() => appendEdge({ from: '', to: '' })}>
+                        Add edge
+                      </Button>
+                    </div>
+                 </div>
+            )}
+
+             {isScatterPlot && (
+                 <div className="space-y-4 p-4 border rounded-lg">
+                    <h4 className="font-medium">Scatter plot data</h4>
+                    <p className="text-xs text-muted-foreground">
+                      Each point is plotted independently — points are not connected with lines.
+                    </p>
+                     {lineFields.map((field, index) => (
+                        <div key={field.id} className="flex items-end gap-2">
+                            <div className="flex-1 space-y-1"><Label className="text-xs">X-Value</Label><Input {...form.register(`lineData.${index}.x`, { valueAsNumber: true })} type="number" /></div>
+                            <div className="flex-1 space-y-1"><Label className="text-xs">Y-Value</Label><Input {...form.register(`lineData.${index}.y`, { valueAsNumber: true })} type="number" /></div>
+                            <Button type="button" variant="ghost" size="icon" onClick={() => removeLine(index)}><Trash2 className="h-4 w-4 text-destructive"/></Button>
+                        </div>
+                    ))}
+                    <Button type="button" variant="outline" size="sm" onClick={() => appendLine({ x: 0, y: 0 })}>Add Point</Button>
+                 </div>
+            )}
+
+             {isLineGraph && (
+                 <div className="space-y-4 p-4 border rounded-lg">
+                    <h4 className="font-medium">Line graph data</h4>
+                    <p className="text-xs text-muted-foreground">
+                      Points are connected left-to-right by X value (good for trends over time).
+                    </p>
                      {lineFields.map((field, index) => (
                         <div key={field.id} className="flex items-end gap-2">
                             <div className="flex-1 space-y-1"><Label className="text-xs">X-Value</Label><Input {...form.register(`lineData.${index}.x`, { valueAsNumber: true })} type="number" /></div>
@@ -298,19 +400,27 @@ export default function VisualGenerator() {
           {isPending ? (
             <Skeleton className="aspect-video w-full" />
           ) : result ? (
-            <div className="aspect-video relative rounded-md border bg-white flex items-center justify-center p-2">
+            <div className="relative min-h-[280px] w-full rounded-md border bg-white p-2">
               {result.imageUrl && (
-                <Image
-                  src={result.imageUrl}
-                  alt="Generated AI Image"
-                  fill
-                  className="object-contain"
-                  unoptimized={
-                    result.imageUrl.startsWith('data:') || result.imageUrl.startsWith('blob:')
-                  }
+                <div className="relative mx-auto aspect-video max-h-[420px] w-full">
+                  <Image
+                    src={result.imageUrl}
+                    alt="Generated AI Image"
+                    fill
+                    className="object-contain"
+                    unoptimized={
+                      result.imageUrl.startsWith('data:') || result.imageUrl.startsWith('blob:')
+                    }
+                  />
+                </div>
+              )}
+              {result.svg && (
+                <div
+                  key={`${watchType}-svg`}
+                  className="w-full overflow-auto [&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-w-full"
+                  dangerouslySetInnerHTML={{ __html: result.svg }}
                 />
               )}
-              {result.svg && <div className="w-full h-full" dangerouslySetInnerHTML={{ __html: result.svg }} />}
             </div>
           ) : (
             <div className="aspect-video flex flex-col items-center justify-center rounded-lg border border-dashed text-center">

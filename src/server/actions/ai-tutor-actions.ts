@@ -4,6 +4,7 @@
 import { aiTutorAssistance, AiTutorAssistanceInput, AiTutorAssistanceOutput } from '@/server/ai/flows/ai-tutor-assistance';
 import { runStudYearAction } from '../services/pipeline';
 import { savedResourceService } from '../services/resources';
+import { toFirestoreDocument } from '@/server/lib/strip-undefined-deep';
 import { adminDb } from '@/lib/firebase/admin-app';
 import * as admin from 'firebase-admin';
 
@@ -40,7 +41,7 @@ export async function askAiTutor(
             let sessionRef;
             const newTranscript = [
                 { role: 'user', content: input.query, createdAt: new Date() },
-                { role: 'assistant', ...output, createdAt: new Date() }
+                toFirestoreDocument({ role: 'assistant', ...output, createdAt: new Date() }),
             ];
 
             if (sessionId) {
@@ -50,14 +51,16 @@ export async function askAiTutor(
                 });
             } else {
                  sessionRef = adminDb.collection('users').doc(userId).collection('ai_sessions').doc();
-                 await sessionRef.set({
+                 await sessionRef.set(
+                  toFirestoreDocument({
                     studentId: userId,
                     mode: 'chat',
                     subject: 'General',
                     topic: 'General Conversation',
                     createdAt: now,
-                    transcript: newTranscript
-                });
+                    transcript: newTranscript,
+                  }),
+                );
             }
             
             if (output.escalated) {

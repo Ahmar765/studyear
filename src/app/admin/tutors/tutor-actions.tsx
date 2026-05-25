@@ -53,68 +53,69 @@ export default function TutorActions({ application }: { application: TutorApplic
         });
     }
 
-    if (application.approvalStatus !== 'PENDING') {
-        return null; // No actions needed if already reviewed
-    }
+    const isApproved = application.approvalStatus === 'APPROVED';
+    const isRejected = application.approvalStatus === 'REJECTED';
 
     return (
         <div className="flex gap-2 justify-end">
-             <AlertDialog>
-                <AlertDialogTrigger asChild>
-                    <Button variant="outline" size="sm" disabled={isPending}>
-                        {isPending ? <Loader className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}
-                        Approve
-                    </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>Approve Tutor Application?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            This will make {application.displayName}'s profile visible in the public marketplace. Are you sure?
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
-                        <Button
-                            type="button"
-                            disabled={isPending}
-                            onClick={() => handleReview('APPROVED')}
-                        >
-                            {isPending ? <Loader className="mr-2 h-4 w-4 animate-spin" /> : null}
-                            Approve
+            {/* Approve / Re-approve button — shown when not already approved */}
+            {!isApproved && (
+                <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                        <Button variant="outline" size="sm" disabled={isPending}>
+                            {isPending ? <Loader className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}
+                            {isRejected ? 'Re-approve' : 'Approve'}
                         </Button>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
-            
-            <AlertDialog>
-                <AlertDialogTrigger asChild>
-                    <Button variant="destructive" size="sm" disabled={isPending}>
-                        {isPending ? <Loader className="mr-2 h-4 w-4 animate-spin" /> : <X className="mr-2 h-4 w-4" />}
-                        Reject
-                    </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>Reject Tutor Application?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            This action will mark the application as rejected. The tutor will be notified. This cannot be easily undone.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
-                        <Button
-                            type="button"
-                            variant="destructive"
-                            disabled={isPending}
-                            onClick={() => handleReview('REJECTED')}
-                        >
-                            {isPending ? <Loader className="mr-2 h-4 w-4 animate-spin" /> : null}
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>{isRejected ? 'Re-approve' : 'Approve'} tutor application?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                This will grant {application.displayName} full access to their tutor dashboard and make their profile visible in the marketplace.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
+                            <Button type="button" disabled={isPending} onClick={() => handleReview('APPROVED')}>
+                                {isPending ? <Loader className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                {isRejected ? 'Re-approve' : 'Approve'}
+                            </Button>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+            )}
+
+            {/* Reject button — shown when not already rejected */}
+            {!isRejected && (
+                <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                        <Button variant="destructive" size="sm" disabled={isPending}>
+                            {isPending ? <Loader className="mr-2 h-4 w-4 animate-spin" /> : <X className="mr-2 h-4 w-4" />}
                             Reject
                         </Button>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Reject tutor application?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                {application.displayName} will lose access to their dashboard and receive a rejection email. You can re-approve later if needed.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
+                            <Button type="button" variant="destructive" disabled={isPending} onClick={() => handleReview('REJECTED')}>
+                                {isPending ? <Loader className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                Reject
+                            </Button>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+            )}
+
+            {/* Both already decided — show inert label */}
+            {isApproved && isRejected === false && (
+                <span className="text-xs text-muted-foreground py-1">Approved</span>
+            )}
         </div>
     );
 }

@@ -29,3 +29,6 @@ export function stripUndefinedDeep<T>(value: T): T {
   }
   return out as T;
 }
+
+/** Use for every Firestore `.set()` / `.update()` payload built from spreads or AI JSON. */
+export const toFirestoreDocument = stripUndefinedDeep;

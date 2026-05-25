@@ -13,6 +13,11 @@ export interface UserData {
   onboardingComplete?: boolean;
   /** Set on `/users/{uid}` when the student completes the academic diagnostic (server action). */
   diagnosticComplete?: boolean;
+  /**
+   * Set on `users/{uid}` by `reviewTutorApplicationAction`.
+   * `true` = approved, `false` = rejected, `undefined` = still pending review.
+   */
+  tutorApproved?: boolean;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }

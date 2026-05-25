@@ -16,6 +16,7 @@ import { adminDb } from '@/lib/firebase/admin-app';
 import * as admin from 'firebase-admin';
 import { HttpsError } from '../lib/errors';
 import { saveStudentResource } from '../services/resources';
+import { toFirestoreDocument } from '@/server/lib/strip-undefined-deep';
 import { getUserProfileServer } from '../services/user';
 
 /** Firestore rejects nested `undefined`; AI payloads may omit optional keys inconsistently. */
@@ -113,18 +114,20 @@ export async function buildPersonalRecoveryPlanAction(
       unknown
     >;
     const planPlain = omitUndefinedDeep(recoveryPlan) as Record<string, unknown>;
-    await recoveryRef.set({
-      userId,
-      studentId,
-      diagnosticId,
-      ...planPlain,
-      ...(Object.keys(ctxPlain).length > 0
-        ? { studentAcademicContext: ctxPlain }
-        : {}),
-      status: "ACTIVE",
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
+    await recoveryRef.set(
+      toFirestoreDocument({
+        userId,
+        studentId,
+        diagnosticId,
+        ...planPlain,
+        ...(Object.keys(ctxPlain).length > 0
+          ? { studentAcademicContext: ctxPlain }
+          : {}),
+        status: "ACTIVE",
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }),
+    );
 
     await saveStudentResource({
       studentId,

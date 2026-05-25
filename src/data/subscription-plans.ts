@@ -89,6 +89,57 @@ export const PARENT_SUBSCRIPTION_PLANS: CheckoutPlanDefinition[] = [
   },
 ];
 
+export const SCHOOL_STARTER_MONTHLY_ACUS = 5_000;
+export const SCHOOL_GROWTH_MONTHLY_ACUS = 15_000;
+export const SCHOOL_ENTERPRISE_MONTHLY_ACUS = 50_000;
+
+export const SCHOOL_SUBSCRIPTION_PLANS: CheckoutPlanDefinition[] = [
+  {
+    productCode: 'SCHOOL_STARTER',
+    name: 'School Starter',
+    price: '99.00',
+    priceSuffix: '/ month',
+    popular: false,
+    features: [
+      'Up to 150 students',
+      `${SCHOOL_STARTER_MONTHLY_ACUS.toLocaleString('en-GB')} shared ACUs per month`,
+      'Command Centre, risk intelligence & intervention pipeline',
+      'Staff deployment hub (up to 15 teachers)',
+      'Parent visibility layer',
+    ],
+  },
+  {
+    productCode: 'SCHOOL_GROWTH',
+    name: 'School Growth',
+    price: '249.00',
+    priceSuffix: '/ month',
+    popular: true,
+    features: [
+      'Up to 600 students',
+      `${SCHOOL_GROWTH_MONTHLY_ACUS.toLocaleString('en-GB')} shared ACUs per month`,
+      'Everything in Starter',
+      'Unlimited staff deployment',
+      'Executive reporting suite & department analytics',
+      'MIS sync (CSV import)',
+    ],
+  },
+  {
+    productCode: 'SCHOOL_ENTERPRISE',
+    name: 'School Enterprise',
+    price: '599.00',
+    priceSuffix: '/ month',
+    popular: false,
+    features: [
+      'Unlimited students & staff',
+      `${SCHOOL_ENTERPRISE_MONTHLY_ACUS.toLocaleString('en-GB')} shared ACUs per month`,
+      'Everything in Growth',
+      'Dedicated onboarding & SLA support',
+      'Custom AI policy & safeguarding controls',
+      'Multi-site / academy trust management',
+    ],
+  },
+];
+
 export function subscriptionTypeDisplayName(
   type: string | undefined | null,
 ): string {
@@ -106,9 +157,11 @@ export function subscriptionTypeDisplayName(
     case 'PRIVATE_TUTOR':
       return 'Private Tutor';
     case 'SCHOOL_STARTER':
+      return 'School Starter';
     case 'SCHOOL_GROWTH':
+      return 'School Growth';
     case 'SCHOOL_ENTERPRISE':
-      return 'School plan';
+      return 'School Enterprise';
     case 'SCHOOL_TUTOR':
     case 'SCHOOL_ADMIN':
       return 'School staff';

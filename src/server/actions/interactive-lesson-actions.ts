@@ -6,6 +6,7 @@ import { aiTutorAssistance, AiTutorAssistanceInput } from '@/server/ai/flows/ai-
 import { generateQuiz, GenerateQuizInput } from '@/server/ai/flows/quiz-generation';
 import { z } from 'zod';
 import { adminDb } from '@/lib/firebase/admin-app';
+import { savedResourceService } from '@/server/services/resources';
 import * as admin from 'firebase-admin';
 import { AIGatewayService } from '../services/ai-gateway';
 import type { AIRequestContext, AIUserInput } from '../ai/gateway-schema';
@@ -62,13 +63,11 @@ export async function createLesson(topic: string, userId: string) {
     const response = await gateway.execute(context, input, generateInteractiveLesson);
     const result = response.output;
 
-    const savedResourceRef = adminDb.collection('users').doc(userId).collection('saved_resources').doc();
-    await savedResourceRef.set({
-        studentId: userId,
-        type: 'AI_INTERACTIVE_LESSON',
-        title: result.lessonTitle,
-        content: result,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    await savedResourceService.save({
+      studentId: userId,
+      type: 'AI_INTERACTIVE_LESSON',
+      title: result.lessonTitle,
+      content: result,
     });
 
     return { success: true, lesson: result };

@@ -96,6 +96,35 @@ function pickHigherParentTier(
   return PARENT_TIER_RANK[a] >= PARENT_TIER_RANK[b] ? a : b;
 }
 
+/**
+ * Subscription label for admin lists — uses the higher parent tier when
+ * `users.subscription` and `subscriptions/{uid}.type` disagree (e.g. Stripe Pro + admin Elite grant).
+ */
+export function resolveListedUserSubscription(
+  role: string | undefined,
+  userSubscription: string | undefined,
+  subDoc: { type?: string; status?: string } | undefined,
+): string {
+  const userSub = String(userSubscription ?? '').trim();
+  const subType = String(subDoc?.type ?? '').trim();
+  const subActive = subDoc?.status === 'ACTIVE';
+
+  if (role === 'PARENT') {
+    const fromUser = resolveParentPlanType(userSub);
+    const fromSubActive = subActive ? resolveParentPlanType(subType) : null;
+    const fromSubDoc = resolveParentPlanType(subType);
+    let tier = pickHigherParentTier(fromUser, fromSubActive);
+    tier = pickHigherParentTier(tier, fromSubDoc);
+    if (tier) return tier;
+    if (userSub) return userSub;
+    return subType || 'FREE';
+  }
+
+  if (subActive && subType) return subType;
+  if (userSub) return userSub;
+  return subType || 'FREE';
+}
+
 /** Active tier from Stripe `subscriptions` doc and/or `users.subscription` (whichever is higher). */
 export async function getActiveParentPlanTier(userId: string): Promise<ParentPlanTier | null> {
   const [subSnap, userSnap] = await Promise.all([

@@ -9,7 +9,7 @@ import type { UserRole, SubscriptionType } from "@/server/schemas";
 import { deriveParentLinkCode } from "@/lib/parent-link-code";
 import { generateSchoolStaffJoinCode } from "@/lib/school-staff-join-code";
 import { ensurePlatformAdminAccess } from "@/server/lib/platform-admin";
-import { sendWelcomeEmail } from "@/server/lib/mail";
+import { sendWelcomeEmail, sendPlatformEmail } from "@/server/lib/mail";
 
 const allowedRoles: UserRole[] = ["STUDENT", "PARENT", "PRIVATE_TUTOR", "SCHOOL_ADMIN", "SCHOOL_TUTOR", "ADMIN"];
 
@@ -155,9 +155,33 @@ export async function signup(uid: string, email: string, role: string, displayNa
         }
         await ensurePlatformAdminAccess(uid, email);
 
-        void sendWelcomeEmail(email, name).catch((err) =>
-          console.error('[signup] welcome email failed:', err),
-        );
+        void sendWelcomeEmail(email, name).then((res) => {
+          if (!res.sent) {
+            console.warn('[signup] welcome email was not delivered (configure MAIL_* env).');
+          }
+        });
+
+        if (userRole === 'PRIVATE_TUTOR') {
+          const adminEmail = process.env.MAIL_FROM_ADDRESS ?? 'contact@studyear.com';
+          const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://studyear.com';
+          void sendPlatformEmail({
+            to: adminEmail,
+            subject: 'New tutor application — action required',
+            html: `
+              <p>A new private tutor has registered on StudYear and is awaiting your approval.</p>
+              <table style="border-collapse:collapse;margin-top:12px;">
+                <tr><td style="padding:4px 12px 4px 0;color:#6b7280;">Name</td><td><strong>${name ?? '—'}</strong></td></tr>
+                <tr><td style="padding:4px 12px 4px 0;color:#6b7280;">Email</td><td>${email}</td></tr>
+              </table>
+              <p style="margin-top:16px;">
+                <a href="${appUrl}/admin/tutors" style="background:#2563eb;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;display:inline-block;">Review application</a>
+              </p>
+            `,
+            text: `New tutor application from ${name ?? email}. Review at ${appUrl}/admin/tutors`,
+          }).then((res) => {
+            if (!res.sent) console.warn('[signup] admin tutor alert email not delivered.');
+          });
+        }
 
         const { sessionId } = await createSession(uid, { platform: "web", userAgent: "unknown" });
         return { message: "Success", error: null, sessionId };

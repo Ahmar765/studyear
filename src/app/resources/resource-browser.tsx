@@ -17,7 +17,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { AlertCircle, Bookmark, Check, Download } from 'lucide-react';
+import { AlertCircle, Bookmark, Check, ExternalLink } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { resourceMetadata, ResourceType } from '@/data/academic';
 import { formatResourceSubject, isJunkFilterValue } from '@/lib/resource-labels';
@@ -291,7 +291,7 @@ export default function ResourceBrowser({
                                                         target="_blank"
                                                         rel="noopener noreferrer"
                                                     >
-                                                        <Download className="mr-2 h-4 w-4" />
+                                                        <ExternalLink className="mr-2 h-4 w-4" />
                                                         Open
                                                     </a>
                                                 </Button>

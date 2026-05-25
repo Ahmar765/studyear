@@ -16,13 +16,14 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import {
   PARENT_SUBSCRIPTION_PLANS,
+  SCHOOL_SUBSCRIPTION_PLANS,
   STUDENT_SUBSCRIPTION_PLANS,
 } from '@/data/subscription-plans';
 import { ACU_PACKAGES } from '@/data/acu-packages';
 import { Separator } from '@/components/ui/separator';
 
 function isStudentLikeRole(role: string | undefined): boolean {
-  return role === 'STUDENT' || role === 'PRIVATE_TUTOR' || role === 'SCHOOL_ADMIN';
+  return role === 'STUDENT' || role === 'PRIVATE_TUTOR';
 }
 
 function AcuPackageCard({
@@ -211,6 +212,7 @@ export default function CheckoutPage() {
 
   const isParent = role === 'PARENT';
   const isSchoolTeacher = role === 'SCHOOL_TUTOR';
+  const isSchoolAdmin = role === 'SCHOOL_ADMIN';
   const isPlatformAdmin = role === 'ADMIN';
   const studentLike = isStudentLikeRole(role);
 
@@ -257,6 +259,43 @@ export default function CheckoutPage() {
             </Button>
           </CardFooter>
         </Card>
+      </div>
+    );
+  }
+
+  if (isSchoolAdmin) {
+    return (
+      <div className="flex-1 space-y-10 p-4 md:p-8">
+        <div className="text-center">
+          <h1 className="text-4xl font-bold tracking-tight">School subscription plans</h1>
+          <p className="mt-2 text-lg text-muted-foreground max-w-2xl mx-auto">
+            Subscribe your institution through Stripe. Each plan includes a monthly shared ACU pool
+            for all staff and students. Top up with additional ACU packs anytime.
+          </p>
+        </div>
+
+        <div className="grid sm:grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+          {SCHOOL_SUBSCRIPTION_PLANS.map((plan) => (
+            <SubscriptionCard key={plan.productCode} {...plan} />
+          ))}
+        </div>
+
+        <div className="max-w-5xl mx-auto space-y-6">
+          <Separator />
+          <div className="text-center space-y-2">
+            <h2 className="text-2xl font-semibold tracking-tight">Top up your school ACU pool</h2>
+            <p className="text-muted-foreground text-sm max-w-xl mx-auto">
+              Need more AI credits mid-month? One-off packs are instantly added to your institution&apos;s shared wallet.
+            </p>
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-8 max-w-4xl mx-auto">
+            {buildAcuPackageCards().map((pkg) => (
+              <AcuPackageCard key={pkg.productCode} {...pkg} />
+            ))}
+          </div>
+        </div>
+
+        <FooterNote subscriptions optionalAcu />
       </div>
     );
   }
@@ -321,18 +360,19 @@ export default function CheckoutPage() {
           </div>
         </div>
       ) : (
-        <div className="max-w-3xl mx-auto space-y-6">
+        <div className="max-w-4xl mx-auto space-y-6">
           <Separator />
           <div className="text-center space-y-2">
             <h2 className="text-2xl font-semibold tracking-tight">
-              Organisation subscriptions
+              School subscription plans
             </h2>
             <p className="text-muted-foreground text-sm max-w-2xl mx-auto">
-              Plans for school and staff accounts. ACU packs above work for prepaid AI usage when your role uses a wallet.
+              Institutional plans for your school. Each plan includes a monthly shared ACU pool for all staff and students.
+              ACU top-up packs above can also be used to supplement your pool at any time.
             </p>
           </div>
-          <div className="grid sm:grid-cols-1 md:grid-cols-2 gap-8 max-w-3xl mx-auto">
-            {STUDENT_SUBSCRIPTION_PLANS.map((plan) => (
+          <div className="grid sm:grid-cols-1 md:grid-cols-3 gap-6">
+            {SCHOOL_SUBSCRIPTION_PLANS.map((plan) => (
               <SubscriptionCard key={plan.productCode} {...plan} />
             ))}
           </div>

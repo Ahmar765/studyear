@@ -23,6 +23,7 @@ import {
 } from "@/lib/profile-academic";
 import { buildStudyPlanSkeleton } from "@/lib/study-plan-calendar";
 import { saveStudyPlanTasks } from "@/server/services/planner";
+import { toFirestoreDocument } from "@/server/lib/strip-undefined-deep";
 
 const GeneratePlanSchema = z.object({
   subjects: z.array(z.object({
@@ -195,7 +196,8 @@ export async function createStudyPlan(formData: FormData): Promise<{ success: bo
     const planOutput = result.result;
 
     const studyPlanRef = adminDb.collection('study_plans').doc();
-    await studyPlanRef.set({
+    await studyPlanRef.set(
+      toFirestoreDocument({
         userId: validatedData.userId,
         studentId: validatedData.userId,
         diagnosticId: validatedData.diagnosticId || null,
@@ -206,7 +208,8 @@ export async function createStudyPlan(formData: FormData): Promise<{ success: bo
         status: 'ACTIVE',
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
+      }),
+    );
 
     await saveStudyPlanTasks(validatedData.userId, studyPlanRef.id, planOutput);
 

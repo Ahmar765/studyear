@@ -46,15 +46,21 @@ export default function AcuAdjustmentDialog({ user, onSuccess }: AcuAdjustmentDi
   const onSubmit = (values: z.infer<typeof FormSchema>) => {
     if (!adminUser) return;
     startTransition(async () => {
-        const result = await adjustAcuBalanceAction({
+        const token = await adminUser.getIdToken();
+        const result = await adjustAcuBalanceAction(
+          {
             ...values,
             userId: user.uid,
             adminId: adminUser.uid,
-        });
+          },
+          token,
+        );
         if (result.success) {
             toast({
-                title: 'ACU Balance Updated',
-                description: `${values.amount.toLocaleString()} ACUs have been credited to ${user.name}.`,
+                title: 'ACU balance updated',
+                description: result.emailSent
+                  ? `${values.amount.toLocaleString()} ACUs credited to ${user.name}. A confirmation email was sent.`
+                  : `${values.amount.toLocaleString()} ACUs credited to ${user.name}. (Email not sent — check MAIL_* env on the server.)`,
             });
             onSuccess();
         } else {

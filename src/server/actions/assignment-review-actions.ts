@@ -14,11 +14,11 @@ import { runStudYearAction } from "../services/pipeline";
 import {
   generateAssignmentReviewVisuals,
   type GeneratedReviewVisual,
-  type GeneratedReviewVisual,
 } from "../services/assignment-review-visuals";
 import { adminDb } from "@/lib/firebase/admin-app";
 import { Timestamp } from "firebase-admin/firestore";
 import { storeGeneratedImageUrl, stripNonPersistableImageFields } from "../lib/visual-image-storage";
+import { toFirestoreDocument } from "@/server/lib/strip-undefined-deep";
 
 async function persistReviewVisualImages(
   visuals: GeneratedReviewVisual[],
@@ -32,7 +32,7 @@ async function persistReviewVisualImages(
     const visual = visuals[index];
     if (!visual.imageUrl) {
       client.push(visual);
-      firestore.push(visual);
+      firestore.push(toFirestoreDocument(visual));
       continue;
     }
     const stored = await storeGeneratedImageUrl(visual.imageUrl, {
@@ -44,7 +44,11 @@ async function persistReviewVisualImages(
       ...visual,
       imageUrl: stored.displayUrl ?? stored.firestoreUrl ?? undefined,
     });
-    firestore.push(stripNonPersistableImageFields(visual, stored.firestoreUrl));
+    firestore.push(
+      toFirestoreDocument(
+        stripNonPersistableImageFields(visual, stored.firestoreUrl),
+      ),
+    );
   }
 
   return { client, firestore };
@@ -137,7 +141,8 @@ export async function submitAssignmentForReviewAction(input: z.infer<typeof Acti
 
     try {
         const submissionRef = adminDb.collection("assignment_submissions").doc();
-        await submissionRef.set({
+        await submissionRef.set(
+          toFirestoreDocument({
             ...validatedData.data,
             pastedText,
             attachmentUrl: attachmentUrl ?? null,
@@ -145,7 +150,8 @@ export async function submitAssignmentForReviewAction(input: z.infer<typeof Acti
             status: "PROCESSING",
             createdAt: Timestamp.now(),
             updatedAt: Timestamp.now(),
-        });
+          }),
+        );
         
         const result = await runStudYearAction({
             userId,
@@ -173,14 +179,16 @@ export async function submitAssignmentForReviewAction(input: z.infer<typeof Acti
           await persistReviewVisualImages(rawVisuals, userId, submissionRef.id);
 
         const reviewRef = adminDb.collection('assignment_reviews').doc(submissionRef.id);
-        await reviewRef.set({
+        await reviewRef.set(
+          toFirestoreDocument({
             submissionId: submissionRef.id,
             studentId,
             userId,
             ...reviewData,
             generatedVisuals: firestoreVisuals,
             createdAt: Timestamp.now(),
-        });
+          }),
+        );
 
         await submissionRef.update({ status: "COMPLETED", updatedAt: Timestamp.now() });
 

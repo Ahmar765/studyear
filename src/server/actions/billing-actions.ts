@@ -11,12 +11,14 @@ import type { SubscriptionType } from '@/server/schemas';
 import { ACU_PACKAGES } from '@/data/acu-packages';
 import {
   PARENT_SUBSCRIPTION_PLANS,
+  SCHOOL_SUBSCRIPTION_PLANS,
   STUDENT_SUBSCRIPTION_PLANS,
 } from '@/data/subscription-plans';
 
 const MARKETING_SUBSCRIPTION_PLANS = [
   ...STUDENT_SUBSCRIPTION_PLANS,
   ...PARENT_SUBSCRIPTION_PLANS,
+  ...SCHOOL_SUBSCRIPTION_PLANS,
 ];
 
 function marketingPlanGbpPence(productCode: string): number | null {
@@ -37,6 +39,9 @@ const SUBSCRIPTION_PRODUCT_CODES = new Set<string>([
   'PARENT_PRO',
   'PARENT_PRO_PLUS',
   'PARENT_ELITE',
+  'SCHOOL_STARTER',
+  'SCHOOL_GROWTH',
+  'SCHOOL_ENTERPRISE',
 ]);
 
 function resolveAppBaseUrl(): string {
@@ -63,6 +68,9 @@ function stripePriceIdForProduct(productCode: string): string | undefined {
     PARENT_PRO: process.env.STRIPE_PRICE_PARENT_PRO,
     PARENT_PRO_PLUS: process.env.STRIPE_PRICE_PARENT_PRO_PLUS,
     PARENT_ELITE: process.env.STRIPE_PRICE_PARENT_ELITE,
+    SCHOOL_STARTER: process.env.STRIPE_PRICE_SCHOOL_STARTER,
+    SCHOOL_GROWTH: process.env.STRIPE_PRICE_SCHOOL_GROWTH,
+    SCHOOL_ENTERPRISE: process.env.STRIPE_PRICE_SCHOOL_ENTERPRISE,
   };
   return map[productCode];
 }

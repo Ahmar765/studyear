@@ -3,6 +3,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import UserActions from './user-actions';
 import { getUsersAction } from "@/server/actions/admin-actions";
+import { subscriptionTypeDisplayName } from "@/data/subscription-plans";
 
 export default async function AdminUsersPage() {
     const { users, error } = await getUsersAction();
@@ -41,7 +42,11 @@ export default async function AdminUsersPage() {
                                     <TableCell>{user.name || 'N/A'}</TableCell>
                                     <TableCell>{user.email}</TableCell>
                                     <TableCell><Badge variant="secondary">{user.role}</Badge></TableCell>
-                                    <TableCell><Badge variant={user.subscription === 'FREE' ? 'outline' : 'default'}>{user.subscription?.replace(/_/g, ' ') || 'free'}</Badge></TableCell>
+                                    <TableCell>
+                                        <Badge variant={user.subscription === 'FREE' ? 'outline' : 'default'}>
+                                            {subscriptionTypeDisplayName(user.subscription ?? 'FREE')}
+                                        </Badge>
+                                    </TableCell>
                                     <TableCell className="text-right">
                                         <UserActions user={user} />
                                     </TableCell>

@@ -8,6 +8,7 @@ import { ensureSchoolStaffJoinCode } from '@/server/lib/school-staff-link';
 import { resolveSchoolAdmin } from '@/server/lib/school-admin';
 import type { SchoolCommandCentrePayload, SchoolOnboardingProfile } from '@/types/school-portal';
 import * as admin from 'firebase-admin';
+import { toFirestoreDocument } from '@/server/lib/strip-undefined-deep';
 
 export async function getSchoolCommandCentreAction(
   idToken?: string | null,
@@ -68,7 +69,7 @@ export async function saveSchoolOnboardingStepAction(
     const existing = (await ref.get()).data() ?? {};
     const prevProfile = (existing.onboardingProfile as SchoolOnboardingProfile) ?? {};
 
-    const merged: SchoolOnboardingProfile = {
+    const rawMerged: SchoolOnboardingProfile = {
       ...prevProfile,
       ...patch,
       examBoards: patch.examBoards ?? prevProfile.examBoards,
@@ -78,6 +79,9 @@ export async function saveSchoolOnboardingStepAction(
       yearGroups: patch.yearGroups ?? prevProfile.yearGroups,
       classes: patch.classes ?? prevProfile.classes,
     };
+
+    // Firestore rejects undefined anywhere in nested objects; strip before writing.
+    const merged = toFirestoreDocument(rawMerged);
 
     const update: Record<string, unknown> = {
       onboardingProfile: merged,

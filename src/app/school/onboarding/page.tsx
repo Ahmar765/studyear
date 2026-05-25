@@ -21,6 +21,21 @@ import Link from 'next/link';
 
 const EMPTY: SchoolOnboardingProfile = {};
 
+/** Split a comma-separated or newline-separated string into a trimmed, non-empty array. */
+function parseList(raw: string): string[] {
+  return raw.split(/[,\n]/).map((s) => s.trim()).filter(Boolean);
+}
+
+/** Convert an array to a comma-separated display string for editing. */
+function joinComma(arr: string[] | undefined): string {
+  return (arr ?? []).join(', ');
+}
+
+/** Convert an array to a newline-separated display string for editing. */
+function joinNewline(arr: string[] | undefined): string {
+  return (arr ?? []).join('\n');
+}
+
 function SchoolOnboardingInner() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -34,6 +49,13 @@ function SchoolOnboardingInner() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
+  // Raw text state for list fields — avoid splitting on every keystroke
+  const [rawExamBoards, setRawExamBoards] = useState('');
+  const [rawPriorities, setRawPriorities] = useState('');
+  const [rawDepartments, setRawDepartments] = useState('');
+  const [rawYearGroups, setRawYearGroups] = useState('');
+  const [rawClasses, setRawClasses] = useState('');
+
   const load = useCallback(async () => {
     if (!user) return;
     setLoading(true);
@@ -45,9 +67,16 @@ function SchoolOnboardingInner() {
         router.replace('/school/dashboard');
         return;
       }
+      const p = res.profile ?? EMPTY;
       setStep(res.onboardingStep ?? 0);
-      setProfile(res.profile ?? EMPTY);
+      setProfile(p);
       setSchoolName(res.schoolName ?? '');
+      // Initialise raw text fields from saved arrays
+      setRawExamBoards(joinComma(p.examBoards));
+      setRawPriorities(joinNewline(p.academicPriorities));
+      setRawDepartments(joinComma(p.departments));
+      setRawYearGroups(joinComma(p.yearGroups));
+      setRawClasses(joinNewline(p.classes));
     } else {
       setLoadError(res.error ?? 'Could not load school workspace.');
     }
@@ -67,13 +96,22 @@ function SchoolOnboardingInner() {
   const progressPct = ((step + 1) / SCHOOL_ONBOARDING_STEPS.length) * 100;
 
   const save = (nextStep: number, patch: SchoolOnboardingProfile, complete?: boolean) => {
+    // Parse raw text fields into arrays before saving
+    const resolved: SchoolOnboardingProfile = {
+      ...patch,
+      examBoards: parseList(rawExamBoards),
+      academicPriorities: parseList(rawPriorities),
+      departments: parseList(rawDepartments),
+      yearGroups: parseList(rawYearGroups),
+      classes: parseList(rawClasses),
+    };
     startTransition(async () => {
       if (!user) return;
       const token = await user.getIdToken();
       const res = await saveSchoolOnboardingStepAction(
         token,
         nextStep,
-        { ...patch, schoolName: schoolName.trim() || undefined },
+        { ...resolved, schoolName: schoolName.trim() || undefined },
         complete,
       );
       if (res.success) {
@@ -214,25 +252,17 @@ function SchoolOnboardingInner() {
                 <div className="space-y-2">
                   <Label>Exam boards (comma-separated)</Label>
                   <Input
-                    value={(profile.examBoards ?? []).join(', ')}
-                    onChange={(e) =>
-                      setProfile((p) => ({
-                        ...p,
-                        examBoards: e.target.value.split(',').map((s) => s.trim()).filter(Boolean),
-                      }))
-                    }
+                    placeholder="AQA, Edexcel, OCR…"
+                    value={rawExamBoards}
+                    onChange={(e) => setRawExamBoards(e.target.value)}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Academic priorities</Label>
+                  <Label>Academic priorities (one per line)</Label>
                   <Textarea
-                    value={(profile.academicPriorities ?? []).join('\n')}
-                    onChange={(e) =>
-                      setProfile((p) => ({
-                        ...p,
-                        academicPriorities: e.target.value.split('\n').filter(Boolean),
-                      }))
-                    }
+                    placeholder="Raise Year 11 maths attainment&#10;Improve reading age across KS3"
+                    value={rawPriorities}
+                    onChange={(e) => setRawPriorities(e.target.value)}
                   />
                 </div>
               </>
@@ -243,39 +273,25 @@ function SchoolOnboardingInner() {
                 <div className="space-y-2">
                   <Label>Departments (comma-separated)</Label>
                   <Input
-                    value={(profile.departments ?? []).join(', ')}
-                    onChange={(e) =>
-                      setProfile((p) => ({
-                        ...p,
-                        departments: e.target.value.split(',').map((s) => s.trim()).filter(Boolean),
-                      }))
-                    }
+                    placeholder="Maths, Science, English…"
+                    value={rawDepartments}
+                    onChange={(e) => setRawDepartments(e.target.value)}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Year groups</Label>
+                  <Label>Year groups (comma-separated)</Label>
                   <Input
                     placeholder="Year 7, Year 8, Year 9…"
-                    value={(profile.yearGroups ?? []).join(', ')}
-                    onChange={(e) =>
-                      setProfile((p) => ({
-                        ...p,
-                        yearGroups: e.target.value.split(',').map((s) => s.trim()).filter(Boolean),
-                      }))
-                    }
+                    value={rawYearGroups}
+                    onChange={(e) => setRawYearGroups(e.target.value)}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Classes / forms</Label>
+                  <Label>Classes / forms (one per line or comma-separated)</Label>
                   <Textarea
                     placeholder="7A, 7B, 8A…"
-                    value={(profile.classes ?? []).join('\n')}
-                    onChange={(e) =>
-                      setProfile((p) => ({
-                        ...p,
-                        classes: e.target.value.split(/[\n,]/).map((s) => s.trim()).filter(Boolean),
-                      }))
-                    }
+                    value={rawClasses}
+                    onChange={(e) => setRawClasses(e.target.value)}
                   />
                 </div>
               </>

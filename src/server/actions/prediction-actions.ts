@@ -8,6 +8,7 @@ import { randomUUID } from 'crypto';
 import type { AIRequestContext, AIUserInput } from '@/server/ai/gateway-schema';
 import { z } from 'zod';
 import { adminDb } from '@/lib/firebase/admin-app';
+import { toFirestoreDocument } from '@/server/lib/strip-undefined-deep';
 import * as admin from 'firebase-admin';
 
 /** Match profile subject names against varied learning_events payload shapes (pipeline wraps fields under `input`). */
@@ -141,13 +142,15 @@ export async function generateGradePredictionAction(input: z.infer<typeof Action
             .doc(input.userId)
             .collection('predictions')
             .doc();
-        await predictionRef.set({
+        await predictionRef.set(
+          toFirestoreDocument({
             ...result.output,
             subject: input.subject,
             targetGrade: input.targetGrade,
             progressAtPrediction: input.progress,
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
+          }),
+        );
 
         await adminDb.collection('student_dashboard_states').doc(input.userId).set(
             {

@@ -7,6 +7,7 @@ import { adminDb } from "@/lib/firebase/admin-app";
 import * as admin from 'firebase-admin';
 import { savedResourceService } from "../services/resources";
 import { runStudYearAction } from "../services/pipeline";
+import { toFirestoreDocument } from "@/server/lib/strip-undefined-deep";
 
 const SubjectConfidenceSchema = z.object({
   subjectId: z.string(),
@@ -47,13 +48,15 @@ export async function generateDiagnosticReportAction(
                 const report = await generateDiagnosticReport({ subjects });
                 
                 const diagnosticRef = adminDb.collection('diagnostic_results').doc();
-                await diagnosticRef.set({
+                await diagnosticRef.set(
+                  toFirestoreDocument({
                     userId: userId,
                     studentId: userId,
                     subjects: subjects,
                     ...report,
                     createdAt: admin.firestore.FieldValue.serverTimestamp(),
-                });
+                  }),
+                );
                 
                 await savedResourceService.save({
                     studentId: userId,

@@ -1,5 +1,6 @@
 import { adminDb } from '@/lib/firebase/admin-app';
 import * as admin from 'firebase-admin';
+import { stripUndefinedDeep } from '@/server/lib/strip-undefined-deep';
 
 /** Types that should stay private (not listed on Find Study Resources). */
 const SKIP_GLOBAL_PUBLISH_TYPES = new Set<string>([
@@ -88,17 +89,24 @@ export const savedResourceService = {
   }) {
     const savedResourceRef = adminDb.collection('users').doc(input.studentId).collection('saved_resources').doc();
 
-    await savedResourceRef.set({
-      studentId: input.studentId,
-      type: input.type,
-      title: input.title,
-      content: input.content || null,
-      sourceInput: input.sourceInput || null,
-      fileUrl: input.fileUrl || null,
-      videoUrl: input.videoUrl || null,
-      linkedEntityId: input.linkedEntityId || null,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
+    const safeContent =
+      input.content === undefined || input.content === null
+        ? null
+        : stripUndefinedDeep(input.content);
+
+    await savedResourceRef.set(
+      stripUndefinedDeep({
+        studentId: input.studentId,
+        type: input.type,
+        title: input.title,
+        content: safeContent,
+        sourceInput: input.sourceInput || null,
+        fileUrl: input.fileUrl || null,
+        videoUrl: input.videoUrl || null,
+        linkedEntityId: input.linkedEntityId || null,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      }),
+    );
 
     const skip =
       input.skipGlobalPublish === true ||
@@ -109,7 +117,7 @@ export const savedResourceService = {
         await publishToGlobalLibrary({
           type: input.type,
           title: input.title,
-          content: input.content,
+          content: safeContent,
           sourceInput: input.sourceInput ?? null,
           fileUrl: input.fileUrl ?? null,
           videoUrl: input.videoUrl ?? null,

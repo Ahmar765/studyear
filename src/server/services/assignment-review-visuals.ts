@@ -55,7 +55,8 @@ function chartGenType(
 }
 
 function toSvgChartType(visualType: ReviewVisualSpec['visualType']): VisualRequest['type'] {
-  if (visualType === 'SCATTER_PLOT' || visualType === 'HISTOGRAM') return 'LINE_GRAPH';
+  if (visualType === 'HISTOGRAM') return 'HISTOGRAM';
+  if (visualType === 'SCATTER_PLOT') return 'SCATTER_PLOT';
   return visualType as VisualRequest['type'];
 }
 
@@ -106,7 +107,7 @@ export async function generateAssignmentReviewVisuals(params: {
         };
 
         const { svg } = generateChartSvg(visualReq);
-        out.push({ ...parsed, svg: svg ?? undefined });
+        out.push(svg ? { ...parsed, svg } : { ...parsed });
         continue;
       }
 

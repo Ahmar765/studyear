@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, Library, FileCheck2, Download } from "lucide-react";
+import { Search, Library, FileCheck2, ExternalLink } from "lucide-react";
 import { searchPastPapersAction, type PastPaperResult } from "@/server/actions/past-paper-actions";
 import { useState, useEffect, useTransition } from "react";
 import { getSubjects, getExamBoards, getLevels } from "@/server/actions/academic-actions";
@@ -159,7 +159,7 @@ export default function PastPapersPage() {
                           </div>
                            <Button asChild variant="ghost" size="sm" className="w-full md:w-auto shrink-0">
                                 <a href={paper.fileUrl} target="_blank" rel="noopener noreferrer">
-                                    <Download className="mr-2"/>Download
+                                    <ExternalLink className="mr-2 h-4 w-4"/>Open
                                 </a>
                             </Button>
                         </Card>

@@ -1,4 +1,5 @@
 import { adminDb } from '@/lib/firebase/admin-app';
+import { toFirestoreDocument } from '@/server/lib/strip-undefined-deep';
 import * as admin from 'firebase-admin';
 import type { AITaskType, AIProvider } from '@/server/ai/gateway-schema';
 import { FeatureKey } from '@/data/acu-costs';
@@ -74,7 +75,7 @@ export async function logAiUsage(params: Omit<AIRequestLog, 'status'> & { status
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
         };
 
-        await logDocRef.set(logData);
+        await logDocRef.set(toFirestoreDocument(logData));
         return { success: true };
 
     } catch (error: any) {

@@ -18,6 +18,7 @@ import {
   storeGeneratedImageUrl,
   stripNonPersistableImageFields,
 } from "@/server/lib/visual-image-storage";
+import { stripUndefinedDeep, toFirestoreDocument } from "@/server/lib/strip-undefined-deep";
 
 export async function createVisualResourceAction(input: VisualRequest): Promise<{ success: boolean; visual?: { svg?: string, imageUrl?: string }; error?: string; }> {
   const validation = VisualRequestSchema.safeParse(input);
@@ -93,22 +94,34 @@ Rules:
       }
     }
 
-    await visualRef.set({
-      studentId: validation.data.studentId,
-      userId: validation.data.userId,
-      type: validation.data.type,
-      title: validation.data.title,
-      prompt: validation.data.prompt ?? null,
-      data: validation.data.data ?? null,
-      svg: result.result.svg ?? null,
-      ...(firestoreImageUrl ? { imageUrl: firestoreImageUrl } : {}),
-      acuCost: result.acu.chargedACUs,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
+    await visualRef.set(
+      toFirestoreDocument({
+        studentId: validation.data.studentId,
+        userId: validation.data.userId,
+        type: validation.data.type,
+        title: validation.data.title,
+        prompt: validation.data.prompt ?? null,
+        data: validation.data.data ?? null,
+        svg: result.result.svg ?? null,
+        ...(firestoreImageUrl ? { imageUrl: firestoreImageUrl } : {}),
+        acuCost: result.acu.chargedACUs,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      }),
+    );
 
-    const libraryContent = stripNonPersistableImageFields(
-      { ...result.result, prompt: validation.data.prompt },
-      firestoreImageUrl,
+    const libraryContent = stripUndefinedDeep(
+      stripNonPersistableImageFields(
+        {
+          ...result.result,
+          prompt: validation.data.prompt ?? null,
+          data: validation.data.data ?? null,
+          xAxisLabel: validation.data.xAxisLabel ?? null,
+          yAxisLabel: validation.data.yAxisLabel ?? null,
+          studyLevel: validation.data.studyLevel ?? null,
+          subject: validation.data.subject ?? null,
+        },
+        firestoreImageUrl,
+      ),
     );
 
     await savedResourceService.save({
@@ -154,15 +167,17 @@ export async function generateSystemVisualAction(context: SystemVisualContext): 
 
         const docRef = adminDb.collection('generated_visuals').doc();
         const imageUrlToStore = persistableImageUrl(result.imageUrl);
-        await docRef.set({
+        await docRef.set(
+          toFirestoreDocument({
             cacheKey,
             userId: 'SYSTEM',
             type: 'SYSTEM_VISUAL',
             title: `System Visual: ${cacheKey}`,
-            prompt: result.revisedPrompt,
+            prompt: result.revisedPrompt ?? null,
             ...(imageUrlToStore !== null ? { imageUrl: imageUrlToStore } : {}),
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
+          }),
+        );
         
         return { success: true, imageUrl: result.imageUrl };
 

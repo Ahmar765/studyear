@@ -91,18 +91,56 @@ export async function sendContactFormNotification(input: {
   return { sent: result.sent };
 }
 
-export async function sendWelcomeEmail(email: string, name?: string | null): Promise<void> {
+function appBaseUrl(): string {
+  const fromEnv = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/$/, '');
+  if (fromEnv) return fromEnv;
+  const vercel = process.env.VERCEL_URL?.trim();
+  if (vercel) return `https://${vercel}`;
+  return 'https://studyear.com';
+}
+
+function greeting(name?: string | null): string {
+  return name?.trim() ? `Hi ${name.trim()},` : 'Hi there,';
+}
+
+export async function sendWelcomeEmail(
+  email: string,
+  name?: string | null,
+): Promise<{ sent: boolean; error?: string }> {
   const settings = await getSystemSettings();
   const title = settings.communications?.signupWelcome?.title ?? 'Welcome to StudYear';
   const body =
     settings.communications?.signupWelcome?.description ??
     'Your account is ready. Sign in to complete your profile and start learning.';
+  const loginUrl = `${appBaseUrl()}/login`;
+  const greet = greeting(name);
 
-  await sendPlatformEmail({
+  const text = [
+    greet,
+    '',
+    body,
+    '',
+    `Sign in: ${loginUrl}`,
+    '',
+    '— StudYear',
+  ].join('\n');
+
+  const result = await sendPlatformEmail({
     to: email,
     subject: title,
-    text: `Hi ${name?.trim() || 'there'},\n\n${body}\n\n— StudYear`,
+    text,
+    html: [
+      `<p>${greet}</p>`,
+      `<p>${body}</p>`,
+      `<p><a href="${loginUrl}">Sign in to StudYear</a></p>`,
+      '<p>— StudYear</p>',
+    ].join(''),
   });
+
+  if (!result.sent) {
+    console.warn('[mail] welcome email not sent:', result.error ?? 'smtp_not_configured');
+  }
+  return result;
 }
 
 export async function sendAcuTopUpReceiptEmail(input: {
@@ -110,12 +148,13 @@ export async function sendAcuTopUpReceiptEmail(input: {
   name?: string | null;
   acus: number;
   amountGbp: string;
-}): Promise<void> {
-  await sendPlatformEmail({
+}): Promise<{ sent: boolean }> {
+  const greet = greeting(input.name);
+  const result = await sendPlatformEmail({
     to: input.email,
     subject: 'StudYear — ACU top-up receipt',
     text: [
-      `Hi ${input.name?.trim() || 'there'},`,
+      greet,
       '',
       `Your wallet was credited with ${input.acus.toLocaleString()} ACUs.`,
       `Amount paid: ${input.amountGbp}`,
@@ -123,4 +162,46 @@ export async function sendAcuTopUpReceiptEmail(input: {
       'Thank you for using StudYear.',
     ].join('\n'),
   });
+  if (!result.sent) {
+    console.warn('[mail] ACU receipt email not sent:', result.error);
+  }
+  return result;
+}
+
+/** Sent when a platform admin credits ACUs from Admin → Users → Adjust ACUs. */
+export async function sendAdminAcuCreditEmail(input: {
+  email: string;
+  name?: string | null;
+  acus: number;
+  reason: string;
+  newBalance?: number;
+}): Promise<{ sent: boolean }> {
+  const greet = greeting(input.name);
+  const balanceLine =
+    typeof input.newBalance === 'number'
+      ? `Your new balance: ${input.newBalance.toLocaleString()} ACUs.`
+      : '';
+
+  const result = await sendPlatformEmail({
+    to: input.email,
+    subject: 'StudYear — ACU credit added to your account',
+    text: [
+      greet,
+      '',
+      `A StudYear administrator added ${input.acus.toLocaleString()} ACUs to your wallet.`,
+      balanceLine,
+      input.reason.trim() ? `Note: ${input.reason.trim()}` : '',
+      '',
+      `View your account: ${appBaseUrl()}/account`,
+      '',
+      '— StudYear',
+    ]
+      .filter(Boolean)
+      .join('\n'),
+  });
+
+  if (!result.sent) {
+    console.warn('[mail] admin ACU credit email not sent:', result.error);
+  }
+  return result;
 }

@@ -55,6 +55,8 @@ import { ACUService } from '../services/acu-service';
 import { getVerifiedUser } from '@/server/lib/auth';
 import { ensurePlatformAdminAccess, isPlatformAdmin } from '@/server/lib/platform-admin';
 import { ADMIN_SUBSCRIPTION_TYPES, isActiveParentPlan } from '@/data/admin-user-plans';
+import { sendAdminAcuCreditEmail } from '@/server/lib/mail';
+import { resolveListedUserSubscription } from '@/server/lib/parent-plan';
 
 async function assertPlatformAdmin(tokenUser: Awaited<ReturnType<typeof getVerifiedUser>>) {
     if (!tokenUser) throw new Error('You must be signed in.');
@@ -230,11 +232,17 @@ export async function getUsersAction(): Promise<{ users: UserProfile[], error: s
             const subscription = subscriptionsMap.get(doc.id);
             const data = doc.data();
             const plainData = firestoreValueToPlain(data) as Record<string, unknown>;
+            const role = String(plainData.role ?? data.role ?? '');
+            const userSubscription = String(plainData.subscription ?? data.subscription ?? '');
             return {
                 uid: doc.id,
                 ...plainData,
                 name: (plainData.name as string) || data.name || 'N/A',
-                subscription: subscription?.type || 'FREE',
+                subscription: resolveListedUserSubscription(
+                    role,
+                    userSubscription,
+                    subscription,
+                ) as UserProfile['subscription'],
             } as UserProfile;
         });
         return { users, error: null };
@@ -645,10 +653,16 @@ export type TutorProfileData = {
     userId: string;
     approvalStatus: 'PENDING' | 'APPROVED' | 'REJECTED';
     bio?: string;
-    subjects?: any;
+    headline?: string;
+    subjects?: string[];
+    levels?: string[];
+    tutorType?: string;
+    qualifications?: string;
     hourlyRate?: number;
     onboardingPaid?: boolean;
     commissionRate?: number;
+    reviewedAt?: string;
+    createdAt?: string;
 };
 
 export interface TutorApplication extends TutorProfileData {
@@ -737,17 +751,65 @@ export async function reviewTutorApplicationAction(
             return { success: false, error: 'Tutor profile not found.' };
         }
 
+        const profileData = profileSnap.data() as Record<string, unknown>;
+        const tutorEmail = typeof profileData.email === 'string' ? profileData.email : null;
+        const tutorName = typeof profileData.displayName === 'string' ? profileData.displayName : null;
+
+        // Fetch email/name from users doc if not on profile
+        let resolvedEmail = tutorEmail;
+        let resolvedName = tutorName;
+        if (!resolvedEmail || !resolvedName) {
+            const userSnap = await adminDb.collection('users').doc(parsed.tutorId).get();
+            const userData = userSnap.data() as Record<string, unknown> | undefined;
+            resolvedEmail = resolvedEmail ?? (typeof userData?.email === 'string' ? userData.email : null);
+            resolvedName = resolvedName ?? (typeof userData?.name === 'string' ? userData.name : null);
+        }
+
         await profileRef.update({
             approvalStatus: parsed.decision,
             reviewedAt: admin.firestore.FieldValue.serverTimestamp(),
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         });
 
-        if (parsed.decision === 'APPROVED') {
-            await adminDb.collection('users').doc(parsed.tutorId).set(
-                { tutorApproved: true, updatedAt: admin.firestore.FieldValue.serverTimestamp() },
-                { merge: true },
-            );
+        await adminDb.collection('users').doc(parsed.tutorId).set(
+            {
+                tutorApproved: parsed.decision === 'APPROVED',
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            },
+            { merge: true },
+        );
+
+        // Send notification email to tutor
+        if (resolvedEmail) {
+            const { sendPlatformEmail } = await import('@/server/lib/mail');
+            if (parsed.decision === 'APPROVED') {
+                await sendPlatformEmail({
+                    to: resolvedEmail,
+                    subject: 'Your StudYear tutor account has been approved!',
+                    html: `
+                        <p>Hi ${resolvedName ?? 'there'},</p>
+                        <p>Great news — your tutor application on <strong>StudYear</strong> has been <strong>approved</strong>.</p>
+                        <p>Your profile is now live on the marketplace. Log in to complete your Command Centre setup and start accepting students.</p>
+                        <p><a href="${process.env.NEXT_PUBLIC_APP_URL ?? 'https://studyear.com'}/tutor/dashboard" style="background:#2563eb;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;display:inline-block;margin-top:8px;">Go to my dashboard</a></p>
+                        <p>Welcome to the StudYear tutor network!</p>
+                        <p>— The StudYear Team</p>
+                    `,
+                    text: `Hi ${resolvedName ?? 'there'},\n\nYour tutor application on StudYear has been approved! Log in to your dashboard at ${process.env.NEXT_PUBLIC_APP_URL ?? 'https://studyear.com'}/tutor/dashboard.\n\n— The StudYear Team`,
+                });
+            } else {
+                await sendPlatformEmail({
+                    to: resolvedEmail,
+                    subject: 'Update on your StudYear tutor application',
+                    html: `
+                        <p>Hi ${resolvedName ?? 'there'},</p>
+                        <p>Thank you for applying to join StudYear as a private tutor.</p>
+                        <p>After reviewing your application, we are unable to approve your account at this time.</p>
+                        <p>If you believe this is a mistake or would like to discuss your application, please reply to this email or contact us at <a href="mailto:contact@studyear.com">contact@studyear.com</a>.</p>
+                        <p>— The StudYear Team</p>
+                    `,
+                    text: `Hi ${resolvedName ?? 'there'},\n\nThank you for applying to join StudYear as a tutor. After review, we are unable to approve your account at this time. Please contact contact@studyear.com if you have questions.\n\n— The StudYear Team`,
+                });
+            }
         }
 
         return { success: true };
@@ -841,25 +903,49 @@ const AcuAdjustmentSchema = z.object({
     description: z.string().min(1),
 });
 
-export async function adjustAcuBalanceAction(input: z.infer<typeof AcuAdjustmentSchema>): Promise<{ success: boolean, error?: string }> {
+export async function adjustAcuBalanceAction(
+    input: z.infer<typeof AcuAdjustmentSchema>,
+    idToken?: string | null,
+): Promise<{ success: boolean; emailSent?: boolean; error?: string }> {
     try {
+        const caller = await getVerifiedUser(idToken);
+        if (!caller) {
+            return { success: false, error: 'Not authenticated.' };
+        }
+        await assertPlatformAdmin(caller);
+
         const { userId, adminId, amount, description } = AcuAdjustmentSchema.parse(input);
 
-        await ACUService.creditACUs({
+        const wallet = await ACUService.creditACUs({
             userId,
-            amount: amount,
-            type: "ADMIN_ADJUSTMENT",
+            amount,
+            type: 'ADMIN_ADJUSTMENT',
             description,
-            metadata: { adminId }
+            metadata: { adminId },
         });
-        
-        return { success: true };
-    } catch (error: any) {
-        console.error("Error adjusting ACU balance:", error);
+
+        let emailSent = false;
+        const userSnap = await adminDb.doc(`users/${userId}`).get();
+        const userEmail = typeof userSnap.data()?.email === 'string' ? userSnap.data()!.email : null;
+        if (userEmail && amount > 0) {
+            const mail = await sendAdminAcuCreditEmail({
+                email: userEmail,
+                name: userSnap.data()?.name as string | undefined,
+                acus: amount,
+                reason: description,
+                newBalance: wallet.balance,
+            });
+            emailSent = mail.sent;
+        }
+
+        return { success: true, emailSent };
+    } catch (error: unknown) {
+        console.error('Error adjusting ACU balance:', error);
         if (error instanceof z.ZodError) {
             return { success: false, error: error.message };
         }
-        return { success: false, error: (error as Error).message };
+        const message = error instanceof Error ? error.message : 'An unexpected server error occurred.';
+        return { success: false, error: message };
     }
 }
 
