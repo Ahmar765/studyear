@@ -200,6 +200,71 @@ export async function createCheckoutSession(
   }
 }
 
+function resolveCheckoutProductCode(session: Stripe.Checkout.Session): string | null {
+  const fromSession = session.metadata?.productCode?.trim().toUpperCase();
+  if (fromSession && SUBSCRIPTION_PRODUCT_CODES.has(fromSession)) {
+    return fromSession;
+  }
+
+  const subRef = session.subscription;
+  if (subRef && typeof subRef === 'object') {
+    const sub = subRef as Stripe.Subscription;
+    const fromSubMeta = sub.metadata?.productCode?.trim().toUpperCase();
+    if (fromSubMeta && SUBSCRIPTION_PRODUCT_CODES.has(fromSubMeta)) {
+      return fromSubMeta;
+    }
+    const fromPriceMeta = sub.items?.data?.[0]?.price?.metadata?.productCode
+      ?.trim()
+      .toUpperCase();
+    if (fromPriceMeta && SUBSCRIPTION_PRODUCT_CODES.has(fromPriceMeta)) {
+      return fromPriceMeta;
+    }
+  }
+
+  return null;
+}
+
+function extractStripeSubscriptionId(session: Stripe.Checkout.Session): string {
+  const subRef = session.subscription;
+  if (typeof subRef === 'string') return subRef;
+  if (subRef && typeof subRef === 'object') {
+    const del = (subRef as { deleted?: boolean }).deleted;
+    const id = (subRef as { id?: string }).id;
+    if (!del && typeof id === 'string') return id;
+  }
+  return '';
+}
+
+async function retrieveCompletedCheckoutSession(
+  stripe: Stripe,
+  sessionId: string,
+): Promise<Stripe.Checkout.Session> {
+  const maxAttempts = 4;
+  let lastSession: Stripe.Checkout.Session | null = null;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const session = await stripe.checkout.sessions.retrieve(sessionId, {
+      expand: ['subscription'],
+    });
+    lastSession = session;
+
+    const paid =
+      session.payment_status === 'paid' ||
+      session.payment_status === 'no_payment_required';
+    const hasSubscription = extractStripeSubscriptionId(session).length > 0;
+
+    if (session.status === 'complete' && paid && (session.mode !== 'subscription' || hasSubscription)) {
+      return session;
+    }
+
+    if (attempt < maxAttempts - 1) {
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+    }
+  }
+
+  return lastSession!;
+}
+
 /**
  * Activates subscription in Firestore when Stripe redirects back with `session_id`.
  * Idempotent with webhook — safe when both run.
@@ -226,11 +291,11 @@ export async function finalizeSubscriptionCheckoutSessionAction(
 
   try {
     const stripe = new Stripe(secret, { apiVersion: '2024-04-10' });
-    const session = await stripe.checkout.sessions.retrieve(sessionId.trim(), {
-      expand: ['subscription'],
-    });
+    const session = await retrieveCompletedCheckoutSession(stripe, sessionId.trim());
 
-    if (session.metadata?.userId !== user.uid) {
+    const sessionUserId =
+      session.metadata?.userId?.trim() || session.client_reference_id?.trim() || '';
+    if (sessionUserId !== user.uid) {
       return { ok: false, error: 'This checkout does not belong to your account.' };
     }
 
@@ -249,12 +314,12 @@ export async function finalizeSubscriptionCheckoutSessionAction(
       };
     }
 
-    const rawCode = session.metadata?.productCode?.trim();
-    const productCode = rawCode?.toUpperCase();
-    if (!productCode || !SUBSCRIPTION_PRODUCT_CODES.has(productCode)) {
+    const productCode = resolveCheckoutProductCode(session);
+    if (!productCode) {
       return {
         ok: false,
-        error: `Missing or invalid subscription plan code (${rawCode ?? 'none'}).`,
+        error:
+          'Missing or invalid subscription plan code. Your payment may still succeed via Stripe webhook — refresh in a minute.',
       };
     }
 
@@ -269,20 +334,12 @@ export async function finalizeSubscriptionCheckoutSessionAction(
       return { ok: false, error: 'Stripe did not return a customer for this session.' };
     }
 
-    const subRef = session.subscription;
-    let stripeSubscriptionId = '';
-    if (typeof subRef === 'string') {
-      stripeSubscriptionId = subRef;
-    } else if (subRef && typeof subRef === 'object') {
-      const del = (subRef as { deleted?: boolean }).deleted;
-      const id = (subRef as { id?: string }).id;
-      if (!del && typeof id === 'string') stripeSubscriptionId = id;
-    }
+    const stripeSubscriptionId = extractStripeSubscriptionId(session);
     if (!stripeSubscriptionId) {
       return {
         ok: false,
         error:
-          'Stripe did not return a subscription id yet. Refresh in a few seconds or rely on the webhook.',
+          'Stripe is still confirming your subscription. Refresh this page in a few seconds.',
       };
     }
 

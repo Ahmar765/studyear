@@ -1,19 +1,10 @@
 import { adminDb } from '@/lib/firebase/admin-app';
 import * as admin from 'firebase-admin';
 import { stripUndefinedDeep } from '@/server/lib/strip-undefined-deep';
-
-/** Types that should stay private (not listed on Find Study Resources). */
-const SKIP_GLOBAL_PUBLISH_TYPES = new Set<string>([
-  'DIAGNOSTIC_REPORT',
-  'RECOVERY_PLAN',
-  'AI_TUTOR_SESSION',
-  'ASSIGNMENT_REVIEW',
-  'ESSAY_REVIEW',
-  'DISSERTATION_REVIEW',
-]);
+import { PRIVATE_LIBRARY_RESOURCE_TYPES } from '@/data/public-library';
 
 function shouldPublishGlobally(type: string): boolean {
-  return !SKIP_GLOBAL_PUBLISH_TYPES.has(type);
+  return !(PRIVATE_LIBRARY_RESOURCE_TYPES as Set<string>).has(type);
 }
 
 async function publishToGlobalLibrary(input: {

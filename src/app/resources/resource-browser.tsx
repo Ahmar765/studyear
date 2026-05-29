@@ -17,10 +17,15 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { AlertCircle, Bookmark, Check, ExternalLink } from 'lucide-react';
+import { AlertCircle, Bookmark, Check, Download, ExternalLink } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { resourceMetadata, ResourceType } from '@/data/academic';
-import { formatResourceSubject, isJunkFilterValue } from '@/lib/resource-labels';
+import {
+    formatResourceLevel,
+    formatResourceSubject,
+    isJunkFilterValue,
+} from '@/lib/resource-labels';
+import { downloadPastPaperPdf, getPastPaperPdfUrl } from '@/lib/past-paper-url';
 
 interface Resource {
     id: string;
@@ -94,7 +99,9 @@ export default function ResourceBrowser({
 
     const levelOptions = useMemo(() => {
         const fromLibrary = new Set(
-            resources.map((r) => r.level.trim()).filter((l) => l && !isJunkFilterValue(l)),
+            resources
+                .map((r) => formatResourceLevel(r.level))
+                .filter((l) => l && !isJunkFilterValue(l)),
         );
         const merged = new Set([...canonicalLevels, ...fromLibrary]);
         return [...merged].sort((a, b) => a.localeCompare(b));
@@ -109,7 +116,12 @@ export default function ResourceBrowser({
             ) {
                 return false;
             }
-            if (levelFilter !== '__all__' && r.level !== levelFilter) return false;
+            if (
+                levelFilter !== '__all__' &&
+                formatResourceLevel(r.level) !== levelFilter
+            ) {
+                return false;
+            }
             if (!q) return true;
             const hay = `${r.title} ${r.topic} ${r.subject} ${r.level}`.toLowerCase();
             return hay.includes(q);
@@ -132,6 +144,18 @@ export default function ResourceBrowser({
         }
     };
     
+    const handleDownloadPastPaper = async (fileUrl: string, title: string) => {
+        try {
+            await downloadPastPaperPdf(fileUrl, title);
+        } catch {
+            toast({
+                variant: 'destructive',
+                title: 'Download failed',
+                description: 'Could not download this PDF.',
+            });
+        }
+    };
+
     const metadata = type ? resourceMetadata[type] : null;
 
     if (!type) {
@@ -259,10 +283,18 @@ export default function ResourceBrowser({
                                         </CardHeader>
                                         <CardContent className="flex-grow space-y-2">
                                             <div className="flex flex-wrap gap-2">
-                                                <Badge variant="outline">{resource.level || '—'}</Badge>
-                                                <Badge variant="secondary">
-                                                    {formatResourceSubject(resource.subject) || '—'}
-                                                </Badge>
+                                                {formatResourceLevel(resource.level) !==
+                                                    'All levels' && (
+                                                    <Badge variant="outline">
+                                                        {formatResourceLevel(resource.level)}
+                                                    </Badge>
+                                                )}
+                                                {formatResourceSubject(resource.subject) !==
+                                                    'General' && (
+                                                    <Badge variant="secondary">
+                                                        {formatResourceSubject(resource.subject)}
+                                                    </Badge>
+                                                )}
                                             </div>
                                             <p className="text-xs text-muted-foreground pt-2">
                                                 Created: {formatCreated(resource.createdAt)}
@@ -285,16 +317,48 @@ export default function ResourceBrowser({
                                                 )}
                                             </Button>
                                             {(resource.videoUrl || resource.fileUrl) && (
-                                                <Button asChild className="w-full" variant="secondary">
-                                                    <a
-                                                        href={resource.videoUrl || resource.fileUrl!}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                    >
-                                                        <ExternalLink className="mr-2 h-4 w-4" />
-                                                        Open
-                                                    </a>
-                                                </Button>
+                                                <>
+                                                    {resource.videoUrl ? (
+                                                        <Button asChild className="w-full" variant="secondary">
+                                                            <a
+                                                                href={resource.videoUrl}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                            >
+                                                                <ExternalLink className="mr-2 h-4 w-4" />
+                                                                Open
+                                                            </a>
+                                                        </Button>
+                                                    ) : resource.fileUrl ? (
+                                                        <>
+                                                            <Button asChild className="w-full" variant="secondary">
+                                                                <a
+                                                                    href={getPastPaperPdfUrl(resource.fileUrl)}
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                >
+                                                                    <ExternalLink className="mr-2 h-4 w-4" />
+                                                                    Open PDF
+                                                                </a>
+                                                            </Button>
+                                                            {type === 'PAST_PAPER' && (
+                                                                <Button
+                                                                    className="w-full"
+                                                                    variant="outline"
+                                                                    onClick={() =>
+                                                                        handleDownloadPastPaper(
+                                                                            resource.fileUrl!,
+                                                                            resource.title,
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    <Download className="mr-2 h-4 w-4" />
+                                                                    Download
+                                                                </Button>
+                                                            )}
+                                                        </>
+                                                    ) : null}
+                                                </>
                                             )}
                                         </CardFooter>
                                     </Card>

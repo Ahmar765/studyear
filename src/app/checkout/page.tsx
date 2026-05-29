@@ -309,7 +309,7 @@ export default function CheckoutPage() {
             Subscribe securely through Stripe to unlock the parent dashboard and linked-student insights.
           </p>
         </div>
-        <div className="grid sm:grid-cols-1 md:grid-cols-2 gap-8 max-w-3xl mx-auto">
+        <div className="grid sm:grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
           {PARENT_SUBSCRIPTION_PLANS.map((plan) => (
             <SubscriptionCard key={plan.productCode} {...plan} />
           ))}

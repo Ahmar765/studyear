@@ -8,6 +8,7 @@
 
 import { ai } from '..';
 import { toGoogleAiGenkitModel } from '@/server/ai/genkit-model';
+import { ReviewVisualSpecSchema } from '@/server/services/assignment-review-visuals';
 import {z} from 'zod';
 
 export const GenerateCourseInputSchema = z.object({
@@ -30,6 +31,11 @@ const LessonSchema = z.object({
     workedExample: z.string(),
     practiceQuestions: z.array(z.string()),
     miniQuiz: z.array(MiniQuizSchema),
+    visuals: z
+      .array(ReviewVisualSpecSchema)
+      .max(1)
+      .optional()
+      .describe('Optional chart or diagram that supports this lesson (graphs, geometry, labelled diagrams).'),
 });
 
 const ModuleAssessmentSchema = z.object({
@@ -97,6 +103,14 @@ You must return a single JSON object matching this exact structure:
               "question": "A quick-check question.",
               "answer": "The correct answer to the question."
             }
+          ],
+          "visuals": [
+            {
+              "visualType": "BAR_GRAPH",
+              "title": "Optional chart title",
+              "rationale": "Why this visual helps",
+              "chartDescription": "Data story for the chart"
+            }
           ]
         }
       ],
@@ -111,6 +125,8 @@ You must return a single JSON object matching this exact structure:
     "markScheme": ["A corresponding mark scheme for the final assessment."]
   }
 }
+
+Add an optional \`visuals\` array (0-1 item) on lessons where a chart or diagram would help — maths, science, geography, economics, etc. Omit \`visuals\` when text alone is enough.
 
 Generate the course now.`,
 });

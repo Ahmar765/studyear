@@ -10,6 +10,7 @@
 
 import { ai } from '..';
 import { toGoogleAiGenkitModel } from '@/server/ai/genkit-model';
+import { ReviewVisualSpecSchema } from '@/server/services/assignment-review-visuals';
 import {z} from 'zod';
 
 const MessageSchema = z.object({
@@ -32,6 +33,13 @@ const AiTutorAssistanceOutputSchema = z.object({
   followUpQuestion: z.string().optional().describe("A targeted question to check for understanding."),
   nextAction: z.string().optional().describe("A suggested next action for the student."),
   escalated: z.boolean().describe("Set to true if the query cannot be answered and requires human intervention."),
+  visuals: z
+    .array(ReviewVisualSpecSchema)
+    .max(2)
+    .optional()
+    .describe(
+      'Optional 0-2 charts or diagrams that clarify the explanation (bar/line/pie graphs, coordinate plots, geometry, or educational images).',
+    ),
 });
 export type AiTutorAssistanceOutput = z.infer<typeof AiTutorAssistanceOutputSchema>;
 
@@ -67,6 +75,7 @@ Your job:
 2. **DIAGNOSE:** Identify the core misunderstanding in the user's query. Populate \`detectedWeakness\`.
 3. **GUIDE:** After answering, provide a \`followUpQuestion\` to check understanding and a \`nextAction\` to guide them.
 4. **ESCALATE:** If the query is ambiguous, outside your academic scope, involves sensitive topics, or you are not confident, set \`escalated\` to \`true\` and set \`response\` to "I'm not sure how to help with that. I'm escalating this to our human support team.".
+5. **VISUALS:** When a chart, graph, or labelled diagram would help (maths, science, geography, economics, etc.), add 1-2 entries to \`visuals\` with visualType, title, rationale, and chartDescription or prompt. Return an empty array or omit \`visuals\` when text alone is enough.
 
 Analyze the query and generate your response in the required JSON format.
 `,

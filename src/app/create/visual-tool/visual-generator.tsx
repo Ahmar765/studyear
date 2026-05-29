@@ -19,6 +19,7 @@ import { VisualRequestSchema } from "@/server/schemas/visual-request";
 import { z } from "zod";
 import Image from "next/image";
 import { resourceMetadata } from "@/data/academic";
+import { VisualEmbedList } from '@/components/visuals/visual-embed-list';
 
 type VisualResult = {
   imageUrl?: string;
@@ -415,10 +416,9 @@ export default function VisualGenerator() {
                 </div>
               )}
               {result.svg && (
-                <div
-                  key={`${watchType}-svg`}
-                  className="w-full overflow-auto [&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-w-full"
-                  dangerouslySetInnerHTML={{ __html: result.svg }}
+                <VisualEmbedList
+                  visuals={[{ title: 'Generated chart', svg: result.svg }]}
+                  className="mt-2"
                 />
               )}
             </div>

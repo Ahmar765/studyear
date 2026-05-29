@@ -51,6 +51,7 @@ function firestoreValueToPlain(value: unknown): unknown {
 }
 import { HttpsError } from '../lib/errors';
 import { resourceMetadata, ResourceType } from '@/data/academic';
+import { getPastPaperPdfUrl } from '@/lib/past-paper-url';
 import { ACUService } from '../services/acu-service';
 import { getVerifiedUser } from '@/server/lib/auth';
 import { ensurePlatformAdminAccess, isPlatformAdmin } from '@/server/lib/platform-admin';
@@ -553,10 +554,14 @@ export async function reviewResourceAction(values: z.infer<typeof ReviewSchema>)
             const uploadData = uploadDoc.data();
             if (uploadData) {
                 const resourceRef = adminDb.collection('resources').doc();
-                const fileUrl =
+                const fileUrlRaw =
                     (typeof uploadData.fileUrl === 'string' && uploadData.fileUrl) ||
                     (typeof uploadData.url === 'string' && uploadData.url) ||
                     null;
+                const fileUrl =
+                    uploadData.type === 'PAST_PAPER' && fileUrlRaw
+                        ? getPastPaperPdfUrl(fileUrlRaw) || fileUrlRaw
+                        : fileUrlRaw;
                 const isVideo = uploadData.type === 'VIDEO';
                 await resourceRef.set({
                     type: uploadData.type,

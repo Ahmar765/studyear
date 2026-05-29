@@ -9,14 +9,19 @@ import { SchoolTimeline } from '@/components/school-portal/school-timeline';
 import { SchoolInsightSnapshot } from '@/components/school-portal/school-insight-snapshot';
 import { SchoolInterventionPipeline } from '@/components/school-portal/school-intervention-pipeline';
 import { SchoolAcuPanel } from '@/components/school-portal/school-acu-panel';
+import { SchoolPeopleSetupPanel } from '@/components/school-portal/school-people-setup-panel';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { ArrowRight } from 'lucide-react';
 
 export function SchoolCommandCentreView({ data }: { data: SchoolCommandCentrePayload }) {
+  const studentCount =
+    data.kpis.find((k) => k.id === 'students')?.value ?? 0;
+
   return (
     <div className="school-ops-dashboard space-y-8">
       <SchoolCommandHero data={data} />
+      <SchoolPeopleSetupPanel studentCount={studentCount} staffCount={data.staffCount} />
       <SchoolKpiBar kpis={data.kpis} />
       <SchoolInsightSnapshot insights={data.insightSnapshot} />
 

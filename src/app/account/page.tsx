@@ -18,7 +18,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { useTransition, useEffect, useState } from 'react';
+import { useTransition, useEffect, useState, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { subscriptionTypeDisplayName } from '@/data/subscription-plans';
@@ -40,7 +40,7 @@ import { getSchoolAcuPoolForTeacherAction } from '@/server/actions/teacher-actio
 
 
 function AccountPageInner() {
-  const { user, logout } = useAuth();
+  const { user, loading: authLoading, logout } = useAuth();
   const { userProfile, loading: profileLoading } = useUserProfile();
   const { wallet, loading: walletLoading } = useAcuWallet();
   const [isPending, startTransition] = useTransition();
@@ -48,6 +48,7 @@ function AccountPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isImpersonating } = useImpersonation();
+  const checkoutFinalizedRef = useRef<string | null>(null);
 
   const isStudentLike =
     userProfile?.role === 'STUDENT' || userProfile?.role === 'PRIVATE_TUTOR';
@@ -87,95 +88,99 @@ function AccountPageInner() {
 
   useEffect(() => {
     if (searchParams.get('purchase') !== 'success') return;
+    if (authLoading) return;
+    if (!user) return;
     if (userProfile?.role === 'ADMIN' || userProfile?.subscription === 'ADMIN') {
       router.replace('/account');
       return;
     }
 
+    const sessionId = searchParams.get('session_id');
+    if (!sessionId) {
+      toast({
+        title: 'Purchase successful',
+        description:
+          'Your ACU balance or subscription will update shortly. Refresh the page if you do not see changes.',
+      });
+      router.replace('/account', { scroll: false });
+      return;
+    }
+
+    if (checkoutFinalizedRef.current === sessionId) return;
+    checkoutFinalizedRef.current = sessionId;
+
     let cancelled = false;
 
     void (async () => {
-      const sessionId = searchParams.get('session_id');
+      try {
+        const token = await user.getIdToken();
+        const subResult = await finalizeSubscriptionCheckoutSessionAction(token, sessionId);
+        const acuResult = await finalizeAcuCheckoutSessionAction(token, sessionId);
+        if (cancelled) return;
 
-      if (sessionId) {
-        try {
-          const authUser = getFirebaseAuth().currentUser;
-          const token = authUser ? await authUser.getIdToken() : null;
-          const subResult =
-            await finalizeSubscriptionCheckoutSessionAction(token, sessionId);
-          const acuResult = await finalizeAcuCheckoutSessionAction(token, sessionId);
-          if (cancelled) return;
-
-          if (subResult.ok && subResult.activated) {
-            toast({
-              title: 'Subscription active',
-              description:
-                'Premium features should unlock immediately. Refresh once if something still looks locked.',
-            });
-          } else if (!subResult.ok) {
-            toast({
-              variant: 'destructive',
-              title: 'Could not confirm subscription',
-              description: subResult.error,
-            });
-          }
-
-          if (acuResult.ok && !acuResult.skipped) {
-            toast({
-              title: acuResult.duplicate ? 'Payment already recorded' : 'Top-up complete',
-              description: acuResult.duplicate
-                ? 'Your ACU balance is already up to date.'
-                : 'Your ACU balance has been updated.',
-            });
-          } else if (!acuResult.ok) {
-            toast({
-              variant: 'destructive',
-              title: 'Could not confirm ACU top-up',
-              description:
-                acuResult.error ??
-                'If you were charged but do not see ACUs, refresh shortly or contact support with your Stripe receipt.',
-            });
-          }
-
-          if (
-            subResult.ok &&
-            subResult.skipped &&
-            acuResult.ok &&
-            acuResult.skipped
-          ) {
-            toast({
-              title: 'Purchase successful',
-              description:
-                'If nothing updated yet, wait a minute for Stripe webhooks or confirm your price IDs in .env.',
-            });
-          }
-        } catch {
-          if (!cancelled) {
-            toast({
-              variant: 'destructive',
-              title: 'Could not confirm checkout',
-              description:
-                'Refresh the page. If ACUs are still missing, contact support with your Stripe receipt.',
-            });
-          }
+        if (subResult.ok && subResult.activated) {
+          toast({
+            title: 'Subscription active',
+            description:
+              'Your plan is now active. Refresh once if something still looks locked.',
+          });
+        } else if (!subResult.ok) {
+          toast({
+            variant: 'destructive',
+            title: 'Could not confirm subscription',
+            description: subResult.error,
+          });
         }
-      } else if (!cancelled) {
-        toast({
-          title: 'Purchase successful',
-          description:
-            'Your ACU balance or subscription will update shortly. Refresh the page if you do not see changes.',
-        });
-      }
 
-      if (!cancelled) {
-        router.replace('/account', { scroll: false });
+        if (acuResult.ok && !acuResult.skipped) {
+          toast({
+            title: acuResult.duplicate ? 'Payment already recorded' : 'Top-up complete',
+            description: acuResult.duplicate
+              ? 'Your ACU balance is already up to date.'
+              : 'Your ACU balance has been updated.',
+          });
+        } else if (!acuResult.ok) {
+          toast({
+            variant: 'destructive',
+            title: 'Could not confirm ACU top-up',
+            description:
+              acuResult.error ??
+              'If you were charged but do not see ACUs, refresh shortly or contact support with your Stripe receipt.',
+          });
+        }
+
+        if (
+          subResult.ok &&
+          subResult.skipped &&
+          acuResult.ok &&
+          acuResult.skipped
+        ) {
+          toast({
+            title: 'Purchase successful',
+            description:
+              'If nothing updated yet, wait a minute for Stripe webhooks or confirm your price IDs in .env.',
+          });
+        }
+      } catch {
+        if (!cancelled) {
+          toast({
+            variant: 'destructive',
+            title: 'Could not confirm checkout',
+            description:
+              'Refresh the page. If your plan is still missing, contact support with your Stripe receipt.',
+          });
+        }
+      } finally {
+        if (!cancelled) {
+          router.replace('/account', { scroll: false });
+        }
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [searchParams, toast, router]);
+  }, [searchParams, user, authLoading, userProfile, toast, router]);
 
 
   if (loading) {

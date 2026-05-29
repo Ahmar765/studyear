@@ -285,14 +285,12 @@ export async function getTutorListingsAction(
     approvedTutorsSnapshot.forEach((doc) => {
       const profile = profileFromDoc(doc.id, doc.data());
       const userData = usersMap.get(doc.id);
-      if (userData) {
-        listings.push(
-          profileToListing(profile, {
-            name: userData.name as string,
-            profileImageUrl: userData.profileImageUrl as string,
-          }),
-        );
-      }
+      listings.push(
+        profileToListing(profile, {
+          name: (userData?.name as string | undefined) ?? 'Tutor',
+          profileImageUrl: userData?.profileImageUrl as string | undefined,
+        }),
+      );
     });
 
     if (filters.query) {
@@ -330,12 +328,22 @@ export async function getTutorListingsAction(
 
 export async function getTutorPublicProfileAction(
   tutorId: string,
-): Promise<{ tutor?: TutorListingCard; error?: string }> {
+  idToken?: string | null,
+): Promise<{ tutor?: TutorListingCard; error?: string; isPreview?: boolean }> {
   try {
+    const viewer = idToken ? await getVerifiedUser(idToken) : null;
+    const isSelf = viewer?.uid === tutorId;
+
     const profileSnap = await adminDb.collection('tutor_profiles').doc(tutorId).get();
-    if (!profileSnap.exists || profileSnap.data()?.approvalStatus !== 'APPROVED') {
+    if (!profileSnap.exists) {
       return { error: 'Tutor not found' };
     }
+
+    const approvalStatus = profileSnap.data()?.approvalStatus;
+    if (approvalStatus !== 'APPROVED' && !isSelf) {
+      return { error: 'Tutor not found' };
+    }
+
     const userSnap = await adminDb.collection('users').doc(tutorId).get();
     const profile = profileFromDoc(tutorId, profileSnap.data()!);
     return {
@@ -343,6 +351,7 @@ export async function getTutorPublicProfileAction(
         name: userSnap.data()?.name as string,
         profileImageUrl: userSnap.data()?.profileImageUrl as string,
       }),
+      isPreview: approvalStatus !== 'APPROVED' && isSelf,
     };
   } catch (e) {
     return { error: e instanceof Error ? e.message : 'Unknown error' };

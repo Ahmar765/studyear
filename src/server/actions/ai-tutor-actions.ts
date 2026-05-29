@@ -1,13 +1,15 @@
 
 'use server';
 
-import { aiTutorAssistance, AiTutorAssistanceInput, AiTutorAssistanceOutput } from '@/server/ai/flows/ai-tutor-assistance';
+import { aiTutorAssistance, AiTutorAssistanceInput } from '@/server/ai/flows/ai-tutor-assistance';
 import { runStudYearAction } from '../services/pipeline';
 import { savedResourceService } from '../services/resources';
 import { toFirestoreDocument } from '@/server/lib/strip-undefined-deep';
 import { adminDb } from '@/lib/firebase/admin-app';
 import * as admin from 'firebase-admin';
+import { enrichWithEducationalVisuals, type TutorLikeOutput } from '@/server/lib/enrich-ai-visuals';
 
+export type AiTutorResponse = TutorLikeOutput;
 
 export async function askAiTutor(
   input: AiTutorAssistanceInput,
@@ -15,7 +17,7 @@ export async function askAiTutor(
   sessionId?: string | null
 ): Promise<{ 
     success: boolean; 
-    response?: AiTutorAssistanceOutput;
+    response?: AiTutorResponse;
     chargedAcus?: number; 
     error?: string;
     sessionId?: string;
@@ -35,7 +37,10 @@ export async function askAiTutor(
         featureKey: 'AI_EXPLANATION',
         payload: input,
         execute: async () => {
-            const output = await aiTutorAssistance(input);
+            const rawOutput = await aiTutorAssistance(input);
+            const output = rawOutput.escalated
+              ? rawOutput
+              : await enrichWithEducationalVisuals(rawOutput, userId);
             const now = admin.firestore.FieldValue.serverTimestamp();
             
             let sessionRef;

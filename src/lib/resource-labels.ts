@@ -4,14 +4,16 @@ const subjectCodeToName = new Map(
   subjects.map((name) => [name.replace(/ /g, '_').toUpperCase(), name]),
 );
 
+const levelCanonical = new Map(levels.map((l) => [l.toLowerCase(), l]));
+
 const JUNK_FILTER_VALUES = new Set(
-  ['community', 'general', 'all levels', ''].map((s) => s.toLowerCase()),
+  ['community', 'general', 'all levels', 'various', ''].map((s) => s.toLowerCase()),
 );
 
 /** Turn stored subject codes (e.g. MATHEMATICS) into readable labels. */
 export function formatResourceSubject(raw: string | undefined | null): string {
   const t = (raw ?? '').trim();
-  if (!t) return 'General';
+  if (!t || isJunkFilterValue(t)) return 'General';
   const fromCode = subjectCodeToName.get(t.toUpperCase());
   if (fromCode) return fromCode;
   if (/^[A-Z0-9_]+$/.test(t) && t.includes('_')) {
@@ -21,6 +23,13 @@ export function formatResourceSubject(raw: string | undefined | null): string {
       .join(' ');
   }
   return t;
+}
+
+/** Normalize stored level strings to canonical profile labels. */
+export function formatResourceLevel(raw: string | undefined | null): string {
+  const t = (raw ?? '').trim();
+  if (!t || isJunkFilterValue(t)) return 'All levels';
+  return levelCanonical.get(t.toLowerCase()) ?? t;
 }
 
 export function isJunkFilterValue(value: string): boolean {

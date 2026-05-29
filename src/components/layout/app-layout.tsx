@@ -132,7 +132,7 @@ const privateTutorNavItems = [
   { href: "/tutor/profile", label: "Authority profile", icon: UserCog },
   { href: "/checkout", label: "Top up ACUs", icon: Fuel },
   { href: "/ai-tutor", label: "AI Teaching Assistant", icon: Bot },
-  { href: "/tutors", label: "Marketplace listing", icon: GraduationCap },
+  { href: "/tutors", label: "My marketplace listing", icon: GraduationCap },
 ];
 
 const schoolNavItems = [
@@ -151,7 +151,7 @@ const schoolNavItems = [
 ];
 
 
-/** Student learning shell — private tutors must never land here. */
+/** Student-only learning paths — tutors are redirected away, except shared marketplace routes. */
 const studentShellPrefixes = [
   '/dashboard',
   '/assessment',
@@ -166,16 +166,28 @@ const studentShellPrefixes = [
   '/saved-resources',
   '/search',
   '/profile-setup',
-  '/tutors',
   '/resources',
   '/contribute',
   '/past-papers',
 ];
 
+function isTutorMarketplacePath(pathname: string): boolean {
+  return pathname === '/tutors' || pathname.startsWith('/tutors/');
+}
+
+function isOwnTutorMarketplacePath(pathname: string, uid: string | undefined): boolean {
+  if (!uid) return false;
+  return pathname === `/tutors/${uid}` || pathname.startsWith(`/tutors/${uid}/`);
+}
+
 function isStudentShellPath(pathname: string): boolean {
   return studentShellPrefixes.some(
     (p) => pathname === p || pathname.startsWith(`${p}/`),
   );
+}
+
+function isBlogPath(pathname: string): boolean {
+  return pathname === '/blog' || pathname.startsWith('/blog/');
 }
 
 const navItemsByRole = {
@@ -233,8 +245,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (loading) return;
 
-    const publicPages = ['/', '/login', '/signup', '/how-it-works', '/terms-of-service', '/about', '/forgot-password', '/privacy-policy', '/disclaimer', '/cookies', '/contact'];
-    const isPublicPage = publicPages.some(page => pathname === page);
+    const publicPages = ['/', '/login', '/signup', '/how-it-works', '/terms-of-service', '/about', '/forgot-password', '/privacy-policy', '/disclaimer', '/cookies', '/contact', '/blog'];
+    const isPublicPage = publicPages.some(page => pathname === page) || isBlogPath(pathname);
     const isAuthPage = ['/login', '/signup', '/forgot-password'].includes(pathname);
     const isImpersonationPage = pathname === '/auth/impersonate';
 
@@ -247,6 +259,11 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       // Land on home so role-based redirects send admins/staff to the right dashboard
       // without a flash of /dashboard (student shell).
       router.replace('/');
+      return;
+    }
+
+    // Public blog — readable by anyone; skip onboarding and role-based redirects.
+    if (isBlogPath(pathname)) {
       return;
     }
 
@@ -373,7 +390,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             isTeacherDashboard ||
             isSchoolDashboard ||
             isParentDashboard ||
-            isStudentShellPath(pathname)
+            (isStudentShellPath(pathname) && !isTutorMarketplacePath(pathname))
           ) {
             // Redirect to the right holding or main page
             if (tutorApproved === false) router.replace('/tutor/rejected');
@@ -389,8 +406,15 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           } else if (onboardingComplete && tutorApproved === false && !isOnRejectedPage && !tutorAccountAllowed) {
             // Rejected — lock to rejection page
             router.replace('/tutor/rejected');
-          } else if (onboardingComplete && tutorApproved !== true && !isOnPendingPage && !isOnRejectedPage && !tutorAccountAllowed) {
-            // Pending — lock to pending page
+          } else if (
+            onboardingComplete &&
+            tutorApproved !== true &&
+            !isOnPendingPage &&
+            !isOnRejectedPage &&
+            !tutorAccountAllowed &&
+            !isOwnTutorMarketplacePath(pathname, user.uid)
+          ) {
+            // Pending — lock to pending page (own marketplace preview still allowed)
             router.replace('/tutor/pending');
           } else if (
             tutorApproved === true &&
@@ -467,8 +491,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     '/disclaimer',
     '/cookies',
     '/contact',
+    '/blog',
   ];
-  const isPublicMarketingPage = publicMarketingPages.includes(pathname);
+  const isPublicMarketingPage =
+    publicMarketingPages.includes(pathname) || isBlogPath(pathname);
 
   if (noLayoutPages.includes(pathname)) {
     return <main>{children}</main>;
@@ -484,7 +510,12 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       : userProfile?.role === 'SCHOOL_TUTOR'
         ? 'SCHOOL_TUTOR'
         : effectiveRole;
-  const currentNavItems = navItemsByRole[resolvedRole] || studentNavItems;
+  const currentNavItems = (navItemsByRole[resolvedRole] || studentNavItems).map((item) => {
+    if (resolvedRole === 'PRIVATE_TUTOR' && item.href === '/tutors' && user?.uid) {
+      return { ...item, href: `/tutors/${user.uid}`, label: 'My marketplace listing' };
+    }
+    return item;
+  });
   const showSidebar = !!user;
 
   return (
@@ -626,6 +657,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                       <ul className="space-y-2 text-sm">
                         <li><Link href="/about" className="hover:text-primary">About Us</Link></li>
                         <li><Link href="/contact" className="hover:text-primary">Contact</Link></li>
+                        <li><Link href="/blog" className="hover:text-primary">Blog</Link></li>
                       </ul>
                     </div>
                     <div>

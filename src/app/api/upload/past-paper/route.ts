@@ -144,7 +144,7 @@ function storageSetupHint(projectId: string | undefined): string {
 
 async function uploadPdfToCloudinary(buf: Buffer, uid: string): Promise<string> {
   const folder = `studyear/past-papers/${uid}`;
-  const public_id = `paper_${Date.now()}_${randomUUID().slice(0, 8)}`;
+  const public_id = `paper_${Date.now()}_${randomUUID().slice(0, 8)}.pdf`;
   return uploadBufferToCloudinary(buf, {
     folder,
     public_id,

@@ -70,7 +70,27 @@ function buildChartDataFromAi(
   return items.map((d) => ({ label: d.name, value: d.value }));
 }
 
+export async function generateEducationalVisuals(params: {
+  specs: ReviewVisualSpec[];
+  userId: string;
+  studentId: string;
+  subject: string;
+  studyLevel: string;
+}): Promise<GeneratedReviewVisual[]> {
+  return generateEducationalVisualsImpl(params);
+}
+
 export async function generateAssignmentReviewVisuals(params: {
+  specs: ReviewVisualSpec[];
+  userId: string;
+  studentId: string;
+  subject: string;
+  studyLevel: string;
+}): Promise<GeneratedReviewVisual[]> {
+  return generateEducationalVisualsImpl(params);
+}
+
+async function generateEducationalVisualsImpl(params: {
   specs: ReviewVisualSpec[];
   userId: string;
   studentId: string;

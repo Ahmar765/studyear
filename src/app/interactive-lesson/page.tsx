@@ -9,7 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 import { BookOpen, Bot, Loader, Sparkles } from 'lucide-react';
 import { createLesson, getNextStep, createLessonFollowUpQuiz } from '@/server/actions/interactive-lesson-actions';
 import { GenerateInteractiveLessonOutput } from '@/server/ai/flows/ai-lesson-generation';
-import LessonDisplay from './lesson-display';
+import LessonDisplay, { type LessonStepBlock } from './lesson-display';
 import QuizDisplay from './quiz-display';
 import { GenerateQuizOutput } from '@/server/ai/flows/quiz-generation';
 import { useAuth } from '@/hooks/use-auth';
@@ -19,7 +19,7 @@ type LessonState = 'idle' | 'generating_lesson' | 'in_lesson' | 'generating_quiz
 export default function InteractiveLessonPage() {
   const [topic, setTopic] = useState('');
   const [lesson, setLesson] = useState<GenerateInteractiveLessonOutput | null>(null);
-  const [lessonContent, setLessonContent] = useState<string[]>([]);
+  const [lessonContent, setLessonContent] = useState<LessonStepBlock[]>([]);
   const [currentStep, setCurrentStep] = useState(0);
   const [quiz, setQuiz] = useState<GenerateQuizOutput | null>(null);
   const [lessonState, setLessonState] = useState<LessonState>('idle');
@@ -47,7 +47,12 @@ export default function InteractiveLessonPage() {
       const result = await createLesson(topic, user.uid);
       if (result.success && result.lesson) {
         setLesson(result.lesson);
-        setLessonContent([result.lesson.firstStepContent]);
+        setLessonContent([
+          {
+            content: result.lesson.firstStepContent,
+            generatedVisuals: result.lesson.generatedVisuals,
+          },
+        ]);
         setCurrentStep(1);
         setLessonState('in_lesson');
         toast({ title: 'Lesson Saved', description: 'This lesson has been saved to your personal library.' });
@@ -59,12 +64,15 @@ export default function InteractiveLessonPage() {
   };
 
   const handleNextStep = async () => {
-      if (!lesson || currentStep >= lesson.lessonPlan.length) return;
+      if (!lesson || currentStep >= lesson.lessonPlan.length || !user) return;
 
       startTransition(async () => {
-          const result = await getNextStep(lesson.lessonPlan, currentStep, topic);
+          const result = await getNextStep(lesson.lessonPlan, currentStep, topic, user.uid);
           if (result.success && result.response) {
-              setLessonContent(prev => [...prev, result.response]);
+              setLessonContent(prev => [...prev, {
+                content: result.response!,
+                generatedVisuals: result.generatedVisuals,
+              }]);
               setCurrentStep(prev => prev + 1);
           } else {
               toast({ variant: 'destructive', title: 'Error', description: "Could not load the next step."})

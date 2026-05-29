@@ -16,7 +16,8 @@ import { useAcuWallet } from "@/hooks/use-acu-wallet";
 import { useEffectiveRole } from "@/hooks/use-effective-role";
 import { ACU_FEATURE_COSTS } from "@/data/acu-costs";
 import { generateCourseAction, getSimilarContentAction } from "@/server/actions/ai-course-actions";
-import { GenerateCourseOutput } from "@/server/ai/flows/course-generation";
+import type { EnrichedCourseOutput } from '@/server/lib/enrich-course-visuals';
+import { VisualEmbedList } from '@/components/visuals/visual-embed-list';
 import { Separator } from "@/components/ui/separator";
 import { SaveGeneratedResourceButton } from "@/components/save-generated-resource-button";
 
@@ -56,7 +57,7 @@ const SimpleMarkdown: React.FC<{ content: string }> = ({ content }) => {
 
 
 export default function AiCourseGenerator({ levels, subjectsByLevel, examBoards }: AiCourseGeneratorProps) {
-  const [generatedCourse, setGeneratedCourse] = useState<GenerateCourseOutput | null>(null);
+  const [generatedCourse, setGeneratedCourse] = useState<EnrichedCourseOutput | null>(null);
   const [similarContent, setSimilarContent] = useState<Recommendation[]>([]);
   const [isGeneratingCourse, startCourseTransition] = useTransition();
   const [isFetchingSimilar, startSimilarTransition] = useTransition();
@@ -257,6 +258,9 @@ export default function AiCourseGenerator({ levels, subjectsByLevel, examBoards 
                                                     <h5 className="font-semibold mb-2">Content</h5>
                                                     <SimpleMarkdown content={lesson.lessonContent} />
                                                 </div>
+                                                {lesson.generatedVisuals && lesson.generatedVisuals.length > 0 ? (
+                                                  <VisualEmbedList visuals={lesson.generatedVisuals} />
+                                                ) : null}
                                                 <div>
                                                     <h5 className="font-semibold mb-2">Worked Example</h5>
                                                     <pre className="bg-muted/50 p-3 rounded-md text-xs whitespace-pre-wrap font-mono">{lesson.workedExample}</pre>

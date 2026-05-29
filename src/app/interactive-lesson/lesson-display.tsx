@@ -2,6 +2,8 @@
 'use client';
 
 import { GenerateInteractiveLessonOutput } from "@/server/ai/flows/ai-lesson-generation";
+import type { GeneratedReviewVisual } from '@/server/services/assignment-review-visuals';
+import { VisualEmbedList } from '@/components/visuals/visual-embed-list';
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,9 +14,14 @@ import { cn } from "@/lib/utils";
 import { BrainCircuit, Check, CheckCircle, Loader, Sparkles } from "lucide-react";
 import React from "react";
 
+export type LessonStepBlock = {
+  content: string;
+  generatedVisuals?: GeneratedReviewVisual[];
+};
+
 interface LessonDisplayProps {
     lesson: GenerateInteractiveLessonOutput;
-    lessonContent: string[];
+    lessonContent: LessonStepBlock[];
     currentStep: number;
     isPending: boolean;
     onNextStep: () => void;
@@ -92,9 +99,12 @@ export default function LessonDisplay({
                     <h1 className="text-3xl font-bold tracking-tight">{lesson.lessonTitle}</h1>
                 </CardHeader>
                 <CardContent>
-                    {lessonContent.map((content, index) => (
+                    {lessonContent.map((step, index) => (
                         <React.Fragment key={index}>
-                            <SimpleMarkdown content={content} />
+                            <SimpleMarkdown content={step.content} />
+                            {step.generatedVisuals && step.generatedVisuals.length > 0 ? (
+                              <VisualEmbedList visuals={step.generatedVisuals} className="my-4" />
+                            ) : null}
                             {index < lessonContent.length - 1 && <Separator className="my-6" />}
                         </React.Fragment>
                     ))}

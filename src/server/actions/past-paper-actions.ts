@@ -1,7 +1,7 @@
-
 'use server';
 
 import { adminDb } from '@/lib/firebase/admin-app';
+import { getPastPaperPdfUrl } from '@/lib/past-paper-url';
 import { z } from 'zod';
 
 const SearchFiltersSchema = z.object({
@@ -20,6 +20,7 @@ export interface PastPaperResult {
   title: string;
   paperYear?: number;
   paperSeries?: string;
+  fileUrl?: string;
   active: boolean;
   createdAt: string;
 }
@@ -64,6 +65,13 @@ export async function searchPastPapersAction(filters: SearchFilters): Promise<{ 
         examBoard: data.examBoard,
         paperYear: data.paperYear,
         paperSeries: data.paperSeries,
+        fileUrl: getPastPaperPdfUrl(
+          typeof data.fileUrl === 'string'
+            ? data.fileUrl
+            : typeof data.url === 'string'
+              ? data.url
+              : undefined,
+        ) || undefined,
         active: data.active,
         createdAt: (data.createdAt as admin.firestore.Timestamp).toDate().toISOString(),
       } as PastPaperResult

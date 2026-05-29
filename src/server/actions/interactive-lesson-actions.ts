@@ -13,6 +13,8 @@ import type { AIRequestContext, AIUserInput } from '../ai/gateway-schema';
 import { randomUUID } from 'crypto';
 import { getUserProfileServer } from '../services/user';
 import type { UserProfile } from '@/lib/firebase/services/user';
+import { enrichWithEducationalVisuals } from '@/server/lib/enrich-ai-visuals';
+import type { GeneratedReviewVisual } from '@/server/services/assignment-review-visuals';
 
 /** Quiz / lesson calibration — never guess A-Level for younger profiles. */
 function resolveQuizAcademicLevel(profile: UserProfile | null): string {
@@ -61,16 +63,21 @@ export async function createLesson(topic: string, userId: string) {
     };
     
     const response = await gateway.execute(context, input, generateInteractiveLesson);
-    const result = response.output;
+    const enriched = await enrichWithEducationalVisuals(
+      response.output,
+      userId,
+      resolveQuizSubject(userProfile, response.output.lessonTitle),
+      academicLevel,
+    );
 
     await savedResourceService.save({
       studentId: userId,
       type: 'AI_INTERACTIVE_LESSON',
-      title: result.lessonTitle,
-      content: result,
+      title: enriched.lessonTitle,
+      content: enriched,
     });
 
-    return { success: true, lesson: result };
+    return { success: true, lesson: enriched };
   } catch (error: any) {
     console.error('Error creating lesson:', error);
     return { success: false, error: error.message || 'Failed to generate lesson.' };
@@ -84,15 +91,27 @@ const LessonStepSchema = z.object({
 });
 const LessonPlanSchema = z.array(LessonStepSchema);
 
-export async function getNextStep(lessonPlan: z.infer<typeof LessonPlanSchema>, currentStep: number, topic: string) {
+export async function getNextStep(
+  lessonPlan: z.infer<typeof LessonPlanSchema>,
+  currentStep: number,
+  topic: string,
+  userId?: string,
+) {
     try {
         const input: AiTutorAssistanceInput = {
             query: `Continue to the next step. The topic is ${topic}.`,
             lessonPlan: lessonPlan,
             currentStep: currentStep,
         }
-        const result = await aiTutorAssistance(input);
-        return { success: true, response: result.response };
+        const raw = await aiTutorAssistance(input);
+        const enriched = userId && !raw.escalated
+          ? await enrichWithEducationalVisuals(raw, userId, topic)
+          : raw;
+        return {
+          success: true,
+          response: enriched.response,
+          generatedVisuals: (enriched as { generatedVisuals?: GeneratedReviewVisual[] }).generatedVisuals,
+        };
     } catch(error) {
         console.error('Error getting next step:', error);
         return { success: false, error: 'Failed to get next step.' };

@@ -61,7 +61,7 @@ export async function uploadImageFileClient(
 
 /** Past-paper PDFs and other documents. */
 export async function uploadPdfFileClient(file: File, options: { folder: string }): Promise<string> {
-  const publicId = `paper_${Date.now()}`;
+  const publicId = `paper_${Date.now()}.pdf`;
   return uploadViaCloudinaryApi(file, 'raw', {
     folder: options.folder,
     public_id: publicId,

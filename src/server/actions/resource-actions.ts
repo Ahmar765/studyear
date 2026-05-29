@@ -7,8 +7,10 @@ import { getVerifiedUser } from '../lib/auth';
 import * as admin from 'firebase-admin';
 import { z } from 'zod';
 import { savedResourceService } from '../services/resources';
-import { formatResourceSubject } from '@/lib/resource-labels';
+import { getPastPaperPdfUrl } from '@/lib/past-paper-url';
+import { formatResourceLevel, formatResourceSubject } from '@/lib/resource-labels';
 import { subjects } from '@/data/academic';
+import { PUBLIC_LIBRARY_RESOURCE_TYPES } from '@/data/public-library';
 
 export async function getResourceCountsAction(): Promise<Record<string, number>> {
   try {
@@ -102,7 +104,7 @@ export async function getResourcesByTypeAction(
         title: String(data.title ?? "Untitled"),
         topic: String(data.topic ?? ""),
         subject: formatResourceSubject(String(data.subject ?? "")),
-        level: String(data.level ?? ""),
+        level: formatResourceLevel(String(data.level ?? "")),
         createdAt: isoFromFirestoreTimestamp(data.createdAt),
         videoUrl:
           typeof data.videoUrl === "string"
@@ -112,9 +114,11 @@ export async function getResourcesByTypeAction(
               : undefined,
         fileUrl:
           typeof data.fileUrl === "string"
-            ? data.fileUrl
+            ? type === "PAST_PAPER"
+              ? getPastPaperPdfUrl(data.fileUrl)
+              : data.fileUrl
             : typeof data.url === "string" && type === "PAST_PAPER"
-              ? data.url
+              ? getPastPaperPdfUrl(data.url)
               : undefined,
       };
     });
@@ -190,6 +194,7 @@ export async function contributeResourceAction(formData: FormData): Promise<{ su
     }
 
     const { title, description, url, type, subjectId, examBoard, level } = validation.data;
+    const storedUrl = type === 'PAST_PAPER' ? getPastPaperPdfUrl(url) || url : url;
     const subjectName =
       subjects.find((s) => s.replace(/ /g, '_').toUpperCase() === subjectId.toUpperCase()) ??
       subjectId.replace(/_/g, ' ');
@@ -201,9 +206,9 @@ export async function contributeResourceAction(formData: FormData): Promise<{ su
             type,
             title,
             description,
-            url,
-            videoUrl: type === 'VIDEO' ? url : null,
-            fileUrl: type === 'PAST_PAPER' ? url : null,
+            url: storedUrl,
+            videoUrl: type === 'VIDEO' ? storedUrl : null,
+            fileUrl: type === 'PAST_PAPER' ? storedUrl : null,
             subject: subjectName,
             topic: title,
             examBoard,

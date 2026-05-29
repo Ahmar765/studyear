@@ -2,13 +2,14 @@
 'use server';
 
 import { z } from 'zod';
-import { generateCourse, GenerateCourseInput } from '@/server/ai/flows/course-generation';
+import { generateCourse, type GenerateCourseOutput } from '@/server/ai/flows/course-generation';
 import { getSimilarContent, SimilarContentInput } from '@/server/ai/flows/similar-content-recommendation';
 import { randomUUID } from 'crypto';
 import { runStudYearAction } from '../services/pipeline';
 import { getUserProfileServer } from '../services/user';
 import { AIGatewayService } from '../services/ai-gateway';
 import { AIRequestContext, AIUserInput } from '../ai/gateway-schema';
+import { enrichCourseWithVisuals, type EnrichedCourseOutput } from '@/server/lib/enrich-course-visuals';
 
 
 const GenerateCourseSchema = z.object({
@@ -47,7 +48,14 @@ export async function generateCourseAction(formData: FormData) {
       execute: () => generateCourse(validatedData),
     });
 
-    return { success: true, course: result.result };
+    const course = await enrichCourseWithVisuals(
+      result.result as GenerateCourseOutput,
+      validatedData.userId,
+      validatedData.subject,
+      validatedData.level,
+    );
+
+    return { success: true, course };
 
   } catch (error: any) {
     console.error("Error in generateCourseAction:", error);

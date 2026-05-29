@@ -296,10 +296,12 @@ export async function manageSubscriptionStatusChange(
     .trim()
     .toUpperCase() as SubscriptionType;
   const subscriptionRef = adminDb.collection('subscriptions').doc(userId);
+  const userRef = adminDb.collection('users').doc(userId);
   
   try {
     await adminDb.runTransaction(async (transaction) => {
-      // Set the subscription data
+      const userDoc = await transaction.get(userRef);
+
       transaction.set(subscriptionRef, { 
         type: planType,
         status: status,
@@ -308,9 +310,17 @@ export async function manageSubscriptionStatusChange(
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       }, { merge: true });
 
-      // If the user is a PARENT, also stamp their customerId onto their parent_profile
-      // This is useful for cross-referencing in other backend services without needing to read the subscription doc
-      const userDoc = await transaction.get(adminDb.collection('users').doc(userId));
+      if (status === 'ACTIVE') {
+        transaction.set(
+          userRef,
+          {
+            subscription: planType,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true },
+        );
+      }
+
       if (userDoc.data()?.role === 'PARENT') {
           const parentProfileRef = adminDb.collection('parent_profiles').doc(userId);
           transaction.set(parentProfileRef, {

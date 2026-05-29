@@ -1,4 +1,5 @@
 import type { VisualRequest } from '@/server/schemas/visual-request';
+import { normalizeSvgForDisplay } from '@/lib/normalize-svg-for-display';
 
 function pickColour(index: number) {
   const colours = ["#2563eb", "#16a34a", "#f97316", "#dc2626", "#9333ea", "#0891b2"];
@@ -596,27 +597,41 @@ function createPieChart(input: VisualRequest) {
 
 
 export function generateChartSvg(input: VisualRequest): { svg?: string } {
+  let result: { svg?: string };
   switch (input.type) {
     case "BAR_GRAPH":
-      return createBarGraph(input);
+      result = createBarGraph(input);
+      break;
     case "LINE_GRAPH":
-      return createLineGraph(input);
+      result = createLineGraph(input);
+      break;
     case "COORDINATE_GRAPH":
-      return createCoordinateGraph(input);
+      result = createCoordinateGraph(input);
+      break;
     case "GEOMETRY_DIAGRAM":
-      return createGeometryDiagram(input);
+      result = createGeometryDiagram(input);
+      break;
     case "FUNCTION_GRAPH":
-      return createFunctionGraph(input);
+      result = createFunctionGraph(input);
+      break;
     case "PIE_CHART":
     case "PICTOGRAPH":
-      return createPieChart(input);
+      result = createPieChart(input);
+      break;
     case "HISTOGRAM":
-      return createHistogram(input);
+      result = createHistogram(input);
+      break;
     case "SCATTER_PLOT":
-      return createScatterPlot(input);
+      result = createScatterPlot(input);
+      break;
     case "GRAPH_THEORY_DIAGRAM":
-      return createGraphTheoryDiagram(input);
+      result = createGraphTheoryDiagram(input);
+      break;
     default:
       throw new Error(`Unsupported visual chart type: ${input.type}`);
   }
+  if (result.svg) {
+    result.svg = normalizeSvgForDisplay(result.svg);
+  }
+  return result;
 }

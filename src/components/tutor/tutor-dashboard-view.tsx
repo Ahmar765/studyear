@@ -42,9 +42,11 @@ const pipelineLabels: Record<TutorPipelineStage, string> = {
 
 export function TutorDashboardView({
   data,
+  tutorId,
   onRefresh,
 }: {
   data: TutorDashboardPayload;
+  tutorId?: string;
   onRefresh?: () => void;
 }) {
   const refresh = onRefresh ?? (() => {});
@@ -234,12 +236,27 @@ export function TutorDashboardView({
             <span className="text-xs font-normal opacity-80">Payouts & commission</span>
           </Link>
         </Button>
-        <Button variant="outline" asChild className="h-auto flex-col items-start gap-1 py-4">
-          <Link href="/tutors">
+        {tutorId ? (
+          <Button variant="outline" asChild className="h-auto flex-col items-start gap-1 py-4">
+            <Link href={`/tutors/${tutorId}`}>
+              <span className="font-semibold">View marketplace listing</span>
+              <span className="text-xs font-normal opacity-80">
+                {data.approvalStatus === 'APPROVED'
+                  ? 'How students see you'
+                  : 'Preview before approval'}
+              </span>
+            </Link>
+          </Button>
+        ) : (
+          <Button
+            variant="outline"
+            disabled
+            className="h-auto flex-col items-start gap-1 py-4 opacity-70"
+          >
             <span className="font-semibold">View marketplace listing</span>
-            <span className="text-xs font-normal opacity-80">How students see you</span>
-          </Link>
-        </Button>
+            <span className="text-xs font-normal opacity-80">Sign in to preview</span>
+          </Button>
+        )}
       </div>
     </div>
   );

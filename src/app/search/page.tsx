@@ -22,7 +22,7 @@ export default async function SearchPage() {
       <div className="flex flex-col items-center text-center space-y-2">
         <h2 className="text-3xl font-bold tracking-tight">Find Study Resources</h2>
         <p className="text-muted-foreground max-w-2xl">
-          Browse videos, past papers, quizzes, and flashcards shared on StudYear. Use subject and level filters on each category to match your course.
+          Browse AI-generated and community-contributed study materials — quizzes, summaries, mind maps, videos, past papers, and more. Use subject and level filters on each category to match your course.
         </p>
         <Button asChild variant="outline" className="mt-2">
           <Link href="/contribute">Submit a video or past paper for review</Link>

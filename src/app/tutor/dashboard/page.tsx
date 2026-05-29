@@ -104,7 +104,7 @@ export default function TutorDashboardPage() {
           <Badge className="bg-amber-600">Awaiting StudYear approval</Badge>
         )}
       </header>
-      <TutorDashboardView data={data} onRefresh={() => void load(true)} />
+      <TutorDashboardView data={data} tutorId={user?.uid} onRefresh={() => void load(true)} />
     </div>
   );
 }

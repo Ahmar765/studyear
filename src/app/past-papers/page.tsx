@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, Library, FileCheck2, ExternalLink } from "lucide-react";
+import { Search, Library, FileCheck2, ExternalLink, Download } from "lucide-react";
 import { searchPastPapersAction, type PastPaperResult } from "@/server/actions/past-paper-actions";
 import { useState, useEffect, useTransition } from "react";
 import { getSubjects, getExamBoards, getLevels } from "@/server/actions/academic-actions";
@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import ContributionForm from "./contribution-form";
+import { downloadPastPaperPdf, getPastPaperPdfUrl } from "@/lib/past-paper-url";
 
 /** Radix Select forbids `value=""` on items; map this to “no filter” in state. */
 const FILTER_ALL = "__past_papers_all__";
@@ -68,6 +69,18 @@ export default function PastPapersPage() {
   const handleFilterChange = (key: keyof typeof filters, value: string) => {
     setFilters(prev => ({ ...prev, [key]: value }));
   }
+
+  const handleDownload = async (paper: PastPaperResult) => {
+    if (!paper.fileUrl) {
+      toast({ variant: 'destructive', title: 'No file', description: 'This paper has no PDF attached.' });
+      return;
+    }
+    try {
+      await downloadPastPaperPdf(paper.fileUrl, paper.title);
+    } catch {
+      toast({ variant: 'destructive', title: 'Download failed', description: 'Could not download this PDF.' });
+    }
+  };
 
   return (
     <div className="flex-1 space-y-8 p-4 md:p-8">
@@ -157,11 +170,33 @@ export default function PastPapersPage() {
                                 <Badge variant="secondary">{subjects.find(s => s.code === paper.subjectId)?.name || paper.subjectId}</Badge>
                             </div>
                           </div>
-                           <Button asChild variant="ghost" size="sm" className="w-full md:w-auto shrink-0">
-                                <a href={paper.fileUrl} target="_blank" rel="noopener noreferrer">
-                                    <ExternalLink className="mr-2 h-4 w-4"/>Open
-                                </a>
-                            </Button>
+                          <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto shrink-0">
+                            {paper.fileUrl ? (
+                              <>
+                                <Button asChild variant="ghost" size="sm" className="w-full sm:w-auto">
+                                  <a
+                                    href={getPastPaperPdfUrl(paper.fileUrl)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                  >
+                                    <ExternalLink className="mr-2 h-4 w-4" />
+                                    Open PDF
+                                  </a>
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="w-full sm:w-auto"
+                                  onClick={() => handleDownload(paper)}
+                                >
+                                  <Download className="mr-2 h-4 w-4" />
+                                  Download
+                                </Button>
+                              </>
+                            ) : (
+                              <span className="text-xs text-muted-foreground px-2">No file attached</span>
+                            )}
+                          </div>
                         </Card>
                       ))}
                     </div>

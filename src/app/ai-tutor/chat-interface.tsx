@@ -15,7 +15,9 @@ import { Bot, User as UserIcon, Send, Loader, Sparkles, BookOpen, AlertTriangle,
 import { useAuth } from '@/hooks/use-auth';
 import { useEffectiveRole } from '@/hooks/use-effective-role';
 import { Form, FormControl, FormField, FormItem } from '@/components/ui/form';
-import { AiTutorAssistanceInput, AiTutorAssistanceOutput } from '@/server/ai/flows/ai-tutor-assistance';
+import { AiTutorAssistanceInput } from '@/server/ai/flows/ai-tutor-assistance';
+import type { AiTutorResponse } from '@/server/actions/ai-tutor-actions';
+import { VisualEmbedList } from '@/components/visuals/visual-embed-list';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';
@@ -28,7 +30,7 @@ interface UserMessage {
 interface AssistantMessage {
     id: string;
     role: 'assistant';
-    content: AiTutorAssistanceOutput;
+    content: AiTutorResponse;
     chargedAcus?: number;
 }
 type Message = UserMessage | AssistantMessage;
@@ -90,6 +92,13 @@ const AIMessageCard: React.FC<{ message: AssistantMessage }> = ({ message }) => 
         <Card>
             <CardContent className="p-4 space-y-4">
                 <SimpleMarkdown content={message.content.response} className="text-foreground" />
+
+                {message.content.generatedVisuals && message.content.generatedVisuals.length > 0 ? (
+                  <>
+                    <Separator />
+                    <VisualEmbedList visuals={message.content.generatedVisuals} />
+                  </>
+                ) : null}
 
                 {message.content.detectedWeakness && (
                     <>
@@ -159,7 +168,7 @@ export default function ChatInterface() {
         .filter(m => m.role === 'assistant' || m.role === 'user')
         .map(m => ({ 
             role: m.role, 
-            content: m.role === 'user' ? m.content : (m.content as AiTutorAssistanceOutput).response 
+            content: m.role === 'user' ? m.content : (m.content as AiTutorResponse).response 
         })) as { role: 'user' | 'assistant'; content: string; }[];
 
       const input: AiTutorAssistanceInput = { query: queryText, history: historyForPrompt };

@@ -16,6 +16,7 @@ import {
   fetchSavedResourceById,
   type SavedResourceDetail,
 } from "@/server/actions/saved-resources-actions";
+import { VisualEmbedList } from '@/components/visuals/visual-embed-list';
 import {
   ArrowLeft,
   BookOpen,
@@ -840,10 +841,9 @@ function RenderSavedBody({
           />
         ) : null}
         {svg?.trim().startsWith("<svg") ? (
-          <div
-            className="overflow-auto rounded-lg border bg-background p-4"
-            dangerouslySetInnerHTML={{ __html: svg }}
-          />
+          <div className="overflow-auto rounded-lg border bg-background p-4">
+            <VisualEmbedList visuals={[{ title: resource.title, svg }]} />
+          </div>
         ) : null}
         {!imageUrl && !svg ? (
           <pre className="max-h-[480px] overflow-auto rounded-md bg-muted p-4 text-xs whitespace-pre-wrap">
