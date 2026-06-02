@@ -519,7 +519,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const showSidebar = !!user;
 
   return (
-    <SidebarProvider>
+    <SidebarProvider className="min-w-0 overflow-x-clip">
       {firebaseInitError ? (
         <div
           className="border-b border-amber-500/40 bg-amber-500/10 px-4 py-2 text-center text-sm text-amber-950 dark:text-amber-100"
@@ -530,7 +530,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           Hosting → Environment variables, then redeploy.
         </div>
       ) : null}
-      <div className="flex min-h-screen">
+      <div className="flex min-h-screen min-w-0 w-full max-w-full overflow-x-clip">
         { showSidebar && (
           <Sidebar>
             <SidebarContent>
@@ -558,9 +558,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             </SidebarContent>
           </Sidebar>
         )}
-        <SidebarInset className="flex flex-col">
+        <SidebarInset className="flex min-w-0 w-full max-w-full flex-col overflow-x-clip">
           { isImpersonating && <ImpersonationBanner /> }
-          <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b bg-background/80 px-4 backdrop-blur-sm sm:px-6">
+          <header className="sticky top-0 z-10 flex h-16 min-w-0 w-full max-w-full items-center justify-between overflow-x-clip border-b bg-background/80 px-4 backdrop-blur-sm sm:px-6">
             <div className="flex items-center gap-4">
               { showSidebar ? (
                 <div className="md:hidden">
@@ -620,18 +620,18 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                   </DropdownMenu>
                 </>
               ) : (
-                  <div className="flex items-center gap-2">
-                      <Button asChild variant="ghost">
+                  <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+                      <Button asChild variant="ghost" size="sm" className="px-2 sm:px-4">
                           <Link href="/login">Login</Link>
                       </Button>
-                      <Button asChild>
+                      <Button asChild size="sm" className="px-2 sm:px-4">
                           <Link href="/signup">Sign Up</Link>
                       </Button>
                   </div>
               )}
             </div>
           </header>
-          <main className="flex-1 overflow-y-auto">
+          <main className="flex-1 min-w-0 w-full max-w-full overflow-x-clip overflow-y-auto">
             {children}
           </main>
            <footer className="border-t bg-background text-muted-foreground">

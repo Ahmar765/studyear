@@ -36,18 +36,18 @@ export default function CookieBanner() {
 
   return (
     <>
-      <div className="fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-sm border-t shadow-lg">
-        <div className="container mx-auto p-4 flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-start gap-3">
-             <Cookie className="h-5 w-5 text-primary mt-1 shrink-0" />
-              <p className="text-sm text-muted-foreground">
+      <div className="fixed bottom-0 left-0 right-0 z-50 max-w-[100vw] overflow-x-clip border-t bg-background/95 shadow-lg backdrop-blur-sm">
+        <div className="mx-auto flex w-full max-w-7xl min-w-0 flex-col items-stretch justify-between gap-4 p-4 md:flex-row md:items-center">
+          <div className="flex min-w-0 items-start gap-3">
+             <Cookie className="mt-1 h-5 w-5 shrink-0 text-primary" />
+              <p className="min-w-0 break-words text-sm text-muted-foreground">
                 We use cookies to enhance your experience, analyze site traffic, and personalize content. By clicking "Accept All", you agree to our use of cookies.
                 Read our <Link href="/cookies" className="underline hover:text-primary">Cookie Policy</Link>.
               </p>
           </div>
-          <div className="flex gap-2 flex-shrink-0 w-full md:w-auto">
-            <Button onClick={acceptAll} className="w-full">Accept All</Button>
-            <Button variant="outline" onClick={() => setShowPreferences(true)} className="w-full">
+          <div className="flex w-full shrink-0 flex-col gap-2 sm:flex-row md:w-auto">
+            <Button onClick={acceptAll} className="w-full sm:w-auto">Accept All</Button>
+            <Button variant="outline" onClick={() => setShowPreferences(true)} className="w-full sm:w-auto">
               Preferences
             </Button>
           </div>
