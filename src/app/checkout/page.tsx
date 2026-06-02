@@ -1,8 +1,7 @@
-
 'use client';
 
 import Link from 'next/link';
-import { useTransition } from 'react';
+import { useState, useTransition } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { CreditCard, Loader, ShieldCheck, Check } from "lucide-react";
@@ -21,6 +20,10 @@ import {
 } from '@/data/subscription-plans';
 import { ACU_PACKAGES } from '@/data/acu-packages';
 import { Separator } from '@/components/ui/separator';
+import {
+  CheckoutDiscountCode,
+  type AppliedDiscount,
+} from '@/components/checkout/checkout-discount-code';
 
 function isStudentLikeRole(role: string | undefined): boolean {
   return role === 'STUDENT' || role === 'PRIVATE_TUTOR';
@@ -34,6 +37,7 @@ function AcuPackageCard({
   packLabel,
   popular,
   productCode,
+  discountCode,
 }: {
   gbp: string;
   acus: number;
@@ -42,6 +46,7 @@ function AcuPackageCard({
   packLabel: string;
   popular: boolean;
   productCode: string;
+  discountCode?: string | null;
 }) {
   const [isPending, startTransition] = useTransition();
   const { toast } = useToast();
@@ -53,6 +58,7 @@ function AcuPackageCard({
         productCode,
         user?.uid,
         user?.email ?? null,
+        discountCode,
       );
       if (!success || !sessionId) {
         toast({ variant: 'destructive', title: 'Error', description: error || 'Could not start checkout.' });
@@ -114,6 +120,7 @@ function SubscriptionCard({
   productCode,
   features,
   popular,
+  discountCode,
 }: {
   name: string;
   price: string;
@@ -121,6 +128,7 @@ function SubscriptionCard({
   productCode: string;
   features: string[];
   popular: boolean;
+  discountCode?: string | null;
 }) {
   const [isPending, startTransition] = useTransition();
   const { toast } = useToast();
@@ -132,6 +140,7 @@ function SubscriptionCard({
         productCode,
         user?.uid,
         user?.email ?? null,
+        discountCode,
       );
       if (!success || !sessionId) {
         toast({ variant: 'destructive', title: 'Error', description: error || 'Could not start Stripe checkout.' });
@@ -195,6 +204,8 @@ export default function CheckoutPage() {
   const { loading: profileLoading } = useUserProfile();
   const { role, tokenRoleResolved } = useEffectiveRole();
   const loading = profileLoading || !tokenRoleResolved;
+  const [appliedDiscount, setAppliedDiscount] = useState<AppliedDiscount | null>(null);
+  const discountCode = appliedDiscount?.code ?? null;
 
   if (loading) {
     return (
@@ -274,9 +285,11 @@ export default function CheckoutPage() {
           </p>
         </div>
 
+        <CheckoutDiscountCode applied={appliedDiscount} onAppliedChange={setAppliedDiscount} />
+
         <div className="grid sm:grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
           {SCHOOL_SUBSCRIPTION_PLANS.map((plan) => (
-            <SubscriptionCard key={plan.productCode} {...plan} />
+            <SubscriptionCard key={plan.productCode} {...plan} discountCode={discountCode} />
           ))}
         </div>
 
@@ -290,7 +303,7 @@ export default function CheckoutPage() {
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-8 max-w-4xl mx-auto">
             {buildAcuPackageCards().map((pkg) => (
-              <AcuPackageCard key={pkg.productCode} {...pkg} />
+              <AcuPackageCard key={pkg.productCode} {...pkg} discountCode={discountCode} />
             ))}
           </div>
         </div>
@@ -309,9 +322,10 @@ export default function CheckoutPage() {
             Subscribe securely through Stripe to unlock the parent dashboard and linked-student insights.
           </p>
         </div>
+        <CheckoutDiscountCode applied={appliedDiscount} onAppliedChange={setAppliedDiscount} />
         <div className="grid sm:grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
           {PARENT_SUBSCRIPTION_PLANS.map((plan) => (
-            <SubscriptionCard key={plan.productCode} {...plan} />
+            <SubscriptionCard key={plan.productCode} {...plan} discountCode={discountCode} />
           ))}
         </div>
         <FooterNote subscriptions />
@@ -333,9 +347,11 @@ export default function CheckoutPage() {
         </p>
       </div>
 
+      <CheckoutDiscountCode applied={appliedDiscount} onAppliedChange={setAppliedDiscount} />
+
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-8 max-w-4xl mx-auto">
         {acuPackages.map((pkg) => (
-          <AcuPackageCard key={pkg.productCode} {...pkg} />
+          <AcuPackageCard key={pkg.productCode} {...pkg} discountCode={discountCode} />
         ))}
       </div>
 
@@ -355,7 +371,7 @@ export default function CheckoutPage() {
           </div>
           <div className="grid sm:grid-cols-1 md:grid-cols-2 gap-8">
             {STUDENT_SUBSCRIPTION_PLANS.map((plan) => (
-              <SubscriptionCard key={plan.productCode} {...plan} />
+              <SubscriptionCard key={plan.productCode} {...plan} discountCode={discountCode} />
             ))}
           </div>
         </div>
@@ -373,7 +389,7 @@ export default function CheckoutPage() {
           </div>
           <div className="grid sm:grid-cols-1 md:grid-cols-3 gap-6">
             {SCHOOL_SUBSCRIPTION_PLANS.map((plan) => (
-              <SubscriptionCard key={plan.productCode} {...plan} />
+              <SubscriptionCard key={plan.productCode} {...plan} discountCode={discountCode} />
             ))}
           </div>
         </div>

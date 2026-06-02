@@ -2,8 +2,15 @@
 
 import { z } from 'zod';
 import * as admin from 'firebase-admin';
+import Stripe from 'stripe';
 import { adminDb } from '@/lib/firebase/admin-app';
 import { getVerifiedUser } from '@/server/lib/auth';
+import {
+  ensureStripeCouponForDiscount,
+  findActiveDiscountCode,
+  formatDiscountLabel,
+  normalizeDiscountCodeInput,
+} from '@/server/lib/discount-codes';
 
 function assertPlatformAdmin(tokenUser: Awaited<ReturnType<typeof getVerifiedUser>>) {
     if (!tokenUser) throw new Error('Not authenticated.');
@@ -82,6 +89,23 @@ export async function createDiscountCodeAction(
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
             createdByUid: uid,
         });
+
+        const secret = process.env.STRIPE_SECRET_KEY;
+        if (secret) {
+            try {
+                const stripe = new Stripe(secret, { apiVersion: '2024-04-10' });
+                await ensureStripeCouponForDiscount(stripe, {
+                    id: code,
+                    code,
+                    type: parsed.data.type,
+                    value: parsed.data.type === 'percentage' ? Math.min(parsed.data.value, 100) : parsed.data.value,
+                    active: true,
+                });
+            } catch (stripeErr) {
+                console.error('createDiscountCodeAction Stripe sync', stripeErr);
+            }
+        }
+
         return { success: true };
     } catch (error: unknown) {
         const msg = error instanceof Error ? error.message : String(error);
@@ -107,5 +131,37 @@ export async function deactivateDiscountCodeAction(
         const msg = error instanceof Error ? error.message : String(error);
         console.error('deactivateDiscountCodeAction', error);
         return { success: false, error: msg };
+    }
+}
+
+/** Lets signed-in users validate a promo code before checkout. */
+export async function validateDiscountCodeAction(
+    rawCode: string,
+): Promise<{
+    valid: boolean;
+    code?: string;
+    label?: string;
+    error?: string;
+}> {
+    try {
+        const normalized = normalizeDiscountCodeInput(rawCode);
+        if (normalized.length < 2) {
+            return { valid: false, error: 'Enter a valid discount code.' };
+        }
+
+        const record = await findActiveDiscountCode(normalized);
+        if (!record) {
+            return { valid: false, error: 'That code is invalid or has expired.' };
+        }
+
+        return {
+            valid: true,
+            code: record.code,
+            label: formatDiscountLabel(record),
+        };
+    } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : String(error);
+        console.error('validateDiscountCodeAction', error);
+        return { valid: false, error: msg };
     }
 }

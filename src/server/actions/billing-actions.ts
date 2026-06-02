@@ -7,6 +7,7 @@ import {
   manageSubscriptionStatusChange,
   recordAcuTopUpFromCheckoutSession,
 } from '@/server/lib/billing';
+import { resolveCheckoutDiscountCoupon } from '@/server/lib/discount-codes';
 import type { SubscriptionType } from '@/server/schemas';
 import { ACU_PACKAGES } from '@/data/acu-packages';
 import {
@@ -79,6 +80,7 @@ export async function createCheckoutSession(
   productCode: string,
   userId: string | undefined,
   customerEmail?: string | null,
+  discountCode?: string | null,
 ): Promise<{ success: boolean; sessionId?: string; error?: string }> {
   if (!userId) {
     return { success: false, error: 'You must be logged in to make a purchase.' };
@@ -93,6 +95,18 @@ export async function createCheckoutSession(
 
   try {
     const stripe = new Stripe(secret, { apiVersion: '2024-04-10' });
+
+    let checkoutDiscounts: Stripe.Checkout.SessionCreateParams.Discount[] | undefined;
+    let appliedDiscountCode: string | undefined;
+
+    if (discountCode?.trim()) {
+      const resolved = await resolveCheckoutDiscountCoupon(stripe, discountCode);
+      if ('error' in resolved) {
+        return { success: false, error: resolved.error };
+      }
+      checkoutDiscounts = [{ coupon: resolved.couponId }];
+      appliedDiscountCode = resolved.record.code;
+    }
 
     const isAcuTopUp = ['ENTRY', 'GROWTH', 'SCALE'].includes(productCode);
 
@@ -121,7 +135,12 @@ export async function createCheckoutSession(
         cancel_url: `${baseUrl}/checkout`,
         customer_email: customerEmail?.trim() || undefined,
         client_reference_id: userId,
-        metadata: { userId, productCode },
+        metadata: {
+          userId,
+          productCode,
+          ...(appliedDiscountCode ? { discountCode: appliedDiscountCode } : {}),
+        },
+        ...(checkoutDiscounts ? { discounts: checkoutDiscounts } : {}),
       });
       if (!session.id) {
         return { success: false, error: 'Stripe did not return a session id.' };
@@ -182,10 +201,19 @@ export async function createCheckoutSession(
       cancel_url: `${baseUrl}/checkout`,
       customer_email: customerEmail?.trim() || undefined,
       client_reference_id: userId,
-      metadata: { userId, productCode },
-      subscription_data: {
-        metadata: { userId, productCode },
+      metadata: {
+        userId,
+        productCode,
+        ...(appliedDiscountCode ? { discountCode: appliedDiscountCode } : {}),
       },
+      subscription_data: {
+        metadata: {
+          userId,
+          productCode,
+          ...(appliedDiscountCode ? { discountCode: appliedDiscountCode } : {}),
+        },
+      },
+      ...(checkoutDiscounts ? { discounts: checkoutDiscounts } : {}),
     });
 
     if (!session.id) {

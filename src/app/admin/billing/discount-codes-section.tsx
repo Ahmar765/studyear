@@ -92,7 +92,9 @@ export default function DiscountCodesSection() {
       <Card>
         <CardHeader>
           <CardTitle>Manage Discount Codes</CardTitle>
-          <CardDescription>Create promotion codes stored in Firestore (Stripe checkout wiring can follow).</CardDescription>
+          <CardDescription>
+          Codes sync to Stripe automatically and can be applied on the checkout page.
+        </CardDescription>
         </CardHeader>
         <CardContent className="flex justify-center py-12">
           <Loader className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -106,7 +108,7 @@ export default function DiscountCodesSection() {
       <CardHeader>
         <CardTitle>Manage Discount Codes</CardTitle>
         <CardDescription>
-          Codes are saved for operational tracking. Connect them to Stripe Coupons in production when ready.
+          Codes sync to Stripe and can be entered by users on the checkout page before purchase.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
