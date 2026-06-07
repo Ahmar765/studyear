@@ -198,7 +198,7 @@ export default function ChatInterface() {
           : isInsufficientAcu && isSchoolTeacher
             ? 'Your school’s ACU pool does not have enough credits for this message. Ask your school administrator to top up under School → ACU command.'
             : isInsufficientAcu
-              ? 'You need more ACUs to run the AI tutor (this message costs 5 ACUs). Use Top up ACUs in the sidebar or header, then try again.'
+              ? 'You need more ACUs to run the AI tutor (short sessions cost 15 ACUs). Use Top up ACUs in the sidebar or header, then try again.'
               : raw.includes('Firestore') || raw.includes('balanceBefore')
                 ? 'We could not update your ACU wallet. Please refresh the page or top up ACUs and try again.'
                 : raw;

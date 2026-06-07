@@ -1,4 +1,4 @@
-export type ParentPlanTier = 'PARENT_PRO' | 'PARENT_PRO_PLUS' | 'PARENT_ELITE';
+export type ParentPlanTier = 'PARENT_VIEW' | 'PARENT_PRO' | 'PARENT_PRO_PLUS' | 'PARENT_ELITE';
 
 export type RiskLevel = 'low' | 'moderate' | 'high' | 'critical';
 export type AlertSeverity = 'success' | 'info' | 'warning' | 'critical';

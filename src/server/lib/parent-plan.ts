@@ -3,6 +3,7 @@ import { HttpsError } from '@/server/lib/errors';
 import type { ParentDashboardPayload, ParentPlanTier } from '@/types/parent-dashboard';
 
 export const ACTIVE_PARENT_PLANS: ParentPlanTier[] = [
+  'PARENT_VIEW',
   'PARENT_PRO',
   'PARENT_PRO_PLUS',
   'PARENT_ELITE',
@@ -39,6 +40,10 @@ const ALL_PARENT_FEATURES: ParentFeatureKey[] = [
   'fullLiveAlerts',
 ];
 
+const PARENT_VIEW_FEATURES = new Set<ParentFeatureKey>([
+  'performanceOverview',
+]);
+
 const PARENT_PRO_FEATURES = new Set<ParentFeatureKey>([
   'earlyWarnings',
   'verifiedStudyHours',
@@ -61,7 +66,8 @@ const PARENT_PRO_PLUS_FEATURES = new Set<ParentFeatureKey>([
 export function parentPlanHasFeature(tier: ParentPlanTier, feature: ParentFeatureKey): boolean {
   if (tier === 'PARENT_ELITE') return true;
   if (tier === 'PARENT_PRO_PLUS') return PARENT_PRO_PLUS_FEATURES.has(feature);
-  return PARENT_PRO_FEATURES.has(feature);
+  if (tier === 'PARENT_PRO') return PARENT_PRO_FEATURES.has(feature);
+  return PARENT_VIEW_FEATURES.has(feature);
 }
 
 export function parentFeatureFlagsFromTier(
@@ -82,6 +88,7 @@ export function resolveParentPlanType(type: string | undefined): ParentPlanTier 
 }
 
 const PARENT_TIER_RANK: Record<ParentPlanTier, number> = {
+  PARENT_VIEW: 0,
   PARENT_PRO: 1,
   PARENT_PRO_PLUS: 2,
   PARENT_ELITE: 3,
@@ -158,7 +165,7 @@ export async function assertParentFeature(
   if (!tier) {
     throw new HttpsError(
       'failed-precondition',
-      'An active Parent subscription is required.',
+      'An active Parent subscription is required. Start with Parent View (£5/mo) for child progress visibility.',
     );
   }
   if (!parentPlanHasFeature(tier, feature)) {

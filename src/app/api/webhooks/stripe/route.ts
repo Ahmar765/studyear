@@ -3,8 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { headers } from 'next/headers';
 import Stripe from 'stripe';
 import {
-  grantParentMonthlyAcusForInvoice,
-  grantPremiumPlusMonthlyAcusForInvoice,
+  grantSubscriptionMonthlyAcusForInvoice,
   manageSubscriptionStatusChange,
   recordAcuTopUpFromCheckoutSession,
 } from '@/server/lib/billing';
@@ -109,36 +108,19 @@ export async function POST(req: NextRequest) {
             'ACTIVE'
         );
 
-        const grant = await grantPremiumPlusMonthlyAcusForInvoice({
+        const grant = await grantSubscriptionMonthlyAcusForInvoice({
           userId,
           invoiceId: invoice.id,
           amountPaidPence: invoice.amount_paid ?? 0,
           productCode: productCode as SubscriptionType,
         });
         if (grant.granted) {
-          console.log(`Premium Plus ACU allowance credited for invoice ${invoice.id}`);
-        } else if (grant.skipReason && grant.skipReason !== 'not_premium_plus') {
           console.log(
-            `Premium Plus ACU grant skipped for invoice ${invoice.id}: ${grant.skipReason}`,
+            `Subscription ACUs (${grant.acus}) credited for invoice ${invoice.id}`,
           );
-        }
-
-        const parentGrant = await grantParentMonthlyAcusForInvoice({
-          userId,
-          invoiceId: invoice.id,
-          amountPaidPence: invoice.amount_paid ?? 0,
-          productCode: productCode as SubscriptionType,
-        });
-        if (parentGrant.granted) {
+        } else if (grant.skipReason && grant.skipReason !== 'no_monthly_acu_allowance') {
           console.log(
-            `Parent subscription ACUs (${parentGrant.acus}) credited for invoice ${invoice.id}`,
-          );
-        } else if (
-          parentGrant.skipReason &&
-          parentGrant.skipReason !== 'not_parent_acu_plan'
-        ) {
-          console.log(
-            `Parent ACU grant skipped for invoice ${invoice.id}: ${parentGrant.skipReason}`,
+            `Subscription ACU grant skipped for invoice ${invoice.id}: ${grant.skipReason}`,
           );
         }
 

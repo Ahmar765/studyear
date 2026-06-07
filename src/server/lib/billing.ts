@@ -4,11 +4,13 @@ import type Stripe from 'stripe';
 import { HttpsError } from './errors';
 import { ACUService } from '../services/acu-service';
 import type { SubscriptionType } from '../schemas';
-import { ACU_PACKAGES, STUDENT_PREMIUM_PLUS_MONTHLY_ACUS } from '@/data/acu-packages';
 import {
-  PARENT_ELITE_MONTHLY_ACUS,
-  PARENT_PRO_PLUS_MONTHLY_ACUS,
-} from '@/data/subscription-plans';
+  ACU_PACKAGES,
+  resolveAcuPackageCode,
+  type AcuPackageCode,
+} from '@/data/acu-packages';
+import { SUBSCRIPTION_MONTHLY_ACUS } from '@/data/subscription-plans';
+import { subscriptionTypeDisplayName } from '@/data/subscription-plans';
 import { sendAcuTopUpReceiptEmail } from '@/server/lib/mail';
 
 /**
@@ -22,9 +24,9 @@ export async function recordAcuTopUpFromCheckoutSession(
   | { ok: false; reason: string }
 > {
   const userId = session.metadata?.userId;
-  const productCode = session.metadata?.productCode;
+  const rawProductCode = session.metadata?.productCode;
 
-  if (!userId || !productCode) {
+  if (!userId || !rawProductCode) {
     return { ok: false, reason: 'missing_metadata' };
   }
 
@@ -32,7 +34,8 @@ export async function recordAcuTopUpFromCheckoutSession(
     return { ok: false, reason: 'wrong_mode' };
   }
 
-  if (!ACU_PACKAGES[productCode as keyof typeof ACU_PACKAGES]) {
+  const packCode = resolveAcuPackageCode(rawProductCode);
+  if (!packCode) {
     return { ok: false, reason: 'invalid_product' };
   }
 
@@ -59,7 +62,7 @@ export async function recordAcuTopUpFromCheckoutSession(
     }
     transaction.set(settlementRef, {
       userId,
-      productCode,
+      productCode: packCode,
       amountTotal: session.amount_total ?? null,
       currency: session.currency ?? 'gbp',
       settledAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -81,7 +84,7 @@ export async function recordAcuTopUpFromCheckoutSession(
     return { ok: true, duplicate: true };
   }
 
-  const balanceResult = await updateUserAcuBalance(userId, productCode);
+  const balanceResult = await updateUserAcuBalance(userId, packCode);
   if (!balanceResult.success) {
     await settlementRef.delete().catch(() => {});
     return { ok: false, reason: balanceResult.error ?? 'acu_credit_failed' };
@@ -91,13 +94,13 @@ export async function recordAcuTopUpFromCheckoutSession(
     userId,
     amount: session.amount_total,
     currency: session.currency,
-    productCode,
+    productCode: packCode,
     stripeCheckoutId: session.id,
     status: session.payment_status,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
   });
 
-  const pack = ACU_PACKAGES[productCode as keyof typeof ACU_PACKAGES];
+  const pack = ACU_PACKAGES[packCode];
   try {
     const userSnap = await adminDb.doc(`users/${userId}`).get();
     const userEmail = userSnap.data()?.email as string | undefined;
@@ -118,7 +121,8 @@ export async function recordAcuTopUpFromCheckoutSession(
 }
 
 export async function updateUserAcuBalance(userId: string, productCode: string) {
-    const pack = ACU_PACKAGES[productCode as keyof typeof ACU_PACKAGES];
+    const packCode = resolveAcuPackageCode(productCode) ?? (productCode as AcuPackageCode);
+    const pack = ACU_PACKAGES[packCode];
 
     if (!pack) {
         console.error(`Invalid productCode received in webhook: ${productCode}`);
@@ -131,7 +135,7 @@ export async function updateUserAcuBalance(userId: string, productCode: string) 
             amount: pack.totalACUs,
             type: "PURCHASE" as const,
             description: `${pack.label} ACU purchase via Stripe`,
-            metadata: { stripeProductCode: productCode, pricePence: pack.pricePence }
+            metadata: { stripeProductCode: pack.code, pricePence: pack.pricePence }
         };
 
         if (pack.bonusACUs > 0) {
@@ -140,13 +144,11 @@ export async function updateUserAcuBalance(userId: string, productCode: string) 
 
         await ACUService.creditACUs(creditData);
 
-        console.log(`Successfully credited ${pack.totalACUs} ACUs to user ${userId} for product ${productCode}.`);
+        console.log(`Successfully credited ${pack.totalACUs} ACUs to user ${userId} for product ${pack.code}.`);
         return { success: true };
 
     } catch (error) {
         console.error(`Failed to update ACU balance for user ${userId} from webhook:`, error);
-        // We don't re-throw here to prevent Stripe from retrying a potentially permanent business logic failure.
-        // The error is logged for manual investigation.
         return { success: false, error: (error as Error).message };
     }
 }
@@ -154,85 +156,18 @@ export async function updateUserAcuBalance(userId: string, productCode: string) 
 type SubscriptionStatus = "ACTIVE" | "INACTIVE" | "CANCELLED" | "EXPIRED" | "PENDING_PAYMENT";
 
 /**
- * Premium Plus: grant bundled ACUs once per paid Stripe invoice (initial + renewals). Idempotent per `invoiceId`.
+ * Grant bundled monthly ACUs once per paid Stripe invoice (initial + renewals). Idempotent per `invoiceId`.
  */
-export async function grantPremiumPlusMonthlyAcusForInvoice(params: {
-  userId: string;
-  invoiceId: string;
-  amountPaidPence: number;
-  productCode: SubscriptionType;
-}): Promise<{ granted: boolean; skipReason?: string }> {
-  if (params.productCode !== 'STUDENT_PREMIUM_PLUS') {
-    return { granted: false, skipReason: 'not_premium_plus' };
-  }
-  if (!params.invoiceId) {
-    return { granted: false, skipReason: 'missing_invoice_id' };
-  }
-  if (params.amountPaidPence <= 0) {
-    return { granted: false, skipReason: 'zero_or_negative_payment' };
-  }
-
-  const grantRef = adminDb.collection('stripe_premium_plus_acu_grants').doc(params.invoiceId);
-
-  const shouldCredit = await adminDb.runTransaction(async (transaction) => {
-    const snap = await transaction.get(grantRef);
-    if (snap.exists) {
-      return false;
-    }
-    transaction.set(grantRef, {
-      userId: params.userId,
-      acus: STUDENT_PREMIUM_PLUS_MONTHLY_ACUS,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-    return true;
-  });
-
-  if (!shouldCredit) {
-    return { granted: false, skipReason: 'already_credited_for_invoice' };
-  }
-
-  try {
-    await ACUService.creditACUs({
-      userId: params.userId,
-      amount: STUDENT_PREMIUM_PLUS_MONTHLY_ACUS,
-      type: 'BONUS',
-      description: `Premium Plus — ${STUDENT_PREMIUM_PLUS_MONTHLY_ACUS.toLocaleString('en-GB')} ACUs (subscription invoice)`,
-      metadata: {
-        source: 'stripe_invoice',
-        stripeInvoiceId: params.invoiceId,
-        productCode: 'STUDENT_PREMIUM_PLUS',
-      },
-    });
-  } catch (error) {
-    await grantRef.delete().catch(() => {});
-    console.error('grantPremiumPlusMonthlyAcusForInvoice: credit failed', error);
-    throw error;
-  }
-
-  console.log(
-    `Premium Plus ACUs (${STUDENT_PREMIUM_PLUS_MONTHLY_ACUS}) credited to ${params.userId} for invoice ${params.invoiceId}`,
-  );
-  return { granted: true };
-}
-
-/**
- * Parent Pro+ / Elite: grant bundled ACUs once per paid Stripe invoice. Idempotent per `invoiceId`.
- */
-export async function grantParentMonthlyAcusForInvoice(params: {
+export async function grantSubscriptionMonthlyAcusForInvoice(params: {
   userId: string;
   invoiceId: string;
   amountPaidPence: number;
   productCode: SubscriptionType;
 }): Promise<{ granted: boolean; skipReason?: string; acus?: number }> {
-  let acus = 0;
-  if (params.productCode === 'PARENT_PRO_PLUS') {
-    acus = PARENT_PRO_PLUS_MONTHLY_ACUS;
-  } else if (params.productCode === 'PARENT_ELITE') {
-    acus = PARENT_ELITE_MONTHLY_ACUS;
-  } else {
-    return { granted: false, skipReason: 'not_parent_acu_plan' };
+  const acus = SUBSCRIPTION_MONTHLY_ACUS[params.productCode];
+  if (!acus || acus <= 0) {
+    return { granted: false, skipReason: 'no_monthly_acu_allowance' };
   }
-
   if (!params.invoiceId) {
     return { granted: false, skipReason: 'missing_invoice_id' };
   }
@@ -240,7 +175,7 @@ export async function grantParentMonthlyAcusForInvoice(params: {
     return { granted: false, skipReason: 'zero_or_negative_payment' };
   }
 
-  const grantRef = adminDb.collection('stripe_parent_acu_grants').doc(params.invoiceId);
+  const grantRef = adminDb.collection('stripe_subscription_acu_grants').doc(params.invoiceId);
 
   const shouldCredit = await adminDb.runTransaction(async (transaction) => {
     const snap = await transaction.get(grantRef);
@@ -258,8 +193,7 @@ export async function grantParentMonthlyAcusForInvoice(params: {
     return { granted: false, skipReason: 'already_credited_for_invoice' };
   }
 
-  const planLabel =
-    params.productCode === 'PARENT_ELITE' ? 'Parent Elite' : 'Parent Pro+';
+  const planLabel = subscriptionTypeDisplayName(params.productCode);
 
   try {
     await ACUService.creditACUs({
@@ -275,7 +209,7 @@ export async function grantParentMonthlyAcusForInvoice(params: {
     });
   } catch (error) {
     await grantRef.delete().catch(() => {});
-    console.error('grantParentMonthlyAcusForInvoice: credit failed', error);
+    console.error('grantSubscriptionMonthlyAcusForInvoice: credit failed', error);
     throw error;
   }
 
@@ -283,6 +217,27 @@ export async function grantParentMonthlyAcusForInvoice(params: {
     `${planLabel} ACUs (${acus}) credited to ${params.userId} for invoice ${params.invoiceId}`,
   );
   return { granted: true, acus };
+}
+
+/** @deprecated Use grantSubscriptionMonthlyAcusForInvoice */
+export async function grantPremiumPlusMonthlyAcusForInvoice(params: {
+  userId: string;
+  invoiceId: string;
+  amountPaidPence: number;
+  productCode: SubscriptionType;
+}): Promise<{ granted: boolean; skipReason?: string }> {
+  const result = await grantSubscriptionMonthlyAcusForInvoice(params);
+  return { granted: result.granted, skipReason: result.skipReason };
+}
+
+/** @deprecated Use grantSubscriptionMonthlyAcusForInvoice */
+export async function grantParentMonthlyAcusForInvoice(params: {
+  userId: string;
+  invoiceId: string;
+  amountPaidPence: number;
+  productCode: SubscriptionType;
+}): Promise<{ granted: boolean; skipReason?: string; acus?: number }> {
+  return grantSubscriptionMonthlyAcusForInvoice(params);
 }
 
 export async function manageSubscriptionStatusChange(
@@ -331,6 +286,5 @@ export async function manageSubscriptionStatusChange(
     console.log(`Subscription updated for user ${userId}: type=${planType}, status=${status}.`);
   } catch (error) {
     console.error(`Failed to update subscription status for user ${userId}:`, error);
-    // Don't rethrow to avoid webhook retry loops on persistent errors.
   }
 }

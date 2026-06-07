@@ -127,7 +127,7 @@ function SubscriptionCard({
   priceSuffix: string;
   productCode: string;
   features: string[];
-  popular: boolean;
+  popular?: boolean;
   discountCode?: string | null;
 }) {
   const [isPending, startTransition] = useTransition();
@@ -195,7 +195,7 @@ function buildAcuPackageCards() {
     baseAcus: pkg.baseACUs,
     bonusAcus: pkg.bonusACUs,
     packLabel: pkg.label,
-    popular: pkg.code === 'GROWTH',
+    popular: pkg.code === 'CORE_BOOST',
     productCode: pkg.code,
   }));
 }
@@ -323,7 +323,7 @@ export default function CheckoutPage() {
           </p>
         </div>
         <CheckoutDiscountCode applied={appliedDiscount} onAppliedChange={setAppliedDiscount} />
-        <div className="grid sm:grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+        <div className="grid sm:grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 max-w-6xl mx-auto">
           {PARENT_SUBSCRIPTION_PLANS.map((plan) => (
             <SubscriptionCard key={plan.productCode} {...plan} discountCode={discountCode} />
           ))}
@@ -340,36 +340,36 @@ export default function CheckoutPage() {
       <div className="text-center">
         <h1 className="text-4xl font-bold tracking-tight">Top up your ACU wallet</h1>
         <p className="mt-2 text-lg text-muted-foreground max-w-2xl mx-auto">
-          One-off packs at <strong className="text-foreground">£5</strong>,{' '}
-          <strong className="text-foreground">£10</strong>, and{' '}
-          <strong className="text-foreground">£15</strong> — ACUs power the AI tutor, diagnostics,
-          planner, interactive lessons, predictions, and other metered tools. Your balance updates after payment.
+          One-off packs from <strong className="text-foreground">£3</strong> to{' '}
+          <strong className="text-foreground">£30</strong> — ACUs power the AI tutor, diagnostics,
+          planner, interactive lessons, predictions, and other metered tools. Premium unlocks tools;
+          usage is always metered (no unlimited AI).
         </p>
       </div>
 
       <CheckoutDiscountCode applied={appliedDiscount} onAppliedChange={setAppliedDiscount} />
 
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-8 max-w-4xl mx-auto">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 max-w-6xl mx-auto">
         {acuPackages.map((pkg) => (
           <AcuPackageCard key={pkg.productCode} {...pkg} discountCode={discountCode} />
         ))}
       </div>
 
       {studentLike ? (
-        <div className="max-w-3xl mx-auto space-y-6">
+        <div className="max-w-6xl mx-auto space-y-6">
           <Separator />
           <div className="text-center space-y-2">
             <h2 className="text-2xl font-semibold tracking-tight">
-              Optional: Premium (£10/mo) & Premium Plus
+              Student plans — monthly only
             </h2>
-            <p className="text-muted-foreground text-sm max-w-xl mx-auto">
-              <strong className="text-foreground">Premium</strong> unlocks the premium creator toolkit for{' '}
-              <strong className="text-foreground">£10/month</strong> — you still need ACUs for metered AI (planner,
-              tutor, diagnostics, predictions, etc.). <strong className="text-foreground">Premium Plus</strong>{' '}
-              adds the bundled monthly ACU allowance shown in the plan card (same size as the £15 Scale pack).
+            <p className="text-muted-foreground text-sm max-w-2xl mx-auto">
+              <strong className="text-foreground">Child Free</strong> includes 100 ACUs every 3 months.
+              Paid plans add monthly ACU allowances — from{' '}
+              <strong className="text-foreground">£5 Student Access</strong> through to{' '}
+              <strong className="text-foreground">£30 Student Max</strong> for daily heavy usage.
             </p>
           </div>
-          <div className="grid sm:grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="grid sm:grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
             {STUDENT_SUBSCRIPTION_PLANS.map((plan) => (
               <SubscriptionCard key={plan.productCode} {...plan} discountCode={discountCode} />
             ))}

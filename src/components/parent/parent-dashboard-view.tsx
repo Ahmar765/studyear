@@ -62,6 +62,7 @@ const moodEmoji: Record<ChildSnapshot['mood'], string> = {
 };
 
 const planLabels: Record<ParentPlanTier, string> = {
+  PARENT_VIEW: 'Parent View',
   PARENT_PRO: 'Parent Pro',
   PARENT_PRO_PLUS: 'Parent Pro+',
   PARENT_ELITE: 'Parent Elite',

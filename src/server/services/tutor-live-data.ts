@@ -195,7 +195,7 @@ export async function fetchLiveTutorContext(tutorId: string): Promise<LiveTutorC
   return {
     sessions,
     students,
-    commissionRate: settings.pricingRules?.tutor_commission ?? 20,
+    commissionRate: settings.pricingRules?.tutor_commission ?? 15,
     profileUpdatedAt: tsToIso(profileSnap.data()?.updatedAt),
   };
 }

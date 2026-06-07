@@ -52,7 +52,7 @@ export default function SettingsForms({ initialSettings }: { initialSettings: Sy
             ff_school_portal: initialSettings.featureFlags?.school_portal ?? true,
             ff_ai_feedback: initialSettings.featureFlags?.ai_feedback ?? true,
             pricing_multiplier: initialSettings.pricingRules?.multiplier ?? 3,
-            tutor_commission: initialSettings.pricingRules?.tutor_commission ?? 20,
+            tutor_commission: initialSettings.pricingRules?.tutor_commission ?? 15,
             ai_defaultProvider: initialSettings.aiProvider?.defaultProvider ?? 'gemini',
             ai_fallbackProvider: initialSettings.aiProvider?.fallbackOrder?.[0] ?? 'vertex',
             ai_openai_costEffective: initialSettings.aiProvider?.modelMap?.openai?.costEffective ?? 'gpt-4-turbo',

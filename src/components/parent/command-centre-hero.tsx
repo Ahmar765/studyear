@@ -44,6 +44,7 @@ function StabilityRing({ score, status }: { score: number; status: string }) {
 }
 
 const planLabels = {
+  PARENT_VIEW: 'Parent View',
   PARENT_PRO: 'Parent Pro',
   PARENT_PRO_PLUS: 'Parent Pro+',
   PARENT_ELITE: 'Parent Elite',

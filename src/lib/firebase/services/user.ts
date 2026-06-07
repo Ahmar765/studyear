@@ -48,8 +48,11 @@ export interface ParentProfileData {
 export interface SubscriptionData {
     type:
         | "FREE"
+        | "STUDENT_ACCESS"
         | "STUDENT_PREMIUM"
         | "STUDENT_PREMIUM_PLUS"
+        | "STUDENT_MAX"
+        | "PARENT_VIEW"
         | "PARENT_PRO"
         | "PARENT_PRO_PLUS"
         | "PARENT_ELITE"

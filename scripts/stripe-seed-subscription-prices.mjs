@@ -3,7 +3,7 @@
  * Uses STRIPE_SECRET_KEY from `.env`.
  *
  * Usage (repo root):
- *   npm run stripe:seed-subscription-prices              → creates 4 new products/prices
+ *   npm run stripe:seed-subscription-prices              → creates new products/prices
  *   npm run stripe:seed-subscription-prices:missing       → keeps recurring price_ IDs from .env;
  *                                                          replaces missing OR one-time IDs with new monthly prices
  *
@@ -11,8 +11,10 @@
  * Webhook signing secret (dashboard-free): `npm run stripe:register-webhook` (needs STRIPE_WEBHOOK_URL) or Stripe CLI `stripe listen`.
  *
  * Env vars used by the app (see billing-actions.ts):
- *   STRIPE_PRICE_STUDENT_PREMIUM, STRIPE_PRICE_STUDENT_PREMIUM_PLUS,
- *   STRIPE_PRICE_PARENT_PRO, STRIPE_PRICE_PARENT_PRO_PLUS, STRIPE_PRICE_PARENT_ELITE,
+ *   STRIPE_PRICE_STUDENT_ACCESS, STRIPE_PRICE_STUDENT_PREMIUM, STRIPE_PRICE_STUDENT_PREMIUM_PLUS,
+ *   STRIPE_PRICE_STUDENT_MAX, STRIPE_PRICE_PARENT_VIEW, STRIPE_PRICE_PARENT_PRO,
+ *   STRIPE_PRICE_PARENT_PRO_PLUS, STRIPE_PRICE_PARENT_ELITE,
+ *   STRIPE_PRICE_SCHOOL_STARTER, STRIPE_PRICE_SCHOOL_GROWTH, STRIPE_PRICE_SCHOOL_ENTERPRISE
  */
 
 import Stripe from 'stripe';
@@ -24,13 +26,19 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const onlyMissing = process.argv.includes('--only-missing');
 
-/** GBP amounts — edit if you change pricing on the marketing site */
+/** GBP amounts — keep in sync with `src/data/subscription-plans.ts` */
 const PLANS = [
+  { code: 'STUDENT_ACCESS', name: 'StudYear — Student Access', amountPence: 500 },
   { code: 'STUDENT_PREMIUM', name: 'StudYear — Student Premium', amountPence: 1000 },
-  { code: 'STUDENT_PREMIUM_PLUS', name: 'StudYear — Student Premium Plus', amountPence: 1500 },
-  { code: 'PARENT_PRO', name: 'StudYear — Parent Pro', amountPence: 999 },
-  { code: 'PARENT_PRO_PLUS', name: 'StudYear — Parent Pro Plus', amountPence: 1999 },
+  { code: 'STUDENT_PREMIUM_PLUS', name: 'StudYear — Student Premium+', amountPence: 2000 },
+  { code: 'STUDENT_MAX', name: 'StudYear — Student Max', amountPence: 3000 },
+  { code: 'PARENT_VIEW', name: 'StudYear — Parent View', amountPence: 500 },
+  { code: 'PARENT_PRO', name: 'StudYear — Parent Pro', amountPence: 1000 },
+  { code: 'PARENT_PRO_PLUS', name: 'StudYear — Parent Pro+', amountPence: 2000 },
   { code: 'PARENT_ELITE', name: 'StudYear — Parent Elite', amountPence: 3900 },
+  { code: 'SCHOOL_STARTER', name: 'StudYear — Small School', amountPence: 9900 },
+  { code: 'SCHOOL_GROWTH', name: 'StudYear — Medium School', amountPence: 19900 },
+  { code: 'SCHOOL_ENTERPRISE', name: 'StudYear — Large School', amountPence: 39900 },
 ];
 
 function loadDotEnv() {
@@ -69,7 +77,6 @@ if (secret.startsWith('sk_live')) {
 const stripe = new Stripe(secret, { apiVersion: '2024-04-10' });
 const currency = (process.env.STRIPE_SEED_CURRENCY || 'gbp').toLowerCase();
 
-/** If this price exists and is recurring, return it; else null (wrong type or invalid id). */
 async function recurringPriceIdOrNull(priceId) {
   try {
     const p = await stripe.prices.retrieve(priceId);

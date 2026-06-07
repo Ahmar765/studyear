@@ -2,14 +2,16 @@
  * Create one-time Stripe Prices for ACU top-ups — no Stripe Dashboard needed.
  * Uses STRIPE_SECRET_KEY from `.env`.
  *
- * Writes Price metadata `productCode`: ENTRY | GROWTH | SCALE (must match checkout / webhook).
+ * Writes Price metadata `productCode`: MINI_BOOST | CORE_BOOST | GROWTH_BOOST | EXAM_BOOST | POWER_BOOST
+ * (must match checkout / webhook; legacy ENTRY/GROWTH/SCALE still accepted via aliases).
  *
  * Usage (repo root):
  *   npm run stripe:seed-acu-packs              → always creates new products + prices
  *   npm run stripe:seed-acu-packs:missing      → reuse valid one-time price_* from .env; create missing/wrong-type
  *
  * Paste printed lines into `.env`:
- *   STRIPE_PRICE_TOPUP_STARTER, STRIPE_PRICE_TOPUP_GROWTH, STRIPE_PRICE_TOPUP_SCALE
+ *   STRIPE_PRICE_TOPUP_MINI, STRIPE_PRICE_TOPUP_CORE, STRIPE_PRICE_TOPUP_GROWTH,
+ *   STRIPE_PRICE_TOPUP_EXAM, STRIPE_PRICE_TOPUP_POWER
  */
 
 import Stripe from 'stripe';
@@ -23,22 +25,34 @@ const onlyMissing = process.argv.includes('--only-missing');
 /** GBP one-time packs — keep in sync with `src/data/acu-packages.ts` */
 const PACKS = [
   {
-    code: 'ENTRY',
-    envKey: 'STRIPE_PRICE_TOPUP_STARTER',
-    name: 'StudYear ACU — Entry (£5)',
+    code: 'MINI_BOOST',
+    envKey: 'STRIPE_PRICE_TOPUP_MINI',
+    name: 'StudYear ACU — Mini Boost (£3)',
+    amountPence: 300,
+  },
+  {
+    code: 'CORE_BOOST',
+    envKey: 'STRIPE_PRICE_TOPUP_CORE',
+    name: 'StudYear ACU — Core Boost (£5)',
     amountPence: 500,
   },
   {
-    code: 'GROWTH',
+    code: 'GROWTH_BOOST',
     envKey: 'STRIPE_PRICE_TOPUP_GROWTH',
-    name: 'StudYear ACU — Growth (£10)',
+    name: 'StudYear ACU — Growth Boost (£10)',
     amountPence: 1000,
   },
   {
-    code: 'SCALE',
-    envKey: 'STRIPE_PRICE_TOPUP_SCALE',
-    name: 'StudYear ACU — Scale (£15)',
-    amountPence: 1500,
+    code: 'EXAM_BOOST',
+    envKey: 'STRIPE_PRICE_TOPUP_EXAM',
+    name: 'StudYear ACU — Exam Boost (£20)',
+    amountPence: 2000,
+  },
+  {
+    code: 'POWER_BOOST',
+    envKey: 'STRIPE_PRICE_TOPUP_POWER',
+    name: 'StudYear ACU — Power Boost (£30)',
+    amountPence: 3000,
   },
 ];
 

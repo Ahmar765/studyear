@@ -108,7 +108,7 @@ export function buildTutorDashboardPayload(
   }).length;
 
   const rate = profile.hourlyRate ?? 32;
-  const commission = (live.commissionRate ?? profile.commissionRate ?? 20) / 100;
+  const commission = (live.commissionRate ?? profile.commissionRate ?? 15) / 100;
   const netRate = rate * (1 - commission);
 
   const completedThisMonth = completed.filter((s) => {

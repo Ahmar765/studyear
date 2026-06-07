@@ -19,7 +19,7 @@ const defaultSettings: SystemSettings = {
   },
   pricingRules: {
     multiplier: 3,
-    tutor_commission: 20,
+    tutor_commission: 15,
   },
   communications: {
     supportEmail: 'support@studyear.ai',

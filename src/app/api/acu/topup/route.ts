@@ -1,14 +1,15 @@
 
 import { NextResponse } from "next/server";
 import { ACUService } from "@/server/services/acu-service";
-import { ACU_PACKAGES } from "@/data/acu-packages";
+import { ACU_PACKAGES, resolveAcuPackageCode } from "@/data/acu-packages";
 import { HttpsError } from "@/server/lib/errors";
 
 export async function POST(req: Request) {
   try {
     const { userId, packageCode } = await req.json();
 
-    const pack = ACU_PACKAGES[packageCode as keyof typeof ACU_PACKAGES];
+    const resolved = resolveAcuPackageCode(packageCode);
+    const pack = resolved ? ACU_PACKAGES[resolved] : undefined;
 
     if (!pack) {
       return NextResponse.json(

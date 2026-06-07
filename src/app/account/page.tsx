@@ -37,6 +37,7 @@ import {
 import ParentLinkCodeCard from '@/components/student/parent-link-code-card';
 import { isDisplayableImageUrl } from '@/lib/format-safe-date';
 import { getSchoolAcuPoolForTeacherAction } from '@/server/actions/teacher-actions';
+import { claimFreeQuarterlyAcusAction } from '@/server/actions/free-plan-actions';
 
 
 function AccountPageInner() {
@@ -85,6 +86,23 @@ function AccountPageInner() {
       }
     })();
   }, [user, usesSchoolAcuPool]);
+
+  useEffect(() => {
+    if (!user || !isStudentLike) return;
+    const sub = String(userProfile?.subscription ?? 'FREE').toUpperCase();
+    if (sub !== 'FREE') return;
+
+    void (async () => {
+      const token = await user.getIdToken();
+      const result = await claimFreeQuarterlyAcusAction(token);
+      if (result.ok && result.granted && result.acus) {
+        toast({
+          title: 'Free ACUs added',
+          description: `${result.acus} ACUs added to your wallet (Child Free quarterly allowance).`,
+        });
+      }
+    })();
+  }, [user, isStudentLike, userProfile?.subscription, toast]);
 
   useEffect(() => {
     if (searchParams.get('purchase') !== 'success') return;
@@ -376,7 +394,7 @@ function AccountPageInner() {
                   <CardDescription>
                     {schoolPool?.linked
                       ? isSchoolAdmin
-                        ? `Shared wallet for ${schoolPool.schoolName ?? 'your school'}. Top up with the same £5 / £10 / £15 packs as students — credits land in this pool for all staff and students.`
+                        ? `Shared wallet for ${schoolPool.schoolName ?? 'your school'}. Top up with ACU packs (£3–£30) — credits land in this pool for all staff and students.`
                         : `Shared wallet for ${schoolPool.schoolName ?? 'your school'}. AI tools debit this balance — contact your school admin to top up.`
                       : isSchoolAdmin
                         ? 'Complete school onboarding to activate your workspace ACU pool.'
@@ -411,11 +429,11 @@ function AccountPageInner() {
                     <CardTitle className="flex items-center gap-2"><Crown /> Subscription</CardTitle>
                     <CardDescription>
                       {isSchoolAdmin
-                        ? 'School workspace ACUs power AI across your cohort. Top up with the same £5 / £10 / £15 packs as students, or add Premium for creator tools.'
+                        ? 'School workspace ACUs power AI across your cohort. Top up with ACU packs or subscribe to a school plan for monthly shared ACUs.'
                         : isStudentLike
-                          ? 'Premium (£10/mo) unlocks creator tools; many AI features still spend ACUs. Premium Plus includes a monthly ACU bundle on each paid renewal.'
+                          ? 'Child Free includes 100 ACUs every 3 months. Paid plans from £5/mo add monthly ACU allowances; Premium (£10) unlocks the full toolkit.'
                           : isParent
-                            ? 'Parent plans are billed in GBP (£). Pro+ and Elite unlock AI advisor, intervention mode, and monthly ACU bundles.'
+                            ? 'Parent plans from £5/mo. Pro+ and Elite unlock AI advisor, intervention mode, and larger monthly ACU bundles.'
                             : 'Your current StudYear plan. Manage upgrades via Stripe checkout.'}
                     </CardDescription>
                 </CardHeader>
@@ -423,7 +441,7 @@ function AccountPageInner() {
                     <p className="text-3xl font-bold">{subscriptionTypeDisplayName(userProfile.subscription)}</p>
                     <p className="text-sm text-muted-foreground mt-1">
                       {isStudentLike
-                        ? 'Top up ACUs anytime from Plans & top-up — Premium Plus adds ACUs automatically when Stripe bills successfully.'
+                        ? 'Top up ACUs anytime from Plans & top-up — paid plans add monthly ACUs automatically when Stripe bills successfully.'
                         : isParent
                           ? 'Upgrade from checkout — Parent Elite includes family intelligence and live alerts.'
                           : 'Premium features unlock automatically when payment completes.'}

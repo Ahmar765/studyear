@@ -9,7 +9,7 @@ import {
 } from '@/server/lib/billing';
 import { resolveCheckoutDiscountCoupon } from '@/server/lib/discount-codes';
 import type { SubscriptionType } from '@/server/schemas';
-import { ACU_PACKAGES } from '@/data/acu-packages';
+import { ACU_PACKAGES, isAcuTopUpProductCode, resolveAcuPackageCode } from '@/data/acu-packages';
 import {
   PARENT_SUBSCRIPTION_PLANS,
   SCHOOL_SUBSCRIPTION_PLANS,
@@ -35,8 +35,11 @@ function marketingPlanName(productCode: string): string {
 }
 
 const SUBSCRIPTION_PRODUCT_CODES = new Set<string>([
+  'STUDENT_ACCESS',
   'STUDENT_PREMIUM',
   'STUDENT_PREMIUM_PLUS',
+  'STUDENT_MAX',
+  'PARENT_VIEW',
   'PARENT_PRO',
   'PARENT_PRO_PLUS',
   'PARENT_ELITE',
@@ -58,14 +61,15 @@ function resolveAppBaseUrl(): string {
 
 /**
  * Maps subscription `productCode` → Stripe Price IDs from `.env`.
- * ACU one-time packs (ENTRY / GROWTH / SCALE) use inline `price_data` in GBP from `ACU_PACKAGES`, not these IDs.
- * Student recurring: STRIPE_PRICE_STUDENT_PREMIUM, STRIPE_PRICE_STUDENT_PREMIUM_PLUS,
- * STRIPE_PRICE_PARENT_PRO, STRIPE_PRICE_PARENT_PRO_PLUS.
+ * ACU one-time packs use inline `price_data` in GBP from `ACU_PACKAGES`, not Stripe Price IDs.
  */
 function stripePriceIdForProduct(productCode: string): string | undefined {
   const map: Record<string, string | undefined> = {
+    STUDENT_ACCESS: process.env.STRIPE_PRICE_STUDENT_ACCESS,
     STUDENT_PREMIUM: process.env.STRIPE_PRICE_STUDENT_PREMIUM,
     STUDENT_PREMIUM_PLUS: process.env.STRIPE_PRICE_STUDENT_PREMIUM_PLUS,
+    STUDENT_MAX: process.env.STRIPE_PRICE_STUDENT_MAX,
+    PARENT_VIEW: process.env.STRIPE_PRICE_PARENT_VIEW,
     PARENT_PRO: process.env.STRIPE_PRICE_PARENT_PRO,
     PARENT_PRO_PLUS: process.env.STRIPE_PRICE_PARENT_PRO_PLUS,
     PARENT_ELITE: process.env.STRIPE_PRICE_PARENT_ELITE,
@@ -108,10 +112,10 @@ export async function createCheckoutSession(
       appliedDiscountCode = resolved.record.code;
     }
 
-    const isAcuTopUp = ['ENTRY', 'GROWTH', 'SCALE'].includes(productCode);
+    const packCode = resolveAcuPackageCode(productCode);
 
-    if (isAcuTopUp) {
-      const pack = ACU_PACKAGES[productCode as keyof typeof ACU_PACKAGES];
+    if (packCode) {
+      const pack = ACU_PACKAGES[packCode];
       if (!pack) {
         return { success: false, error: `Unknown ACU pack "${productCode}".` };
       }
@@ -137,7 +141,7 @@ export async function createCheckoutSession(
         client_reference_id: userId,
         metadata: {
           userId,
-          productCode,
+          productCode: pack.code,
           ...(appliedDiscountCode ? { discountCode: appliedDiscountCode } : {}),
         },
         ...(checkoutDiscounts ? { discounts: checkoutDiscounts } : {}),
@@ -418,8 +422,7 @@ export async function finalizeAcuCheckoutSessionAction(
     }
 
     const productCode = session.metadata?.productCode;
-    const isAcuPack =
-      !!productCode && ['ENTRY', 'GROWTH', 'SCALE'].includes(productCode);
+    const isAcuPack = !!productCode && isAcuTopUpProductCode(productCode);
 
     if (!isAcuPack || session.mode !== 'payment') {
       return { ok: true, skipped: true };
