@@ -672,6 +672,60 @@ export async function updateSchoolStaffAssignmentsAction(
     }
 }
 
+/** School admin links an existing StudYear student account to their school by email. */
+export async function linkStudentToSchoolByEmailAction(
+    idToken: string | null | undefined,
+    studentEmail: string,
+): Promise<{ success: boolean; studentName?: string; error?: string }> {
+    try {
+        const { schoolId } = await requireSchoolAdminWithSchool(idToken);
+        const email = studentEmail.trim().toLowerCase();
+        if (!email || !email.includes('@')) {
+            return { success: false, error: 'Enter a valid student email address.' };
+        }
+
+        const usersSnap = await adminDb
+            .collection('users')
+            .where('email', '==', email)
+            .limit(3)
+            .get();
+
+        if (usersSnap.empty) {
+            return {
+                success: false,
+                error:
+                    'No StudYear account found for that email. The student must sign up first, then you can link them here.',
+            };
+        }
+
+        const studentDoc =
+            usersSnap.docs.find((d) => (d.data().role as string) === 'STUDENT') ?? usersSnap.docs[0];
+        const studentId = studentDoc.id;
+        const role = studentDoc.data().role as string;
+
+        if (role !== 'STUDENT') {
+            return {
+                success: false,
+                error: 'That account is not a student profile. Use a student email address.',
+            };
+        }
+
+        await adminDb.collection('student_profiles').doc(studentId).set(
+            { schoolAccountId: schoolId, userId: studentId },
+            { merge: true },
+        );
+
+        return {
+            success: true,
+            studentName: (studentDoc.data().name as string) || email,
+        };
+    } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : String(error);
+        console.error('linkStudentToSchoolByEmailAction', error);
+        return { success: false, error: msg };
+    }
+}
+
 export async function regenerateSchoolStaffJoinCodeAction(
     idToken: string | null | undefined,
 ): Promise<{ code: string | null; error?: string }> {

@@ -8,6 +8,7 @@ import * as admin from 'firebase-admin';
 import { z } from 'zod';
 import { savedResourceService } from '../services/resources';
 import { getPastPaperPdfUrl } from '@/lib/past-paper-url';
+import { VISUAL_TOOL_RESOURCE_TYPES } from '@/data/public-library';
 import { formatResourceLevel, formatResourceSubject } from '@/lib/resource-labels';
 import { subjects } from '@/data/academic';
 import { PUBLIC_LIBRARY_RESOURCE_TYPES } from '@/data/public-library';
@@ -60,32 +61,73 @@ function isoFromFirestoreTimestamp(v: unknown): string {
   return "";
 }
 
+async function fetchResourceRowsForTypes(
+  types: string[],
+  limit = 120,
+): Promise<admin.firestore.QueryDocumentSnapshot[]> {
+  const batches: string[][] = [];
+  for (let i = 0; i < types.length; i += 10) {
+    batches.push(types.slice(i, i + 10));
+  }
+
+  const allDocs: admin.firestore.QueryDocumentSnapshot[] = [];
+  for (const batch of batches) {
+    if (batch.length === 1) {
+      try {
+        const snap = await adminDb
+          .collection('resources')
+          .where('type', '==', batch[0])
+          .orderBy('createdAt', 'desc')
+          .limit(limit)
+          .get();
+        allDocs.push(...snap.docs);
+      } catch {
+        const snap = await adminDb
+          .collection('resources')
+          .where('type', '==', batch[0])
+          .limit(limit)
+          .get();
+        allDocs.push(...snap.docs);
+      }
+      continue;
+    }
+
+    try {
+      const snap = await adminDb
+        .collection('resources')
+        .where('type', 'in', batch)
+        .orderBy('createdAt', 'desc')
+        .limit(limit)
+        .get();
+      allDocs.push(...snap.docs);
+    } catch {
+      const snap = await adminDb
+        .collection('resources')
+        .where('type', 'in', batch)
+        .limit(limit)
+        .get();
+      allDocs.push(...snap.docs);
+    }
+  }
+
+  return allDocs;
+}
+
 export async function getResourcesByTypeAction(
   type: string,
 ): Promise<{ success: boolean; resources?: any[]; error?: string }> {
   try {
     const limit = 120;
-    let snapshot: admin.firestore.QuerySnapshot;
-    try {
-      snapshot = await adminDb
-        .collection("resources")
-        .where("type", "==", type)
-        .orderBy("createdAt", "desc")
-        .limit(limit)
-        .get();
-    } catch {
-      snapshot = await adminDb
-        .collection("resources")
-        .where("type", "==", type)
-        .limit(limit)
-        .get();
-    }
+    const types =
+      type === 'VISUAL_TOOLS' ? [...VISUAL_TOOL_RESOURCE_TYPES] : [type];
 
-    if (snapshot.empty) {
+    const docs = await fetchResourceRowsForTypes(types, limit);
+
+    if (docs.length === 0) {
       return { success: true, resources: [] };
     }
 
-    const rows = snapshot.docs.map((doc) => {
+    const rows = docs.map((doc) => {
       const data = doc.data();
       const { createdBy: _c, content: _big, sourceInput: _s, ...meta } = data;
       return {

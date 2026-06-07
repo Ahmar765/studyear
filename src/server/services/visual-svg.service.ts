@@ -541,28 +541,29 @@ function createFunctionGraph(input: VisualRequest) {
 function createPieChart(input: VisualRequest) {
   const data = normalizeLabeledSeries(input.data);
   const width = 500;
-  const height = 500;
-  const radius = Math.min(width, height) / 2 - 40;
-  const cx = width / 2;
-  const cy = height / 2;
+  const height = 400;
+  const pieCx = 155;
+  const pieCy = 210;
+  const radius = 120;
+  const legendX = 300;
 
   if (data.length === 0) {
-      return { svg: `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg"><text x="250" y="250" text-anchor="middle">No data for pie chart.</text></svg>` };
+      return { svg: `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg"><text x="250" y="200" text-anchor="middle">No data for pie chart.</text></svg>` };
   }
 
   const total = data.reduce((sum, d) => sum + d.value, 0);
-  let startAngle = -90; // Start at the top
+  let startAngle = -90;
   const slices = data.map((d, i) => {
     const angle = (d.value / total) * 360;
     const endAngle = startAngle + angle;
     const largeArcFlag = angle > 180 ? 1 : 0;
 
-    const x1 = cx + radius * Math.cos(startAngle * Math.PI / 180);
-    const y1 = cy + radius * Math.sin(startAngle * Math.PI / 180);
-    const x2 = cx + radius * Math.cos(endAngle * Math.PI / 180);
-    const y2 = cy + radius * Math.sin(endAngle * Math.PI / 180);
+    const x1 = pieCx + radius * Math.cos(startAngle * Math.PI / 180);
+    const y1 = pieCy + radius * Math.sin(startAngle * Math.PI / 180);
+    const x2 = pieCx + radius * Math.cos(endAngle * Math.PI / 180);
+    const y2 = pieCy + radius * Math.sin(endAngle * Math.PI / 180);
 
-    const path = `M ${cx},${cy} L ${x1},${y1} A ${radius},${radius} 0 ${largeArcFlag},1 ${x2},${y2} Z`;
+    const path = `M ${pieCx},${pieCy} L ${x1},${y1} A ${radius},${radius} 0 ${largeArcFlag},1 ${x2},${y2} Z`;
     startAngle = endAngle;
 
     return `<path d="${path}" fill="${pickColour(i)}" stroke="white" stroke-width="2"/>`;
@@ -572,24 +573,17 @@ function createPieChart(input: VisualRequest) {
     const percentage = ((d.value / total) * 100).toFixed(0);
     return `
       <g>
-        <rect x="20" y="${40 + i * 25}" width="15" height="15" rx="3" fill="${pickColour(i)}" />
-        <text x="45" y="${53 + i * 25}" font-size="14" fill="#333">${d.label} (${percentage}%)</text>
+        <rect x="${legendX}" y="${60 + i * 25}" width="15" height="15" rx="3" fill="${pickColour(i)}" />
+        <text x="${legendX + 25}" y="${73 + i * 25}" font-size="14" fill="#333">${d.label} (${percentage}%)</text>
       </g>
     `;
   }).join("");
 
-
   const svg = `
-<svg width="${width}" height="${height}" viewBox="0 0 ${width} 500" xmlns="http://www.w3.org/2000/svg" style="background-color: white; font-family: sans-serif;">
-  <text x="${width / 2}" y="25" text-anchor="middle" font-size="20" font-weight="bold">${input.title}</text>
-  <g transform="translate(0, 50)">
-    <g transform="translate(${cx - 100}, ${cy})">
-      ${slices}
-    </g>
-    <g transform="translate(350, 80)">
-      ${legend}
-    </g>
-  </g>
+<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" style="background-color: white; font-family: sans-serif;">
+  <text x="${width / 2}" y="28" text-anchor="middle" font-size="20" font-weight="bold">${input.title}</text>
+  <g>${slices}</g>
+  <g>${legend}</g>
 </svg>`;
 
   return { svg };

@@ -1,5 +1,6 @@
 import { generateChartData } from '@/server/ai/flows/chart-generation';
 import { generateImage } from '@/server/ai/flows/image-generation';
+import { buildEducationalImagePrompt } from '@/server/lib/educational-image-prompt';
 import { generateChartSvg } from '@/server/services/visual-svg.service';
 import type { VisualRequest } from '@/server/schemas/visual-request';
 import { z } from 'zod';
@@ -134,7 +135,13 @@ async function generateEducationalVisualsImpl(params: {
       if (IMAGE_TYPES.has(parsed.visualType)) {
         const prompt =
           parsed.prompt?.trim() ||
-          `Educational illustration for ${params.subject} (${params.studyLevel}): ${parsed.title}. ${parsed.rationale}. Clean, labelled, suitable for students — include axes and labels if it is a graph.`;
+          buildEducationalImagePrompt({
+            title: parsed.title,
+            topic: parsed.rationale ?? parsed.title,
+            studyLevel: params.studyLevel,
+            subject: params.subject,
+            rationale: parsed.rationale,
+          });
         const img = await generateImage({ prompt });
         out.push({ ...parsed, imageUrl: img.imageUrl });
         continue;

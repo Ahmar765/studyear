@@ -43,6 +43,7 @@ type EditUserFormProps = {
 export default function EditUserForm({ user, onUpdateSuccess }: EditUserFormProps) {
   const [isPending, startTransition] = useTransition();
   const { toast } = useToast();
+  const router = useRouter();
   const { user: adminUser } = useAuth();
 
   const form = useForm<z.infer<typeof FormSchema>>({

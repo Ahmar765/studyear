@@ -26,6 +26,8 @@ export default function DiscountCodesSection() {
   const [code, setCode] = useState('');
   const [type, setType] = useState<'percentage' | 'fixed'>('percentage');
   const [value, setValue] = useState('10');
+  const [validUntil, setValidUntil] = useState('');
+  const [maxRedemptions, setMaxRedemptions] = useState('');
 
   const load = async () => {
     if (!user) return;
@@ -62,6 +64,10 @@ export default function DiscountCodesSection() {
         code,
         type,
         value: num,
+        validUntil: validUntil.trim() || null,
+        maxRedemptions: maxRedemptions.trim()
+          ? Number.parseInt(maxRedemptions, 10)
+          : null,
       });
       if (res.success) {
         toast({ title: 'Discount code created' });
@@ -148,6 +154,27 @@ export default function DiscountCodesSection() {
               required
             />
           </div>
+          <div>
+            <Label htmlFor="discount-expires">Valid until (optional)</Label>
+            <Input
+              id="discount-expires"
+              type="date"
+              value={validUntil}
+              onChange={(e) => setValidUntil(e.target.value)}
+            />
+          </div>
+          <div>
+            <Label htmlFor="discount-max">Max redemptions (optional)</Label>
+            <Input
+              id="discount-max"
+              type="number"
+              min={1}
+              step={1}
+              value={maxRedemptions}
+              onChange={(e) => setMaxRedemptions(e.target.value)}
+              placeholder="e.g., 100"
+            />
+          </div>
           <Button className="w-full" type="submit" disabled={submitting || !user}>
             {submitting ? 'Saving…' : 'Create discount code'}
           </Button>
@@ -168,6 +195,16 @@ export default function DiscountCodesSection() {
                   <span className="text-muted-foreground">
                     {c.type === 'percentage' ? `${c.value}%` : `£${c.value}`}
                   </span>
+                  {c.validUntil ? (
+                    <span className="text-xs text-muted-foreground">
+                      until {new Date(c.validUntil).toLocaleDateString('en-GB')}
+                    </span>
+                  ) : null}
+                  {c.maxRedemptions ? (
+                    <span className="text-xs text-muted-foreground">
+                      {c.redemptionCount}/{c.maxRedemptions} used
+                    </span>
+                  ) : null}
                   {c.active ? (
                     <Badge variant="secondary">Active</Badge>
                   ) : (

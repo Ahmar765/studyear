@@ -181,19 +181,25 @@ export async function updateUserAction(
         }
 
         const plan = validation.data.subscription as SubscriptionType;
-        const subscriptionActive =
-            plan !== 'FREE' &&
-            (validation.data.role !== 'PARENT' || isActiveParentPlan(plan));
+        const subscriptionActive = plan !== 'FREE';
+        const adminGrantDays = 30;
+        const expiresAt = subscriptionActive
+            ? Timestamp.fromMillis(Date.now() + adminGrantDays * 24 * 60 * 60 * 1000)
+            : null;
 
         const batch = adminDb.batch();
         const userRef = adminDb.doc(`users/${targetUid}`);
         const subscriptionRef = adminDb.doc(`subscriptions/${targetUid}`);
 
-        batch.update(userRef, {
-            role: validation.data.role,
-            subscription: plan,
-            updatedAt: Timestamp.now(),
-        });
+        batch.set(
+            userRef,
+            {
+                role: validation.data.role,
+                subscription: plan,
+                updatedAt: Timestamp.now(),
+            },
+            { merge: true },
+        );
 
         batch.set(
             subscriptionRef,
@@ -202,8 +208,13 @@ export async function updateUserAction(
                 status: subscriptionActive ? 'ACTIVE' : 'INACTIVE',
                 updatedAt: Timestamp.now(),
                 ...(subscriptionActive
-                    ? { adminGranted: true, grantedAt: Timestamp.now() }
-                    : {}),
+                    ? {
+                          adminGranted: true,
+                          grantedAt: Timestamp.now(),
+                          expiresAt,
+                          renewsMonthly: false,
+                      }
+                    : { adminGranted: false, expiresAt: null }),
             },
             { merge: true },
         );

@@ -437,9 +437,36 @@ function AccountPageInner() {
                             : 'Your current StudYear plan. Manage upgrades via Stripe checkout.'}
                     </CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="space-y-2">
                     <p className="text-3xl font-bold">{subscriptionTypeDisplayName(userProfile.subscription)}</p>
-                    <p className="text-sm text-muted-foreground mt-1">
+                    {userProfile.subscriptionStatus ? (
+                      <p className="text-sm">
+                        Status:{' '}
+                        <span className="font-medium capitalize">
+                          {userProfile.subscriptionStatus.toLowerCase().replace(/_/g, ' ')}
+                        </span>
+                      </p>
+                    ) : null}
+                    {userProfile.subscriptionRenewsMonthly ? (
+                      <p className="text-sm text-muted-foreground">
+                        Renews monthly via Stripe until you cancel — each successful payment adds your plan&apos;s ACU allowance.
+                      </p>
+                    ) : userProfile.subscriptionAdminGranted &&
+                      userProfile.subscriptionExpiresAt ? (
+                      <p className="text-sm text-amber-700 dark:text-amber-400">
+                        Admin grant valid until{' '}
+                        <strong>
+                          {userProfile.subscriptionExpiresAt.toDate().toLocaleDateString('en-GB', {
+                            day: 'numeric',
+                            month: 'long',
+                            year: 'numeric',
+                          })}
+                        </strong>
+                        {' '}
+                        (30 days) — renew via checkout or ask your administrator to extend.
+                      </p>
+                    ) : null}
+                    <p className="text-sm text-muted-foreground">
                       {isStudentLike
                         ? 'Top up ACUs anytime from Plans & top-up — paid plans add monthly ACUs automatically when Stripe bills successfully.'
                         : isParent

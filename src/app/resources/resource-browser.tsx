@@ -52,7 +52,9 @@ export default function ResourceBrowser({
     const searchParams = useSearchParams();
     const typeParam = searchParams.get('type');
     const type =
-        typeParam && typeParam in resourceMetadata ? (typeParam as ResourceType) : null;
+        typeParam === 'VISUAL_TOOLS' || (typeParam && typeParam in resourceMetadata)
+            ? (typeParam as ResourceType | 'VISUAL_TOOLS')
+            : null;
 
     const [resources, setResources] = useState<Resource[]>([]);
     const [saved, setSaved] = useState<string[]>([]);
@@ -156,7 +158,16 @@ export default function ResourceBrowser({
         }
     };
 
-    const metadata = type ? resourceMetadata[type] : null;
+    const metadata =
+        type === 'VISUAL_TOOLS'
+            ? {
+                  title: 'Visual Tools & Graphs',
+                  description:
+                      'Bar charts, pie charts, diagrams, and labelled educational images shared by the community.',
+              }
+            : type
+              ? resourceMetadata[type as ResourceType]
+              : null;
 
     if (!type) {
         return (

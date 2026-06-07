@@ -46,8 +46,18 @@ export default function ContactForm() {
       if (result.success) {
         toast({
           title: copy.title,
-          description: copy.description,
+          description: result.emailSent
+            ? copy.description
+            : `${copy.description} Your message was saved, but we could not send an email notification — our team will still see it in the admin inbox shortly.`,
         });
+        if (!result.emailSent) {
+          toast({
+            variant: 'destructive',
+            title: 'Email delivery issue',
+            description:
+              'Outbound mail is not configured on the server (MAIL_SMTP_* env vars). Ask your administrator to set SMTP and Admin → Communications → Contact email.',
+          });
+        }
         (e.target as HTMLFormElement).reset();
         setEnquiryType('support');
       } else {

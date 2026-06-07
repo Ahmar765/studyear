@@ -66,11 +66,22 @@ export interface SubscriptionData {
     status: "ACTIVE" | "INACTIVE" | "CANCELLED" | "EXPIRED" | "PENDING_PAYMENT";
     startedAt?: Timestamp;
     expiresAt?: Timestamp;
+    adminGranted?: boolean;
+    renewsMonthly?: boolean;
+    stripeSubscriptionId?: string;
 }
 
 
 // Represents the unified user object used throughout the client-side application
-export type UserProfile = UserData & Partial<StudentProfileData> & Partial<ParentProfileData> & { subscription?: SubscriptionData['type'] };
+export type UserProfile = UserData &
+  Partial<StudentProfileData> &
+  Partial<ParentProfileData> & {
+    subscription?: SubscriptionData['type'];
+    subscriptionStatus?: SubscriptionData['status'];
+    subscriptionExpiresAt?: Timestamp;
+    subscriptionRenewsMonthly?: boolean;
+    subscriptionAdminGranted?: boolean;
+  };
 
 /**
  * Which top-level profile doc to merge for this user.
@@ -127,6 +138,10 @@ export function getUserProfile(
         ...(parentProfileData || {}),
         ...(studentProfileData || {}),
         subscription: subscriptionTier as SubscriptionData['type'],
+        subscriptionStatus: subscriptionData?.status,
+        subscriptionExpiresAt: subscriptionData?.expiresAt,
+        subscriptionRenewsMonthly: subscriptionData?.renewsMonthly,
+        subscriptionAdminGranted: subscriptionData?.adminGranted,
       };
       callback(combinedProfile);
     } else {

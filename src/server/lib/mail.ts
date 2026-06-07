@@ -1,5 +1,5 @@
 import nodemailer from 'nodemailer';
-import { getSystemSettings } from '@/server/actions/settings-actions';
+import { readSystemSettingsCommunications } from '@/server/lib/system-settings-read';
 
 type SendMailInput = {
   to: string | string[];
@@ -69,12 +69,13 @@ export async function sendContactFormNotification(input: {
   email: string;
   enquiryType: string;
   message: string;
-}): Promise<{ sent: boolean }> {
-  const settings = await getSystemSettings();
+}): Promise<{ sent: boolean; error?: string }> {
+  const communications = await readSystemSettingsCommunications();
   const to =
-    settings.communications?.contactEmail?.trim() ||
-    settings.communications?.supportEmail?.trim() ||
-    'contact@studyear.com';
+    process.env.CONTACT_INBOX_EMAIL?.trim() ||
+    communications.contactEmail?.trim() ||
+    communications.supportEmail?.trim() ||
+    'contact@studyear.ai';
 
   const result = await sendPlatformEmail({
     to,
@@ -88,7 +89,7 @@ export async function sendContactFormNotification(input: {
       input.message,
     ].join('\n'),
   });
-  return { sent: result.sent };
+  return { sent: result.sent, error: result.error };
 }
 
 function appBaseUrl(): string {
@@ -107,10 +108,10 @@ export async function sendWelcomeEmail(
   email: string,
   name?: string | null,
 ): Promise<{ sent: boolean; error?: string }> {
-  const settings = await getSystemSettings();
-  const title = settings.communications?.signupWelcome?.title ?? 'Welcome to StudYear';
+  const communications = await readSystemSettingsCommunications();
+  const title = communications.signupWelcome?.title ?? 'Welcome to StudYear';
   const body =
-    settings.communications?.signupWelcome?.description ??
+    communications.signupWelcome?.description ??
     'Your account is ready. Sign in to complete your profile and start learning.';
   const loginUrl = `${appBaseUrl()}/login`;
   const greet = greeting(name);

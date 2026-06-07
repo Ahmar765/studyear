@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { useState, useTransition } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { CreditCard, Loader, ShieldCheck, Check } from "lucide-react";
+import { CreditCard, Loader, ShieldCheck, Check, Tag } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from '@/hooks/use-toast';
 import { getStripe } from '@/lib/stripe';
 import { createCheckoutSession } from '@/server/actions/billing-actions';
@@ -38,6 +39,7 @@ function AcuPackageCard({
   popular,
   productCode,
   discountCode,
+  appliedDiscountLabel,
 }: {
   gbp: string;
   acus: number;
@@ -47,6 +49,7 @@ function AcuPackageCard({
   popular: boolean;
   productCode: string;
   discountCode?: string | null;
+  appliedDiscountLabel?: string | null;
 }) {
   const [isPending, startTransition] = useTransition();
   const { toast } = useToast();
@@ -103,7 +106,15 @@ function AcuPackageCard({
           )}
         </CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-3">
+        {appliedDiscountLabel ? (
+          <div className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-400">
+            <Tag className="h-4 w-4 shrink-0" />
+            <span>
+              Code <span className="font-mono font-medium">{discountCode}</span> — {appliedDiscountLabel} at Stripe
+            </span>
+          </div>
+        ) : null}
         <Button className="w-full" onClick={handlePurchase} disabled={isPending || !user}>
           {isPending ? <Loader className="animate-spin" /> : <CreditCard className="mr-2 h-4 w-4" />}
           {isPending ? 'Processing…' : 'Purchase now'}
@@ -121,6 +132,7 @@ function SubscriptionCard({
   features,
   popular,
   discountCode,
+  appliedDiscountLabel,
 }: {
   name: string;
   price: string;
@@ -129,6 +141,7 @@ function SubscriptionCard({
   features: string[];
   popular?: boolean;
   discountCode?: string | null;
+  appliedDiscountLabel?: string | null;
 }) {
   const [isPending, startTransition] = useTransition();
   const { toast } = useToast();
@@ -177,6 +190,12 @@ function SubscriptionCard({
             </li>
           ))}
         </ul>
+        {appliedDiscountLabel ? (
+          <Badge variant="secondary" className="mt-2 gap-1">
+            <Tag className="h-3 w-3" />
+            {discountCode} — {appliedDiscountLabel}
+          </Badge>
+        ) : null}
       </CardContent>
       <CardFooter>
         <Button className="w-full" onClick={handleSubscribe} disabled={isPending || !user}>
@@ -198,6 +217,13 @@ function buildAcuPackageCards() {
     popular: pkg.code === 'CORE_BOOST',
     productCode: pkg.code,
   }));
+}
+
+function discountProps(applied: AppliedDiscount | null) {
+  return {
+    discountCode: applied?.code ?? null,
+    appliedDiscountLabel: applied?.label ?? null,
+  };
 }
 
 export default function CheckoutPage() {
@@ -289,7 +315,7 @@ export default function CheckoutPage() {
 
         <div className="grid sm:grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
           {SCHOOL_SUBSCRIPTION_PLANS.map((plan) => (
-            <SubscriptionCard key={plan.productCode} {...plan} discountCode={discountCode} />
+            <SubscriptionCard key={plan.productCode} {...plan} {...discountProps(appliedDiscount)} />
           ))}
         </div>
 
@@ -303,7 +329,7 @@ export default function CheckoutPage() {
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-8 max-w-4xl mx-auto">
             {buildAcuPackageCards().map((pkg) => (
-              <AcuPackageCard key={pkg.productCode} {...pkg} discountCode={discountCode} />
+              <AcuPackageCard key={pkg.productCode} {...pkg} {...discountProps(appliedDiscount)} />
             ))}
           </div>
         </div>
@@ -325,7 +351,7 @@ export default function CheckoutPage() {
         <CheckoutDiscountCode applied={appliedDiscount} onAppliedChange={setAppliedDiscount} />
         <div className="grid sm:grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 max-w-6xl mx-auto">
           {PARENT_SUBSCRIPTION_PLANS.map((plan) => (
-            <SubscriptionCard key={plan.productCode} {...plan} discountCode={discountCode} />
+            <SubscriptionCard key={plan.productCode} {...plan} {...discountProps(appliedDiscount)} />
           ))}
         </div>
         <FooterNote subscriptions />
@@ -351,7 +377,7 @@ export default function CheckoutPage() {
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 max-w-6xl mx-auto">
         {acuPackages.map((pkg) => (
-          <AcuPackageCard key={pkg.productCode} {...pkg} discountCode={discountCode} />
+          <AcuPackageCard key={pkg.productCode} {...pkg} {...discountProps(appliedDiscount)} />
         ))}
       </div>
 
@@ -371,7 +397,7 @@ export default function CheckoutPage() {
           </div>
           <div className="grid sm:grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
             {STUDENT_SUBSCRIPTION_PLANS.map((plan) => (
-              <SubscriptionCard key={plan.productCode} {...plan} discountCode={discountCode} />
+              <SubscriptionCard key={plan.productCode} {...plan} {...discountProps(appliedDiscount)} />
             ))}
           </div>
         </div>
@@ -389,7 +415,7 @@ export default function CheckoutPage() {
           </div>
           <div className="grid sm:grid-cols-1 md:grid-cols-3 gap-6">
             {SCHOOL_SUBSCRIPTION_PLANS.map((plan) => (
-              <SubscriptionCard key={plan.productCode} {...plan} discountCode={discountCode} />
+              <SubscriptionCard key={plan.productCode} {...plan} {...discountProps(appliedDiscount)} />
             ))}
           </div>
         </div>

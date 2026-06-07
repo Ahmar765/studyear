@@ -9,6 +9,9 @@ export type DiscountCodeRecord = {
   value: number;
   active: boolean;
   stripeCouponId?: string;
+  validUntil?: Date | null;
+  maxRedemptions?: number | null;
+  redemptionCount?: number;
 };
 
 export function normalizeDiscountCodeInput(raw: string): string {
@@ -19,6 +22,44 @@ export function formatDiscountLabel(record: Pick<DiscountCodeRecord, 'type' | 'v
   return record.type === 'percentage' ? `${record.value}% off` : `£${record.value} off`;
 }
 
+function parseValidUntil(raw: unknown): Date | null {
+  if (!raw) return null;
+  if (raw instanceof admin.firestore.Timestamp) return raw.toDate();
+  if (raw instanceof Date) return raw;
+  if (typeof raw === 'string') {
+    const d = new Date(raw);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  return null;
+}
+
+function mapDiscountDoc(id: string, data: Record<string, unknown>): DiscountCodeRecord | null {
+  if (data.active === false) return null;
+
+  const validUntil = parseValidUntil(data.validUntil);
+  if (validUntil && validUntil.getTime() < Date.now()) return null;
+
+  const maxRedemptions =
+    typeof data.maxRedemptions === 'number' && data.maxRedemptions > 0
+      ? data.maxRedemptions
+      : null;
+  const redemptionCount =
+    typeof data.redemptionCount === 'number' ? data.redemptionCount : 0;
+  if (maxRedemptions !== null && redemptionCount >= maxRedemptions) return null;
+
+  return {
+    id,
+    code: (data.code as string) || id,
+    type: (data.type as 'percentage' | 'fixed') || 'percentage',
+    value: typeof data.value === 'number' ? data.value : Number(data.value) || 0,
+    active: true,
+    stripeCouponId: typeof data.stripeCouponId === 'string' ? data.stripeCouponId : undefined,
+    validUntil,
+    maxRedemptions,
+    redemptionCount,
+  };
+}
+
 export async function findActiveDiscountCode(raw: string): Promise<DiscountCodeRecord | null> {
   const code = normalizeDiscountCodeInput(raw);
   if (code.length < 2) return null;
@@ -27,17 +68,41 @@ export async function findActiveDiscountCode(raw: string): Promise<DiscountCodeR
   const snap = await ref.get();
   if (!snap.exists) return null;
 
-  const data = snap.data()!;
-  if (data.active === false) return null;
+  return mapDiscountDoc(snap.id, snap.data() as Record<string, unknown>);
+}
 
-  return {
-    id: snap.id,
-    code: (data.code as string) || snap.id,
-    type: (data.type as 'percentage' | 'fixed') || 'percentage',
-    value: typeof data.value === 'number' ? data.value : Number(data.value) || 0,
-    active: true,
-    stripeCouponId: typeof data.stripeCouponId === 'string' ? data.stripeCouponId : undefined,
-  };
+/** Increment redemption count after a successful paid checkout (idempotent per session). */
+export async function recordDiscountRedemption(
+  code: string,
+  checkoutSessionId: string,
+): Promise<void> {
+  const normalized = normalizeDiscountCodeInput(code);
+  if (!normalized) return;
+
+  const settlementRef = adminDb
+    .collection('discount_redemption_settlements')
+    .doc(checkoutSessionId);
+
+  const shouldIncrement = await adminDb.runTransaction(async (tx) => {
+    const existing = await tx.get(settlementRef);
+    if (existing.exists) return false;
+    tx.set(settlementRef, {
+      code: normalized,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    return true;
+  });
+
+  if (!shouldIncrement) return;
+
+  const codeRef = adminDb.collection('admin_discount_codes').doc(normalized);
+  await codeRef.set(
+    {
+      redemptionCount: admin.firestore.FieldValue.increment(1),
+      lastRedeemedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true },
+  );
 }
 
 function stripeCouponIdFromCode(code: string): string {
@@ -78,6 +143,10 @@ export async function ensureStripeCouponForDiscount(
           amount_off: Math.max(Math.round(record.value * 100), 1),
           currency: 'gbp',
         }),
+    ...(record.maxRedemptions ? { max_redemptions: record.maxRedemptions } : {}),
+    ...(record.validUntil
+      ? { redeem_by: Math.floor(record.validUntil.getTime() / 1000) }
+      : {}),
   };
 
   await stripe.coupons.create(params);
@@ -103,7 +172,7 @@ export async function resolveCheckoutDiscountCoupon(
 
   const record = await findActiveDiscountCode(trimmed);
   if (!record) {
-    return { error: 'That discount code is invalid or has expired.' };
+    return { error: 'That discount code is invalid, expired, or has reached its usage limit.' };
   }
 
   if (record.value <= 0) {

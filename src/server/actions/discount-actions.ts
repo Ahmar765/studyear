@@ -22,6 +22,9 @@ const CreateDiscountSchema = z.object({
     code: z.string().min(2).max(40),
     type: z.enum(['percentage', 'fixed']),
     value: z.number().positive(),
+    /** ISO date YYYY-MM-DD — code stops working after this day (UK end of day). */
+    validUntil: z.string().optional().nullable(),
+    maxRedemptions: z.number().int().positive().optional().nullable(),
 });
 
 export interface DiscountCodeRow {
@@ -31,6 +34,9 @@ export interface DiscountCodeRow {
     value: number;
     active: boolean;
     createdAt: string | null;
+    validUntil: string | null;
+    maxRedemptions: number | null;
+    redemptionCount: number;
 }
 
 export async function listDiscountCodesAction(idToken?: string | null): Promise<{
@@ -45,6 +51,8 @@ export async function listDiscountCodesAction(idToken?: string | null): Promise<
             const d = doc.data();
             const createdRaw = d.createdAt as admin.firestore.Timestamp | undefined;
             const dt = createdRaw?.toDate?.() ?? null;
+            const validRaw = d.validUntil as admin.firestore.Timestamp | undefined;
+            const validDt = validRaw?.toDate?.() ?? null;
             return {
                 id: doc.id,
                 code: (d.code as string) || doc.id,
@@ -52,6 +60,11 @@ export async function listDiscountCodesAction(idToken?: string | null): Promise<
                 value: typeof d.value === 'number' ? d.value : Number(d.value) || 0,
                 active: d.active !== false,
                 createdAt: dt ? dt.toISOString() : null,
+                validUntil: validDt ? validDt.toISOString() : null,
+                maxRedemptions:
+                    typeof d.maxRedemptions === 'number' ? d.maxRedemptions : null,
+                redemptionCount:
+                    typeof d.redemptionCount === 'number' ? d.redemptionCount : 0,
             };
         });
         codes.sort((a, b) => (a.createdAt && b.createdAt && a.createdAt < b.createdAt ? 1 : -1));
@@ -81,11 +94,20 @@ export async function createDiscountCodeAction(
         if (existing.exists) {
             return { success: false, error: 'That code already exists.' };
         }
+        const validUntil = parsed.data.validUntil?.trim()
+            ? admin.firestore.Timestamp.fromDate(
+                  new Date(`${parsed.data.validUntil.trim()}T23:59:59`),
+              )
+            : null;
+
         await ref.set({
             code,
             type: parsed.data.type,
             value: parsed.data.type === 'percentage' ? Math.min(parsed.data.value, 100) : parsed.data.value,
             active: true,
+            validUntil,
+            maxRedemptions: parsed.data.maxRedemptions ?? null,
+            redemptionCount: 0,
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
             createdByUid: uid,
         });
@@ -100,6 +122,9 @@ export async function createDiscountCodeAction(
                     type: parsed.data.type,
                     value: parsed.data.type === 'percentage' ? Math.min(parsed.data.value, 100) : parsed.data.value,
                     active: true,
+                    validUntil: validUntil?.toDate() ?? null,
+                    maxRedemptions: parsed.data.maxRedemptions ?? null,
+                    redemptionCount: 0,
                 });
             } catch (stripeErr) {
                 console.error('createDiscountCodeAction Stripe sync', stripeErr);

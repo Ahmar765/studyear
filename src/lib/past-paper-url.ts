@@ -1,11 +1,10 @@
-/** Ensure PDF links open/download with the correct .pdf extension and MIME type. */
+/** Ensure PDF links use a .pdf suffix where hosts omit it (Cloudinary raw, etc.). */
 export function getPastPaperPdfUrl(url: string | undefined | null): string {
   const trimmed = (url ?? '').trim();
   if (!trimmed) return '';
 
   if (/\.pdf(\?|#|$)/i.test(trimmed)) return trimmed;
 
-  // Cloudinary raw uploads often omit the extension — browsers then save as .txt/.bin.
   if (/cloudinary\.com\/.*\/raw\/upload/i.test(trimmed)) {
     const hashIdx = trimmed.indexOf('#');
     const hash = hashIdx >= 0 ? trimmed.slice(hashIdx) : '';
@@ -19,6 +18,17 @@ export function getPastPaperPdfUrl(url: string | undefined | null): string {
   return trimmed;
 }
 
+export function pastPaperProxyDownloadHref(
+  url: string,
+  title: string,
+  origin = 'https://studyear.com',
+): string {
+  const proxy = new URL('/api/past-paper/download', origin);
+  proxy.searchParams.set('url', url);
+  proxy.searchParams.set('title', title);
+  return proxy.toString();
+}
+
 export function sanitizePastPaperFilename(title: string): string {
   const base = title
     .trim()
@@ -29,18 +39,34 @@ export function sanitizePastPaperFilename(title: string): string {
   return name.toLowerCase().endsWith('.pdf') ? name : `${name}.pdf`;
 }
 
+function shouldUseProxyDownload(url: string): boolean {
+  return /firebasestorage\.googleapis\.com/i.test(url);
+}
+
 /** Download a past-paper PDF with a proper filename and application/pdf blob type. */
 export async function downloadPastPaperPdf(
   url: string,
   title: string,
 ): Promise<void> {
-  const href = getPastPaperPdfUrl(url);
-  if (!href) throw new Error('Missing file URL');
+  const normalized = getPastPaperPdfUrl(url);
+  if (!normalized) throw new Error('Missing file URL');
 
   const filename = sanitizePastPaperFilename(title);
 
+  if (typeof window !== 'undefined' && shouldUseProxyDownload(url)) {
+    const proxyHref = pastPaperProxyDownloadHref(url, title, window.location.origin);
+    const anchor = document.createElement('a');
+    anchor.href = proxyHref;
+    anchor.download = filename;
+    anchor.rel = 'noopener';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    return;
+  }
+
   try {
-    const res = await fetch(href);
+    const res = await fetch(normalized);
     if (!res.ok) throw new Error(`Download failed (${res.status})`);
     const blob = await res.blob();
     const pdfBlob =
@@ -57,7 +83,6 @@ export async function downloadPastPaperPdf(
     anchor.remove();
     URL.revokeObjectURL(objectUrl);
   } catch {
-    // Fallback: open normalized URL (extension helps the browser infer PDF).
-    window.open(href, '_blank', 'noopener,noreferrer');
+    window.open(normalized, '_blank', 'noopener,noreferrer');
   }
 }

@@ -19,6 +19,7 @@ import {
   stripNonPersistableImageFields,
 } from "@/server/lib/visual-image-storage";
 import { stripUndefinedDeep, toFirestoreDocument } from "@/server/lib/strip-undefined-deep";
+import { buildEducationalImagePrompt } from "@/server/lib/educational-image-prompt";
 
 export async function createVisualResourceAction(input: VisualRequest): Promise<{ success: boolean; visual?: { svg?: string, imageUrl?: string }; error?: string; }> {
   const validation = VisualRequestSchema.safeParse(input);
@@ -42,27 +43,16 @@ export async function createVisualResourceAction(input: VisualRequest): Promise<
         if (isChart) {
           visualOutput = generateChartSvg(validation.data);
         } else if (isImage) {
-            let finalPrompt = validation.data.prompt;
-            if (validation.data.type === 'EDUCATIONAL_IMAGE') {
-                finalPrompt = `
-Create a child-friendly educational image for primary school learners.
-
-Title: ${validation.data.title}
-Topic: ${validation.data.prompt}
-Study level: ${validation.data.studyLevel ?? "Primary School"}
-
-Rules:
-- Bright but clean colours
-- Simple shapes
-- No scary content
-- No complex adult themes
-- No clutter
-- Use age-appropriate visuals
-- Make it easy for a child to understand
-- No unnecessary text unless educational labels are needed
-- Suitable for classroom and parent use
-`;
-            }
+            const finalPrompt =
+              validation.data.type === 'EDUCATIONAL_IMAGE' ||
+              validation.data.type === 'VISUAL_DRAWING'
+                ? buildEducationalImagePrompt({
+                    title: validation.data.title,
+                    topic: validation.data.prompt ?? validation.data.title,
+                    studyLevel: validation.data.studyLevel,
+                    subject: validation.data.subject,
+                  })
+                : validation.data.prompt;
           const imageResult = await generateImage({ prompt: finalPrompt! });
           visualOutput = { imageUrl: imageResult.imageUrl, revisedPrompt: imageResult.revisedPrompt };
         } else {
@@ -130,6 +120,9 @@ Rules:
       title: validation.data.title,
       content: libraryContent,
       linkedEntityId: visualId,
+      subject: validation.data.subject ?? null,
+      level: validation.data.studyLevel ?? null,
+      topic: validation.data.title,
     });
 
     return {

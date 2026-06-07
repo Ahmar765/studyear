@@ -7,6 +7,7 @@ import {
   manageSubscriptionStatusChange,
   recordAcuTopUpFromCheckoutSession,
 } from '@/server/lib/billing';
+import { recordDiscountRedemption } from '@/server/lib/discount-codes';
 import type { SubscriptionType } from '@/server/schemas';
 export async function POST(req: NextRequest) {
   const body = await req.text();
@@ -42,6 +43,14 @@ export async function POST(req: NextRequest) {
         }
 
         if (session.mode === 'payment' && session.metadata?.productCode) {
+            if (session.metadata?.discountCode && session.payment_status === 'paid') {
+              await recordDiscountRedemption(
+                session.metadata.discountCode,
+                session.id,
+              ).catch((err) =>
+                console.error('discount redemption record failed', err),
+              );
+            }
             const outcome = await recordAcuTopUpFromCheckoutSession(session);
             if (outcome.ok && !outcome.duplicate) {
               console.log(
@@ -55,6 +64,14 @@ export async function POST(req: NextRequest) {
         }
         
         if (session.mode === 'subscription') {
+            if (session.metadata?.discountCode && session.payment_status === 'paid') {
+              await recordDiscountRedemption(
+                session.metadata.discountCode,
+                session.id,
+              ).catch((err) =>
+                console.error('discount redemption record failed', err),
+              );
+            }
             const subscriptionId = session.subscription as string;
             const subscriptionType = session.metadata?.productCode
               ?.trim()

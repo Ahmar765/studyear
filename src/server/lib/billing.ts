@@ -263,6 +263,9 @@ export async function manageSubscriptionStatusChange(
         stripeSubscriptionId: subscriptionId,
         stripeCustomerId: customerId,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        ...(status === 'ACTIVE' && subscriptionId
+          ? { renewsMonthly: true, adminGranted: false }
+          : {}),
       }, { merge: true });
 
       if (status === 'ACTIVE') {
