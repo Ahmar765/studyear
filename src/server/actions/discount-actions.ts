@@ -6,11 +6,21 @@ import Stripe from 'stripe';
 import { adminDb } from '@/lib/firebase/admin-app';
 import { getVerifiedUser } from '@/server/lib/auth';
 import {
-  ensureStripeCouponForDiscount,
+  ensureStripePromotionCodeForDiscount,
   findActiveDiscountCode,
+  findStripeDashboardPromotionCode,
   formatDiscountLabel,
   normalizeDiscountCodeInput,
 } from '@/server/lib/discount-codes';
+
+function labelFromStripeCoupon(coupon: Stripe.Coupon): string {
+  if (coupon.percent_off) return `${coupon.percent_off}% off`;
+  if (coupon.amount_off && coupon.currency) {
+    const gbp = coupon.amount_off / 100;
+    return `£${gbp % 1 === 0 ? gbp.toFixed(0) : gbp.toFixed(2)} off`;
+  }
+  return 'Discount applied';
+}
 
 function assertPlatformAdmin(tokenUser: Awaited<ReturnType<typeof getVerifiedUser>>) {
     if (!tokenUser) throw new Error('Not authenticated.');
@@ -116,7 +126,7 @@ export async function createDiscountCodeAction(
         if (secret) {
             try {
                 const stripe = new Stripe(secret, { apiVersion: '2024-04-10' });
-                await ensureStripeCouponForDiscount(stripe, {
+                await ensureStripePromotionCodeForDiscount(stripe, {
                     id: code,
                     code,
                     type: parsed.data.type,
@@ -175,15 +185,31 @@ export async function validateDiscountCodeAction(
         }
 
         const record = await findActiveDiscountCode(normalized);
-        if (!record) {
-            return { valid: false, error: 'That code is invalid or has expired.' };
+        if (record) {
+            return {
+                valid: true,
+                code: record.code,
+                label: formatDiscountLabel(record),
+            };
         }
 
-        return {
-            valid: true,
-            code: record.code,
-            label: formatDiscountLabel(record),
-        };
+        const secret = process.env.STRIPE_SECRET_KEY;
+        if (secret) {
+            const stripe = new Stripe(secret, { apiVersion: '2024-04-10' });
+            const promo = await findStripeDashboardPromotionCode(stripe, normalized);
+            if (promo) {
+                const coupon = promo.coupon;
+                if (typeof coupon === 'object' && coupon) {
+                    return {
+                        valid: true,
+                        code: normalized,
+                        label: labelFromStripeCoupon(coupon),
+                    };
+                }
+            }
+        }
+
+        return { valid: false, error: 'That code is invalid or has expired.' };
     } catch (error: unknown) {
         const msg = error instanceof Error ? error.message : String(error);
         console.error('validateDiscountCodeAction', error);

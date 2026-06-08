@@ -114,10 +114,17 @@ export default function DiscountCodesSection() {
       <CardHeader>
         <CardTitle>Manage Discount Codes</CardTitle>
         <CardDescription>
-          Codes sync to Stripe and can be entered by users on the checkout page before purchase.
+          Codes sync to Stripe automatically. Share links like{' '}
+          <span className="font-mono text-xs">/checkout?code=YOUR_CODE</span> so users land with the code ready.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
+        <div className="rounded-md border border-dashed bg-muted/40 px-3 py-3 text-sm text-muted-foreground space-y-1">
+          <p className="font-medium text-foreground">How customers use a code</p>
+          <p>1. Go to Plans &amp; top-up (<span className="font-mono">/checkout</span>)</p>
+          <p>2. Apply the code in the discount box (or open a shared link with <span className="font-mono">?code=</span>)</p>
+          <p>3. Pick a plan — the discount is applied on the Stripe payment screen</p>
+        </div>
         <form onSubmit={handleCreate} className="space-y-4">
           <div>
             <Label htmlFor="discount-code">New code</Label>

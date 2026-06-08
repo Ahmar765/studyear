@@ -7,7 +7,14 @@ import {
   manageSubscriptionStatusChange,
   recordAcuTopUpFromCheckoutSession,
 } from '@/server/lib/billing';
-import { resolveCheckoutDiscountCoupon } from '@/server/lib/discount-codes';
+import {
+  normalizeDiscountCodeInput,
+  resolveCheckoutDiscountCoupon,
+} from '@/server/lib/discount-codes';
+
+function normalizeDiscountCodeForMetadata(raw: string): string {
+  return normalizeDiscountCodeInput(raw);
+}
 import type { SubscriptionType } from '@/server/schemas';
 import { ACU_PACKAGES, isAcuTopUpProductCode, resolveAcuPackageCode } from '@/data/acu-packages';
 import {
@@ -108,8 +115,9 @@ export async function createCheckoutSession(
       if ('error' in resolved) {
         return { success: false, error: resolved.error };
       }
-      checkoutDiscounts = [{ coupon: resolved.couponId }];
-      appliedDiscountCode = resolved.record.code;
+      checkoutDiscounts = [{ promotion_code: resolved.promotionCodeId }];
+      appliedDiscountCode =
+        resolved.record?.code ?? normalizeDiscountCodeForMetadata(discountCode);
     }
 
     const packCode = resolveAcuPackageCode(productCode);

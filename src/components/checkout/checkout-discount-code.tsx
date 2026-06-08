@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import { Tag, Loader, Check, X } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -20,9 +20,14 @@ type CheckoutDiscountCodeProps = {
 };
 
 export function CheckoutDiscountCode({ applied, onAppliedChange }: CheckoutDiscountCodeProps) {
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState(applied?.code ?? '');
   const [isPending, startTransition] = useTransition();
   const { toast } = useToast();
+
+  useEffect(() => {
+    if (applied?.code) setInput(applied.code);
+    else if (!applied) setInput('');
+  }, [applied?.code, applied]);
 
   const applyCode = () => {
     const trimmed = input.trim();
@@ -64,10 +69,17 @@ export function CheckoutDiscountCode({ applied, onAppliedChange }: CheckoutDisco
           Discount code
         </CardTitle>
         <CardDescription>
-          Have a promo code from StudYear? Apply it here before you purchase or subscribe.
+          Enter your code here first — it is passed to Stripe when you click Purchase or Subscribe.
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="space-y-4">
+        <ol className="list-decimal list-inside space-y-1.5 text-sm text-muted-foreground rounded-md border bg-muted/30 px-3 py-3">
+          <li>Type your code below and click <strong className="text-foreground">Apply code</strong></li>
+          <li>Choose an ACU pack or subscription plan</li>
+          <li>
+            On Stripe&apos;s payment page you&apos;ll see the discount as a line-item reduction before you pay
+          </li>
+        </ol>
         <div className="flex flex-col gap-2 sm:flex-row">
           <Input
             value={input}

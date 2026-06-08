@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, useTransition } from 'react';
+import { Suspense, useTransition } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { CreditCard, Loader, ShieldCheck, Check, Tag } from "lucide-react";
@@ -25,6 +25,8 @@ import {
   CheckoutDiscountCode,
   type AppliedDiscount,
 } from '@/components/checkout/checkout-discount-code';
+import { CheckoutDiscountBanner } from '@/components/checkout/checkout-discount-banner';
+import { useCheckoutDiscount } from '@/hooks/use-checkout-discount';
 
 function isStudentLikeRole(role: string | undefined): boolean {
   return role === 'STUDENT' || role === 'PRIVATE_TUTOR';
@@ -226,12 +228,13 @@ function discountProps(applied: AppliedDiscount | null) {
   };
 }
 
-export default function CheckoutPage() {
+function CheckoutPageContent() {
   const { loading: profileLoading } = useUserProfile();
   const { role, tokenRoleResolved } = useEffectiveRole();
   const loading = profileLoading || !tokenRoleResolved;
-  const [appliedDiscount, setAppliedDiscount] = useState<AppliedDiscount | null>(null);
+  const { appliedDiscount, setAppliedDiscount } = useCheckoutDiscount();
   const discountCode = appliedDiscount?.code ?? null;
+  const checkoutBottomPad = appliedDiscount ? 'pb-20' : '';
 
   if (loading) {
     return (
@@ -302,7 +305,7 @@ export default function CheckoutPage() {
 
   if (isSchoolAdmin) {
     return (
-      <div className="flex-1 space-y-10 p-4 md:p-8">
+      <div className={`flex-1 space-y-10 p-4 md:p-8 ${checkoutBottomPad}`}>
         <div className="text-center">
           <h1 className="text-4xl font-bold tracking-tight">School subscription plans</h1>
           <p className="mt-2 text-lg text-muted-foreground max-w-2xl mx-auto">
@@ -335,13 +338,16 @@ export default function CheckoutPage() {
         </div>
 
         <FooterNote subscriptions optionalAcu />
+        {appliedDiscount ? (
+          <CheckoutDiscountBanner applied={appliedDiscount} onClear={() => setAppliedDiscount(null)} />
+        ) : null}
       </div>
     );
   }
 
   if (isParent) {
     return (
-      <div className="flex-1 space-y-8 p-4 md:p-8">
+      <div className={`flex-1 space-y-8 p-4 md:p-8 ${checkoutBottomPad}`}>
         <div className="text-center">
           <h1 className="text-4xl font-bold tracking-tight">Parent subscriptions</h1>
           <p className="mt-2 text-lg text-muted-foreground max-w-2xl mx-auto">
@@ -355,6 +361,9 @@ export default function CheckoutPage() {
           ))}
         </div>
         <FooterNote subscriptions />
+        {appliedDiscount ? (
+          <CheckoutDiscountBanner applied={appliedDiscount} onClear={() => setAppliedDiscount(null)} />
+        ) : null}
       </div>
     );
   }
@@ -362,7 +371,7 @@ export default function CheckoutPage() {
   const acuPackages = buildAcuPackageCards();
 
   return (
-    <div className="flex-1 space-y-10 p-4 md:p-8">
+    <div className={`flex-1 space-y-10 p-4 md:p-8 ${checkoutBottomPad}`}>
       <div className="text-center">
         <h1 className="text-4xl font-bold tracking-tight">Top up your ACU wallet</h1>
         <p className="mt-2 text-lg text-muted-foreground max-w-2xl mx-auto">
@@ -422,7 +431,25 @@ export default function CheckoutPage() {
       )}
 
       <FooterNote subscriptions optionalAcu />
+      {appliedDiscount ? (
+        <CheckoutDiscountBanner applied={appliedDiscount} onClear={() => setAppliedDiscount(null)} />
+      ) : null}
     </div>
+  );
+}
+
+export default function CheckoutPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex-1 space-y-8 p-4 md:p-8">
+          <Skeleton className="h-12 w-1/2 mx-auto" />
+          <Skeleton className="h-8 w-3/4 mx-auto" />
+        </div>
+      }
+    >
+      <CheckoutPageContent />
+    </Suspense>
   );
 }
 

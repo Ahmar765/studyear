@@ -9,6 +9,7 @@ export type DiscountCodeRecord = {
   value: number;
   active: boolean;
   stripeCouponId?: string;
+  stripePromotionCodeId?: string;
   validUntil?: Date | null;
   maxRedemptions?: number | null;
   redemptionCount?: number;
@@ -54,6 +55,8 @@ function mapDiscountDoc(id: string, data: Record<string, unknown>): DiscountCode
     value: typeof data.value === 'number' ? data.value : Number(data.value) || 0,
     active: true,
     stripeCouponId: typeof data.stripeCouponId === 'string' ? data.stripeCouponId : undefined,
+    stripePromotionCodeId:
+      typeof data.stripePromotionCodeId === 'string' ? data.stripePromotionCodeId : undefined,
     validUntil,
     maxRedemptions,
     redemptionCount,
@@ -69,6 +72,29 @@ export async function findActiveDiscountCode(raw: string): Promise<DiscountCodeR
   if (!snap.exists) return null;
 
   return mapDiscountDoc(snap.id, snap.data() as Record<string, unknown>);
+}
+
+/** Look up an active promotion code created directly in the Stripe Dashboard. */
+export async function findStripeDashboardPromotionCode(
+  stripe: Stripe,
+  raw: string,
+): Promise<Stripe.PromotionCode | null> {
+  const code = normalizeDiscountCodeInput(raw);
+  if (code.length < 2) return null;
+
+  const listed = await stripe.promotionCodes.list({
+    code,
+    active: true,
+    limit: 1,
+  });
+
+  const promo = listed.data[0];
+  if (!promo || !promo.active) return null;
+
+  const coupon = promo.coupon;
+  if (typeof coupon === 'object' && coupon && !coupon.valid) return null;
+
+  return promo;
 }
 
 /** Increment redemption count after a successful paid checkout (idempotent per session). */
@@ -96,6 +122,9 @@ export async function recordDiscountRedemption(
   if (!shouldIncrement) return;
 
   const codeRef = adminDb.collection('admin_discount_codes').doc(normalized);
+  const snap = await codeRef.get();
+  if (!snap.exists) return;
+
   await codeRef.set(
     {
       redemptionCount: admin.firestore.FieldValue.increment(1),
@@ -105,36 +134,10 @@ export async function recordDiscountRedemption(
   );
 }
 
-function stripeCouponIdFromCode(code: string): string {
-  const sanitized = code.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 40);
-  return sanitized || 'PROMO';
-}
-
-/** Ensures a Stripe coupon exists for a Firestore discount code. */
-export async function ensureStripeCouponForDiscount(
-  stripe: Stripe,
+async function couponParamsFromRecord(
   record: DiscountCodeRecord,
-): Promise<string> {
-  const couponId = record.stripeCouponId || stripeCouponIdFromCode(record.code);
-
-  try {
-    const existing = await stripe.coupons.retrieve(couponId);
-    if (existing.valid) {
-      if (!record.stripeCouponId) {
-        await adminDb.collection('admin_discount_codes').doc(record.id).set(
-          { stripeCouponId: couponId },
-          { merge: true },
-        );
-      }
-      return couponId;
-    }
-  } catch (err) {
-    const stripeErr = err as Stripe.errors.StripeError;
-    if (stripeErr.code !== 'resource_missing') throw err;
-  }
-
-  const params: Stripe.CouponCreateParams = {
-    id: couponId,
+): Promise<Stripe.CouponCreateParams> {
+  return {
     duration: 'once',
     name: `StudYear ${record.code}`,
     ...(record.type === 'percentage'
@@ -148,47 +151,135 @@ export async function ensureStripeCouponForDiscount(
       ? { redeem_by: Math.floor(record.validUntil.getTime() / 1000) }
       : {}),
   };
+}
 
-  await stripe.coupons.create(params);
+async function promotionCodeStillValid(
+  stripe: Stripe,
+  promotionCodeId: string,
+): Promise<Stripe.PromotionCode | null> {
+  try {
+    const promo = await stripe.promotionCodes.retrieve(promotionCodeId);
+    if (!promo.active) return null;
+    const coupon = promo.coupon;
+    if (typeof coupon === 'object' && coupon && !coupon.valid) return null;
+    return promo;
+  } catch (err) {
+    const stripeErr = err as Stripe.errors.StripeError;
+    if (stripeErr.code === 'resource_missing') return null;
+    throw err;
+  }
+}
+
+/**
+ * Ensures a Stripe Promotion Code exists for a Firestore admin discount.
+ * Recreates coupon + promotion code if they were deleted in Stripe Dashboard.
+ */
+export async function ensureStripePromotionCodeForDiscount(
+  stripe: Stripe,
+  record: DiscountCodeRecord,
+): Promise<string> {
+  if (record.stripePromotionCodeId) {
+    const existing = await promotionCodeStillValid(stripe, record.stripePromotionCodeId);
+    if (existing) return existing.id;
+  }
+
+  // Try by customer-facing code string (survives coupon id churn)
+  const listed = await stripe.promotionCodes.list({
+    code: record.code,
+    limit: 3,
+  });
+  const activeMatch = listed.data.find((p) => p.active);
+  if (activeMatch) {
+    await adminDb.collection('admin_discount_codes').doc(record.id).set(
+      {
+        stripePromotionCodeId: activeMatch.id,
+        stripeCouponId:
+          typeof activeMatch.coupon === 'string'
+            ? activeMatch.coupon
+            : activeMatch.coupon?.id,
+        stripeSyncedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+    return activeMatch.id;
+  }
+
+  const coupon = await stripe.coupons.create(await couponParamsFromRecord(record));
+
+  const promo = await stripe.promotionCodes.create({
+    coupon: coupon.id,
+    code: record.code,
+    ...(record.maxRedemptions ? { max_redemptions: record.maxRedemptions } : {}),
+    ...(record.validUntil
+      ? { expires_at: Math.floor(record.validUntil.getTime() / 1000) }
+      : {}),
+  });
+
   await adminDb.collection('admin_discount_codes').doc(record.id).set(
     {
-      stripeCouponId: couponId,
+      stripeCouponId: coupon.id,
+      stripePromotionCodeId: promo.id,
       stripeSyncedAt: admin.firestore.FieldValue.serverTimestamp(),
     },
     { merge: true },
   );
 
-  return couponId;
+  return promo.id;
+}
+
+/** @deprecated Use ensureStripePromotionCodeForDiscount */
+export async function ensureStripeCouponForDiscount(
+  stripe: Stripe,
+  record: DiscountCodeRecord,
+): Promise<string> {
+  const promoId = await ensureStripePromotionCodeForDiscount(stripe, record);
+  const promo = await stripe.promotionCodes.retrieve(promoId);
+  const coupon = promo.coupon;
+  return typeof coupon === 'string' ? coupon : coupon?.id ?? promoId;
 }
 
 export async function resolveCheckoutDiscountCoupon(
   stripe: Stripe,
   rawCode: string | null | undefined,
-): Promise<{ couponId: string; record: DiscountCodeRecord } | { error: string }> {
+): Promise<
+  | { promotionCodeId: string; record?: DiscountCodeRecord; source: 'admin' | 'stripe_dashboard' }
+  | { error: string }
+> {
   const trimmed = rawCode?.trim();
   if (!trimmed) {
     return { error: 'Enter a discount code.' };
   }
 
   const record = await findActiveDiscountCode(trimmed);
-  if (!record) {
-    return { error: 'That discount code is invalid, expired, or has reached its usage limit.' };
-  }
-
-  if (record.value <= 0) {
-    return { error: 'That discount code is no longer valid.' };
+  if (record) {
+    if (record.value <= 0) {
+      return { error: 'That discount code is no longer valid.' };
+    }
+    try {
+      const promotionCodeId = await ensureStripePromotionCodeForDiscount(stripe, record);
+      return { promotionCodeId, record, source: 'admin' };
+    } catch (err) {
+      console.error('resolveCheckoutDiscountCoupon admin', err);
+      return {
+        error:
+          err instanceof Error
+            ? err.message
+            : 'Could not apply this discount code. Try again or contact support.',
+      };
+    }
   }
 
   try {
-    const couponId = await ensureStripeCouponForDiscount(stripe, record);
-    return { couponId, record };
+    const dashboardPromo = await findStripeDashboardPromotionCode(stripe, trimmed);
+    if (dashboardPromo) {
+      return {
+        promotionCodeId: dashboardPromo.id,
+        source: 'stripe_dashboard',
+      };
+    }
   } catch (err) {
-    console.error('resolveCheckoutDiscountCoupon', err);
-    return {
-      error:
-        err instanceof Error
-          ? err.message
-          : 'Could not apply this discount code. Try again or contact support.',
-    };
+    console.error('resolveCheckoutDiscountCoupon stripe dashboard', err);
   }
+
+  return { error: 'That discount code is invalid, expired, or has reached its usage limit.' };
 }
