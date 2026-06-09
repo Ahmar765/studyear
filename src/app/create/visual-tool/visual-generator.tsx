@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
+import { useUserProfile } from "@/hooks/use-user-profile";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Sparkles, Bot, Loader, Image as ImageIcon, BarChartHorizontal, Trash2, DraftingCompass } from "lucide-react";
 import { createVisualResourceAction } from "@/server/actions/visual-actions";
@@ -68,6 +69,7 @@ export default function VisualGenerator() {
   const [result, setResult] = useState<VisualResult>(null);
   const [isPending, startTransition] = useTransition();
   const { user } = useAuth();
+  const { userProfile } = useUserProfile();
   const { toast } = useToast();
 
   const form = useForm<FormValues>({
@@ -145,11 +147,20 @@ export default function VisualGenerator() {
     }
 
     setResult(null);
+    const studyLevel =
+      String(userProfile?.studyLevel ?? userProfile?.yearGroup ?? 'GCSE').trim() || 'GCSE';
+    const subject =
+      (Array.isArray(userProfile?.subjects) && userProfile.subjects[0]?.name
+        ? String(userProfile.subjects[0].name)
+        : 'General studies');
+
     const submissionData: Record<string, unknown> = {
       userId: user.uid,
       studentId: user.uid,
       type: values.type,
       title: values.title,
+      studyLevel,
+      subject,
     };
 
     if (["EDUCATIONAL_IMAGE", "VISUAL_DRAWING"].includes(values.type)) {

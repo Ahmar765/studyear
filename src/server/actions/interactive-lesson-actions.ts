@@ -98,14 +98,23 @@ export async function getNextStep(
   userId?: string,
 ) {
     try {
+        const userProfile = userId ? await getUserProfileServer(userId) : null;
+        const academicLevel = resolveQuizAcademicLevel(userProfile);
+        const subject = resolveQuizSubject(userProfile, topic);
+        const step =
+          lessonPlan.find((s) => s.step === currentStep) ??
+          lessonPlan[currentStep - 1];
+
         const input: AiTutorAssistanceInput = {
-            query: `Continue to the next step. The topic is ${topic}.`,
+            query: step
+              ? `Teach interactive lesson step ${currentStep}: "${step.title}". Key concept: ${step.concept}. Overall topic: ${topic}. Explain clearly, use examples, and check understanding before moving on.`
+              : `Continue the interactive lesson on ${topic} (step ${currentStep}).`,
             lessonPlan: lessonPlan,
             currentStep: currentStep,
         }
         const raw = await aiTutorAssistance(input);
         const enriched = userId && !raw.escalated
-          ? await enrichWithEducationalVisuals(raw, userId, topic)
+          ? await enrichWithEducationalVisuals(raw, userId, subject, academicLevel)
           : raw;
         return {
           success: true,

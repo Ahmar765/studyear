@@ -20,8 +20,16 @@ export const ReviewVisualSpecSchema = z.object({
   ]),
   title: z.string(),
   rationale: z.string(),
-  prompt: z.string().optional(),
-  chartDescription: z.string().optional(),
+  prompt: z
+    .string()
+    .optional()
+    .describe(
+      'For EDUCATIONAL_IMAGE: short topic description (e.g. "labelled arm muscles"). Labels are rendered in UK English — do not use foreign text.',
+    ),
+  chartDescription: z
+    .string()
+    .optional()
+    .describe('For charts: data story with UK English category names and units.'),
   data: z.unknown().optional(),
   xAxisLabel: z.string().optional(),
   yAxisLabel: z.string().optional(),
@@ -133,15 +141,13 @@ async function generateEducationalVisualsImpl(params: {
       }
 
       if (IMAGE_TYPES.has(parsed.visualType)) {
-        const prompt =
-          parsed.prompt?.trim() ||
-          buildEducationalImagePrompt({
-            title: parsed.title,
-            topic: parsed.rationale ?? parsed.title,
-            studyLevel: params.studyLevel,
-            subject: params.subject,
-            rationale: parsed.rationale,
-          });
+        const prompt = buildEducationalImagePrompt({
+          title: parsed.title,
+          topic: parsed.prompt?.trim() || parsed.rationale || parsed.title,
+          studyLevel: params.studyLevel,
+          subject: params.subject,
+          rationale: parsed.rationale,
+        });
         const img = await generateImage({ prompt });
         out.push({ ...parsed, imageUrl: img.imageUrl });
         continue;

@@ -68,6 +68,14 @@ Your job:
 {{/each}}
 {{/if}}
 
+{{#if lessonPlan}}
+**Interactive lesson — step {{currentStep}} of {{lessonPlan.length}}:**
+{{#each lessonPlan}}
+- Step {{step}}: {{title}} — {{concept}}
+{{/each}}
+Teach the content for the current step. Use the step title and concept above; do not skip ahead.
+{{/if}}
+
 **User's New Query:** "{{{query}}}"
 
 **Rules:**
@@ -75,7 +83,10 @@ Your job:
 2. **DIAGNOSE:** Identify the core misunderstanding in the user's query. Populate \`detectedWeakness\`.
 3. **GUIDE:** After answering, provide a \`followUpQuestion\` to check understanding and a \`nextAction\` to guide them.
 4. **ESCALATE:** If the query is ambiguous, outside your academic scope, involves sensitive topics, or you are not confident, set \`escalated\` to \`true\` and set \`response\` to "I'm not sure how to help with that. I'm escalating this to our human support team.".
-5. **VISUALS:** When a chart, graph, or labelled diagram would help (maths, science, geography, economics, etc.), add 1-2 entries to \`visuals\` with visualType, title, rationale, and chartDescription or prompt. Return an empty array or omit \`visuals\` when text alone is enough.
+5. **VISUALS:** When a chart, graph, or labelled diagram would help (maths, science, biology, geography, economics, etc.), add 1-2 entries to \`visuals\`:
+   - Charts: use BAR_GRAPH, LINE_GRAPH, or PIE_CHART with \`chartDescription\` (UK English axis labels and units).
+   - Labelled diagrams (muscles, cells, organs, maps): use EDUCATIONAL_IMAGE with a short \`prompt\` describing what to label (e.g. "labelled diagram of arm muscles: biceps, triceps, deltoid") — labels will be rendered in UK English.
+   - Omit \`visuals\` only when text alone is enough.
 
 Analyze the query and generate your response in the required JSON format.
 `,

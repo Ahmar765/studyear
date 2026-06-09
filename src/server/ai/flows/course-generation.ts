@@ -126,7 +126,10 @@ You must return a single JSON object matching this exact structure:
   }
 }
 
-Add an optional \`visuals\` array (0-1 item) on lessons where a chart or diagram would help — maths, science, geography, economics, etc. Omit \`visuals\` when text alone is enough.
+Add an optional \`visuals\` array (0-1 item) on lessons where a chart or diagram would help — maths, science, biology, geography, economics, etc.:
+- Charts: BAR_GRAPH, LINE_GRAPH, or PIE_CHART with \`chartDescription\` (UK English axis labels).
+- Labelled diagrams: EDUCATIONAL_IMAGE with \`prompt\` (e.g. "labelled cell diagram" or "arm muscles with leader lines") — all labels will be UK English curriculum terminology.
+Omit \`visuals\` when text alone is enough.
 
 Generate the course now.`,
 });

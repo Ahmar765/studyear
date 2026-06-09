@@ -66,6 +66,30 @@ export async function storeGeneratedImageUrl(
   }
 }
 
+/** Upload data-URL AI images to Cloudinary so tutor/course/lesson visuals survive reload. */
+export async function persistEducationalVisualImages<
+  T extends { imageUrl?: string },
+>(visuals: T[], userId: string, idPrefix: string): Promise<T[]> {
+  const out: T[] = [];
+  for (let index = 0; index < visuals.length; index++) {
+    const visual = visuals[index];
+    if (!visual.imageUrl) {
+      out.push(visual);
+      continue;
+    }
+    const stored = await storeGeneratedImageUrl(visual.imageUrl, {
+      userId,
+      id: `${idPrefix}-visual-${index}`,
+      folder: `studyear/ai-visuals/${userId}`,
+    });
+    out.push({
+      ...visual,
+      imageUrl: stored.displayUrl ?? stored.firestoreUrl ?? visual.imageUrl,
+    });
+  }
+  return out;
+}
+
 /** Strip oversized inline image payloads before writing to Firestore. */
 export function stripNonPersistableImageFields<T extends { imageUrl?: string }>(
   value: T,

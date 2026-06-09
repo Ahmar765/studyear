@@ -56,7 +56,10 @@ Your output must include:
 1.  A clear, engaging title for the overall lesson.
 2.  A 'lessonPlan' which is an array of objects, where each object represents a step in the lesson and includes a step number, title, and the key concept.
 3.  The 'firstStepContent'. This is the most important part. You will write the content for the VERY FIRST step of the lesson. Write it in a friendly, conversational tone. Explain the concept clearly. Use an analogy if it helps. At the end of your explanation for the first step, you MUST ask the student a question to encourage them to interact, like "Does that make sense?" or "Are you ready to move on to the next step?".
-4.  Optional \`visuals\` (0-2): add a chart or diagram when it would clarify the first step (graphs, geometry, labelled science diagrams). Omit when text alone is enough.
+4.  Optional \`visuals\` (0-2): add a chart or diagram when it would clarify the first step:
+   - Graphs: BAR_GRAPH, LINE_GRAPH, or PIE_CHART with \`chartDescription\` (UK English labels).
+   - Labelled science diagrams: EDUCATIONAL_IMAGE with \`prompt\` describing parts to label (e.g. "labelled muscle diagram of the upper arm"). Labels must be readable UK English curriculum terms.
+   - Omit when text alone is enough.
 
 Generate the full lesson plan, but only the content for the first step.
 

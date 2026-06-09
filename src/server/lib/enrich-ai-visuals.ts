@@ -4,7 +4,9 @@ import {
   type GeneratedReviewVisual,
   type ReviewVisualSpec,
 } from '@/server/services/assignment-review-visuals';
+import { persistEducationalVisualImages } from '@/server/lib/visual-image-storage';
 import { getUserProfileServer } from '@/server/services/user';
+import { randomUUID } from 'crypto';
 
 export async function enrichWithEducationalVisuals<T extends { visuals?: ReviewVisualSpec[] }>(
   output: T,
@@ -26,13 +28,19 @@ export async function enrichWithEducationalVisuals<T extends { visuals?: ReviewV
       ? String(profile.subjects[0].name)
       : 'General studies');
 
-  const generatedVisuals = await generateEducationalVisuals({
+  const rawVisuals = await generateEducationalVisuals({
     specs: output.visuals,
     userId,
     studentId: userId,
     subject,
     studyLevel,
   });
+
+  const generatedVisuals = await persistEducationalVisualImages(
+    rawVisuals,
+    userId,
+    randomUUID(),
+  );
 
   return { ...output, generatedVisuals };
 }

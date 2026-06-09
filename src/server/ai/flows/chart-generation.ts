@@ -28,9 +28,14 @@ const prompt = ai.definePrompt({
   name: 'generateChartDataPrompt',
   input: {schema: GenerateChartInputSchema},
   output: {schema: GenerateChartOutputSchema},
-  prompt: `You are a data visualization assistant. Your task is to convert a natural language description into a structured JSON object that can be used to render a chart.
+  prompt: `You are a data visualization assistant for UK students. Convert a natural language description into structured chart JSON.
 
-You will be given a description of data and a chart type. You must generate a suitable title and a data array for a charting library like Recharts. The data array should consist of objects with a 'name' (for the label) and a 'value' (for the numerical data).
+Generate a suitable title and a data array for a charting library. Each item needs a 'name' (category label) and 'value' (number).
+
+Rules:
+- All labels and titles must use UK English spelling and terminology
+- Use sensible UK curriculum units where relevant (%, £, metres, etc.)
+- Category names must be plain readable English (not codes or foreign text)
 
 Chart Type: {{{type}}}
 Description: {{{description}}}

@@ -1,5 +1,7 @@
 import type { GenerateCourseOutput } from '@/server/ai/flows/course-generation';
 import { generateEducationalVisuals, type GeneratedReviewVisual } from '@/server/services/assignment-review-visuals';
+import { persistEducationalVisualImages } from '@/server/lib/visual-image-storage';
+import { randomUUID } from 'crypto';
 
 export type EnrichedCourseLesson = GenerateCourseOutput['modules'][number]['lessons'][number] & {
   generatedVisuals?: GeneratedReviewVisual[];
@@ -31,13 +33,18 @@ export async function enrichCourseWithVisuals(
         lessons.push(lesson);
         continue;
       }
-      const generatedVisuals = await generateEducationalVisuals({
+      const rawVisuals = await generateEducationalVisuals({
         specs: lesson.visuals.slice(0, 1),
         userId,
         studentId: userId,
         subject,
         studyLevel: level,
       });
+      const generatedVisuals = await persistEducationalVisualImages(
+        rawVisuals,
+        userId,
+        randomUUID(),
+      );
       generatedCount += generatedVisuals.length;
       lessons.push({ ...lesson, generatedVisuals });
     }
