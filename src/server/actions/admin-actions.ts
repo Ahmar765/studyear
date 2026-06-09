@@ -161,7 +161,7 @@ export async function updateUserAction(
     targetUid: string,
     data: z.infer<typeof UpdateUserSchema>,
     idToken?: string | null,
-): Promise<{ success: boolean; error?: string; }> {
+): Promise<{ success: boolean; error?: string; warning?: string }> {
     if (!targetUid) {
         return { success: false, error: "Target User ID is required." };
     }
@@ -219,11 +219,32 @@ export async function updateUserAction(
             { merge: true },
         );
 
-        await adminAuth.setCustomUserClaims(targetUid, { role: validation.data.role });
-
         await batch.commit();
 
-        return { success: true };
+        let warning: string | undefined;
+        try {
+            await adminAuth.getUser(targetUid);
+            await adminAuth.setCustomUserClaims(targetUid, { role: validation.data.role });
+        } catch (authErr: unknown) {
+            const code =
+                authErr && typeof authErr === 'object' && 'code' in authErr
+                    ? String((authErr as { code?: string }).code)
+                    : '';
+            const isMissingAuthUser =
+                code === 'auth/user-not-found' ||
+                (authErr instanceof Error &&
+                    authErr.message.includes('no user record corresponding to the provided identifier'));
+
+            if (!isMissingAuthUser) throw authErr;
+
+            console.warn(
+                `updateUserAction: Firestore updated for ${targetUid} but Firebase Auth user is missing.`,
+            );
+            warning =
+                'Profile saved in the database, but this user has no Firebase login account. They cannot sign in until they register again with the same email.';
+        }
+
+        return { success: true, warning };
     } catch (error: any) {
         console.error('Error updating user:', error);
         return { success: false, error: error.message || 'An unexpected server error occurred.' };
@@ -247,8 +268,8 @@ export async function getUsersAction(): Promise<{ users: UserProfile[], error: s
             const role = String(plainData.role ?? data.role ?? '');
             const userSubscription = String(plainData.subscription ?? data.subscription ?? '');
             return {
-                uid: doc.id,
                 ...plainData,
+                uid: doc.id,
                 name: (plainData.name as string) || data.name || 'N/A',
                 subscription: resolveListedUserSubscription(
                     role,

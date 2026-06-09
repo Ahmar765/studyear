@@ -71,12 +71,15 @@ export default function EditUserForm({ user, onUpdateSuccess }: EditUserFormProp
       const token = adminUser ? await adminUser.getIdToken() : null;
       const result = await updateUserAction(user.uid, values, token);
       if (result.success) {
+        const displayName = user.name && user.name !== 'N/A' ? user.name : user.email ?? 'User';
         toast({
-          title: 'User updated',
+          title: result.warning ? 'User updated (limited)' : 'User updated',
           description:
-            values.role === 'PARENT' && values.subscription === 'PARENT_ELITE'
-              ? `${user.name} is now on Parent Elite. Use View as User to test the Command Centre.`
-              : `${user.name}'s profile has been updated.`,
+            result.warning ??
+            (values.role === 'PARENT' && values.subscription === 'PARENT_ELITE'
+              ? `${displayName} is now on Parent Elite. Use View as User to test the Command Centre.`
+              : `${displayName}'s profile has been updated.`),
+          ...(result.warning ? { variant: 'destructive' as const } : {}),
         });
         router.refresh();
         onUpdateSuccess();
