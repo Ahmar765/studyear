@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Suspense, useTransition } from 'react';
+import { Suspense, useCallback, useRef, useTransition } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { CreditCard, Loader, ShieldCheck, Check, Tag } from "lucide-react";
@@ -21,12 +21,11 @@ import {
 } from '@/data/subscription-plans';
 import { ACU_PACKAGES } from '@/data/acu-packages';
 import { Separator } from '@/components/ui/separator';
-import {
-  CheckoutDiscountCode,
-  type AppliedDiscount,
-} from '@/components/checkout/checkout-discount-code';
+import type { AppliedDiscount } from '@/components/checkout/checkout-discount-code';
+import { CheckoutDiscountSection } from '@/components/checkout/checkout-discount-section';
 import { CheckoutDiscountBanner } from '@/components/checkout/checkout-discount-banner';
 import { useCheckoutDiscount } from '@/hooks/use-checkout-discount';
+import { rememberDiscountForCheckoutCompletion } from '@/lib/checkout-discount-storage';
 
 function isStudentLikeRole(role: string | undefined): boolean {
   return role === 'STUDENT' || role === 'PRIVATE_TUTOR';
@@ -59,6 +58,12 @@ function AcuPackageCard({
 
   const handlePurchase = () => {
     startTransition(async () => {
+      if (discountCode && appliedDiscountLabel) {
+        rememberDiscountForCheckoutCompletion({
+          code: discountCode,
+          label: appliedDiscountLabel,
+        });
+      }
       const { success, sessionId, error } = await createCheckoutSession(
         productCode,
         user?.uid,
@@ -81,8 +86,15 @@ function AcuPackageCard({
     });
   };
 
+  const hasDiscount = Boolean(discountCode && appliedDiscountLabel);
+
   return (
-    <Card className={popular ? 'border-primary' : ''}>
+    <Card
+      className={cn(
+        popular ? 'border-primary' : '',
+        hasDiscount && 'ring-2 ring-emerald-500/35 shadow-md',
+      )}
+    >
       <CardHeader className="text-center">
         {popular && <p className="font-semibold text-primary mb-2">Most popular</p>}
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">
@@ -119,7 +131,11 @@ function AcuPackageCard({
         ) : null}
         <Button className="w-full" onClick={handlePurchase} disabled={isPending || !user}>
           {isPending ? <Loader className="animate-spin" /> : <CreditCard className="mr-2 h-4 w-4" />}
-          {isPending ? 'Processing…' : 'Purchase now'}
+          {isPending
+            ? 'Processing…'
+            : hasDiscount
+              ? `Purchase with ${discountCode}`
+              : 'Purchase now'}
         </Button>
       </CardContent>
     </Card>
@@ -151,6 +167,12 @@ function SubscriptionCard({
 
   const handleSubscribe = () => {
     startTransition(async () => {
+      if (discountCode && appliedDiscountLabel) {
+        rememberDiscountForCheckoutCompletion({
+          code: discountCode,
+          label: appliedDiscountLabel,
+        });
+      }
       const { success, sessionId, error } = await createCheckoutSession(
         productCode,
         user?.uid,
@@ -173,8 +195,16 @@ function SubscriptionCard({
     });
   };
 
+  const hasDiscount = Boolean(discountCode && appliedDiscountLabel);
+
   return (
-    <Card className={cn('flex flex-col', popular ? 'border-primary' : '')}>
+    <Card
+      className={cn(
+        'flex flex-col',
+        popular ? 'border-primary' : '',
+        hasDiscount && 'ring-2 ring-emerald-500/35 shadow-md',
+      )}
+    >
       <CardHeader className="text-center">
         {popular && <p className="font-semibold text-primary mb-2">Recommended</p>}
         <CardTitle className="text-3xl font-bold">{name}</CardTitle>
@@ -202,7 +232,11 @@ function SubscriptionCard({
       <CardFooter>
         <Button className="w-full" onClick={handleSubscribe} disabled={isPending || !user}>
           {isPending ? <Loader className="animate-spin" /> : <CreditCard className="mr-2 h-4 w-4" />}
-          {isPending ? 'Redirecting…' : 'Subscribe with Stripe'}
+          {isPending
+            ? 'Redirecting…'
+            : hasDiscount
+              ? `Subscribe with ${discountCode}`
+              : 'Subscribe with Stripe'}
         </Button>
       </CardFooter>
     </Card>
@@ -235,6 +269,19 @@ function CheckoutPageContent() {
   const { appliedDiscount, setAppliedDiscount } = useCheckoutDiscount();
   const discountCode = appliedDiscount?.code ?? null;
   const checkoutBottomPad = appliedDiscount ? 'pb-20' : '';
+  const plansRef = useRef<HTMLDivElement>(null);
+
+  const scrollToPlans = useCallback(() => {
+    plansRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
+
+  const discountSection = (
+    <CheckoutDiscountSection
+      applied={appliedDiscount}
+      onAppliedChange={setAppliedDiscount}
+      onScrollToPlans={scrollToPlans}
+    />
+  );
 
   if (loading) {
     return (
@@ -314,8 +361,18 @@ function CheckoutPageContent() {
           </p>
         </div>
 
-        <CheckoutDiscountCode applied={appliedDiscount} onAppliedChange={setAppliedDiscount} />
+        {discountSection}
 
+        <div
+          id="checkout-plans"
+          ref={plansRef}
+          className="scroll-mt-24 space-y-6"
+        >
+          {appliedDiscount ? (
+            <p className="text-center text-sm font-medium text-emerald-700 dark:text-emerald-400">
+              Step 2 — Choose a plan (your code {appliedDiscount.code} is already applied)
+            </p>
+          ) : null}
         <div className="grid sm:grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
           {SCHOOL_SUBSCRIPTION_PLANS.map((plan) => (
             <SubscriptionCard key={plan.productCode} {...plan} {...discountProps(appliedDiscount)} />
@@ -336,6 +393,7 @@ function CheckoutPageContent() {
             ))}
           </div>
         </div>
+        </div>
 
         <FooterNote subscriptions optionalAcu />
         {appliedDiscount ? (
@@ -354,11 +412,18 @@ function CheckoutPageContent() {
             Subscribe securely through Stripe to unlock the parent dashboard and linked-student insights.
           </p>
         </div>
-        <CheckoutDiscountCode applied={appliedDiscount} onAppliedChange={setAppliedDiscount} />
+        {discountSection}
+        <div id="checkout-plans" ref={plansRef} className="scroll-mt-24 space-y-6">
+          {appliedDiscount ? (
+            <p className="text-center text-sm font-medium text-emerald-700 dark:text-emerald-400">
+              Step 2 — Choose a plan (your code {appliedDiscount.code} is already applied)
+            </p>
+          ) : null}
         <div className="grid sm:grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 max-w-6xl mx-auto">
           {PARENT_SUBSCRIPTION_PLANS.map((plan) => (
             <SubscriptionCard key={plan.productCode} {...plan} {...discountProps(appliedDiscount)} />
           ))}
+        </div>
         </div>
         <FooterNote subscriptions />
         {appliedDiscount ? (
@@ -382,8 +447,14 @@ function CheckoutPageContent() {
         </p>
       </div>
 
-      <CheckoutDiscountCode applied={appliedDiscount} onAppliedChange={setAppliedDiscount} />
+      {discountSection}
 
+      <div id="checkout-plans" ref={plansRef} className="scroll-mt-24 space-y-6">
+        {appliedDiscount ? (
+          <p className="text-center text-sm font-medium text-emerald-700 dark:text-emerald-400">
+            Step 2 — Choose a pack or plan (your code {appliedDiscount.code} is already applied)
+          </p>
+        ) : null}
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 max-w-6xl mx-auto">
         {acuPackages.map((pkg) => (
           <AcuPackageCard key={pkg.productCode} {...pkg} {...discountProps(appliedDiscount)} />
@@ -429,6 +500,7 @@ function CheckoutPageContent() {
           </div>
         </div>
       )}
+      </div>
 
       <FooterNote subscriptions optionalAcu />
       {appliedDiscount ? (

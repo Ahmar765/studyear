@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { validateDiscountCodeAction } from '@/server/actions/discount-actions';
+import { cn } from '@/lib/utils';
 
 export type AppliedDiscount = {
   code: string;
@@ -17,9 +18,15 @@ export type AppliedDiscount = {
 type CheckoutDiscountCodeProps = {
   applied: AppliedDiscount | null;
   onAppliedChange: (discount: AppliedDiscount | null) => void;
+  /** Called after a code is successfully applied (e.g. scroll to plans). */
+  onApplied?: () => void;
 };
 
-export function CheckoutDiscountCode({ applied, onAppliedChange }: CheckoutDiscountCodeProps) {
+export function CheckoutDiscountCode({
+  applied,
+  onAppliedChange,
+  onApplied,
+}: CheckoutDiscountCodeProps) {
   const [input, setInput] = useState(applied?.code ?? '');
   const [isPending, startTransition] = useTransition();
   const { toast } = useToast();
@@ -47,12 +54,14 @@ export function CheckoutDiscountCode({ applied, onAppliedChange }: CheckoutDisco
         return;
       }
 
-      onAppliedChange({ code: result.code, label: result.label });
+      const next = { code: result.code, label: result.label };
+      onAppliedChange(next);
       setInput(result.code);
       toast({
-        title: 'Code applied',
-        description: `${result.code} — ${result.label} will be applied at Stripe checkout.`,
+        title: 'Code applied — now pick a plan',
+        description: `${result.code} (${result.label}) will appear as a discount on Stripe when you pay.`,
       });
+      onApplied?.();
     });
   };
 
@@ -62,7 +71,13 @@ export function CheckoutDiscountCode({ applied, onAppliedChange }: CheckoutDisco
   };
 
   return (
-    <Card className="max-w-xl mx-auto border-dashed">
+    <Card
+      id="discount-code-box"
+      className={cn(
+        'border-dashed scroll-mt-24',
+        applied ? 'border-emerald-500/50 shadow-sm ring-1 ring-emerald-500/20' : 'border-primary/30',
+      )}
+    >
       <CardHeader className="pb-3">
         <CardTitle className="text-lg flex items-center gap-2">
           <Tag className="h-5 w-5 text-primary" />
@@ -73,13 +88,33 @@ export function CheckoutDiscountCode({ applied, onAppliedChange }: CheckoutDisco
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <ol className="list-decimal list-inside space-y-1.5 text-sm text-muted-foreground rounded-md border bg-muted/30 px-3 py-3">
-          <li>Type your code below and click <strong className="text-foreground">Apply code</strong></li>
-          <li>Choose an ACU pack or subscription plan</li>
-          <li>
-            On Stripe&apos;s payment page you&apos;ll see the discount as a line-item reduction before you pay
-          </li>
-        </ol>
+        <div className="grid gap-2 text-sm rounded-md border bg-muted/30 px-3 py-3">
+          <div className="flex items-start gap-3">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">
+              1
+            </span>
+            <p className="text-muted-foreground pt-0.5">
+              Enter your code here and click <strong className="text-foreground">Apply code</strong>
+            </p>
+          </div>
+          <div className="flex items-start gap-3">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/80 text-primary-foreground text-xs font-bold">
+              2
+            </span>
+            <p className="text-muted-foreground pt-0.5">
+              Scroll down and click <strong className="text-foreground">Purchase</strong> or{' '}
+              <strong className="text-foreground">Subscribe</strong> on any plan
+            </p>
+          </div>
+          <div className="flex items-start gap-3">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/60 text-primary-foreground text-xs font-bold">
+              3
+            </span>
+            <p className="text-muted-foreground pt-0.5">
+              On Stripe&apos;s secure page, your discount appears as a line-item reduction before you pay
+            </p>
+          </div>
+        </div>
         <div className="flex flex-col gap-2 sm:flex-row">
           <Input
             value={input}

@@ -23,8 +23,14 @@ export function CheckoutDiscountBanner({ applied, onClear }: CheckoutDiscountBan
           <span className="font-medium">Discount ready:</span>
           <span className="font-mono font-semibold">{applied.code}</span>
           <Badge variant="secondary">{applied.label}</Badge>
-          <span className="text-muted-foreground hidden sm:inline">
-            — pick a plan below, then confirm the reduced price on Stripe
+          <a
+            href="#checkout-plans"
+            className="text-emerald-700 dark:text-emerald-400 underline underline-offset-2 hidden sm:inline"
+          >
+            Jump to plans
+          </a>
+          <span className="text-muted-foreground hidden md:inline">
+            — discount shows on Stripe before you pay
           </span>
         </div>
         <Button type="button" variant="ghost" size="sm" onClick={onClear} className="shrink-0">

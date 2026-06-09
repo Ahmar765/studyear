@@ -4,30 +4,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import type { AppliedDiscount } from '@/components/checkout/checkout-discount-code';
 import { validateDiscountCodeAction } from '@/server/actions/discount-actions';
-
-const STORAGE_KEY = 'studyear_checkout_discount';
-
-function readStoredDiscount(): AppliedDiscount | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    const raw = sessionStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as AppliedDiscount;
-    if (parsed?.code && parsed?.label) return parsed;
-  } catch {
-    /* ignore */
-  }
-  return null;
-}
-
-function writeStoredDiscount(discount: AppliedDiscount | null) {
-  if (typeof window === 'undefined') return;
-  if (!discount) {
-    sessionStorage.removeItem(STORAGE_KEY);
-    return;
-  }
-  sessionStorage.setItem(STORAGE_KEY, JSON.stringify(discount));
-}
+import {
+  readStoredCheckoutDiscount,
+  writeStoredCheckoutDiscount,
+} from '@/lib/checkout-discount-storage';
 
 export function useCheckoutDiscount() {
   const searchParams = useSearchParams();
@@ -36,11 +16,11 @@ export function useCheckoutDiscount() {
 
   const setAppliedDiscount = useCallback((discount: AppliedDiscount | null) => {
     setAppliedDiscountState(discount);
-    writeStoredDiscount(discount);
+    writeStoredCheckoutDiscount(discount);
   }, []);
 
   useEffect(() => {
-    const stored = readStoredDiscount();
+    const stored = readStoredCheckoutDiscount();
     if (stored) setAppliedDiscountState(stored);
   }, []);
 

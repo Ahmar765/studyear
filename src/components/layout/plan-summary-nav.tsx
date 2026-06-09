@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Crown, Fuel, PlusCircle } from 'lucide-react';
+import { Crown, Fuel, PlusCircle, Tag } from 'lucide-react';
 import Link from 'next/link';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useUserProfile } from '@/hooks/use-user-profile';
@@ -88,6 +88,12 @@ export default function PlanSummaryNav() {
           <Fuel className="h-4 w-4 shrink-0 text-primary" />
           <span>{balance.toLocaleString()} ACUs</span>
         </div>
+        <Button asChild variant="outline" size="sm">
+          <Link href="/checkout#discount-code-box">
+            <Tag className="mr-2 h-4 w-4" />
+            Promo code
+          </Link>
+        </Button>
         <Button asChild size="sm">
           <Link href="/top-up">
             <PlusCircle className="mr-2 h-4 w-4" />
@@ -107,6 +113,12 @@ export default function PlanSummaryNav() {
         <Crown className="h-4 w-4 shrink-0 text-primary" />
         <span className="truncate max-w-[10rem] sm:max-w-none">{tierLabel}</span>
       </div>
+      <Button asChild variant="outline" size="sm">
+        <Link href="/checkout#discount-code-box">
+          <Tag className="mr-2 h-4 w-4" />
+          Promo code
+        </Link>
+      </Button>
       <Button asChild size="sm">
         <Link href="/checkout">
           <PlusCircle className="mr-2 h-4 w-4" />

@@ -21,6 +21,10 @@ import {
 import { useTransition, useEffect, useState, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter, useSearchParams } from 'next/navigation';
+import {
+  clearCheckoutDiscountSession,
+  readLastCheckoutDiscount,
+} from '@/lib/checkout-discount-storage';
 import { subscriptionTypeDisplayName } from '@/data/subscription-plans';
 import { useAcuWallet } from '@/hooks/use-acu-wallet';
 import { useImpersonation } from '@/hooks/use-impersonation';
@@ -136,11 +140,14 @@ function AccountPageInner() {
         const acuResult = await finalizeAcuCheckoutSessionAction(token, sessionId);
         if (cancelled) return;
 
+        const lastDiscount = readLastCheckoutDiscount();
+
         if (subResult.ok && subResult.activated) {
           toast({
             title: 'Subscription active',
-            description:
-              'Your plan is now active. Refresh once if something still looks locked.',
+            description: lastDiscount
+              ? `Your plan is active. Discount ${lastDiscount.code} (${lastDiscount.label}) was applied on Stripe.`
+              : 'Your plan is now active. Refresh once if something still looks locked.',
           });
         } else if (!subResult.ok) {
           toast({
@@ -155,7 +162,9 @@ function AccountPageInner() {
             title: acuResult.duplicate ? 'Payment already recorded' : 'Top-up complete',
             description: acuResult.duplicate
               ? 'Your ACU balance is already up to date.'
-              : 'Your ACU balance has been updated.',
+              : lastDiscount
+                ? `Your ACU balance has been updated. Discount ${lastDiscount.code} (${lastDiscount.label}) was applied on Stripe.`
+                : 'Your ACU balance has been updated.',
           });
         } else if (!acuResult.ok) {
           toast({
@@ -190,6 +199,7 @@ function AccountPageInner() {
         }
       } finally {
         if (!cancelled) {
+          clearCheckoutDiscountSession();
           router.replace('/account', { scroll: false });
         }
       }
