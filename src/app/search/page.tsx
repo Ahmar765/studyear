@@ -20,7 +20,10 @@ export default async function SearchPage() {
       <div className="flex flex-col items-center text-center space-y-2">
         <h2 className="text-3xl font-bold tracking-tight">Find Study Resources</h2>
         <p className="text-muted-foreground max-w-2xl">
-          Browse AI-generated and community-contributed study materials — quizzes, summaries, mind maps, videos, past papers, and visual tools. Use subject and level filters on each category to match your course.
+          Browse {LIBRARY_HUB_SECTIONS.length} resource categories — quizzes, flashcards, summaries,
+          mind maps, formula sheets, study plans, essay plans, AI courses, interactive lessons,
+          videos, past papers, and visual tools. Open a category, then filter by your subject and
+          study level.
         </p>
         <Button asChild variant="outline" className="mt-2">
           <Link href="/contribute">Submit a video or past paper for review</Link>

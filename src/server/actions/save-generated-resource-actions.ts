@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { verifyIdTokenString } from "@/server/lib/auth";
 import { savedResourceService } from "@/server/services/resources";
+import { resolveResourceCatalogMeta } from "@/server/lib/resource-catalog-meta";
 
 const SaveGeneratedSchema = z.object({
   idToken: z.string().min(10),
@@ -36,6 +37,14 @@ export async function saveGeneratedResourceToLibrary(
   }
 
   try {
+    const catalog = await resolveResourceCatalogMeta({
+      studentId: user.uid,
+      type: parsed.data.type,
+      title: parsed.data.title.trim(),
+      content: safeContent ?? null,
+      sourceInput: parsed.data.sourceInput?.trim() || undefined,
+    });
+
     await savedResourceService.save({
       studentId: user.uid,
       type: parsed.data.type,
@@ -43,6 +52,9 @@ export async function saveGeneratedResourceToLibrary(
       content: safeContent ?? null,
       sourceInput: parsed.data.sourceInput?.trim() || undefined,
       linkedEntityId: parsed.data.linkedEntityId?.trim() || undefined,
+      subject: catalog.subject,
+      level: catalog.level,
+      topic: catalog.topic,
     });
     return { success: true };
   } catch (e: unknown) {

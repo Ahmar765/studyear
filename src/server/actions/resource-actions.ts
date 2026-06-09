@@ -9,9 +9,10 @@ import { z } from 'zod';
 import { savedResourceService } from '../services/resources';
 import { getPastPaperPdfUrl } from '@/lib/past-paper-url';
 import { VISUAL_TOOL_RESOURCE_TYPES } from '@/data/public-library';
-import { formatResourceLevel, formatResourceSubject } from '@/lib/resource-labels';
+import { formatResourceSubject } from '@/lib/resource-labels';
 import { subjects } from '@/data/academic';
-import { PUBLIC_LIBRARY_RESOURCE_TYPES } from '@/data/public-library';
+import { LIBRARY_HUB_SECTIONS } from '@/data/public-library';
+import { displayResourceCatalogFields } from '@/server/lib/resource-catalog-meta';
 
 export async function getResourceCountsAction(): Promise<Record<string, number>> {
   try {
@@ -21,13 +22,21 @@ export async function getResourceCountsAction(): Promise<Record<string, number>>
       counts[doc.id] = doc.data().total || 0;
     });
 
-    /** Reconcile from live `resources` when counters are missing (e.g. legacy VIDEO rows). */
-    const types = ['VIDEO', 'PAST_PAPER', 'QUIZ', 'FLASHCARD'];
+    /** Reconcile from live `resources` when counters are missing. */
+    const typesToReconcile = new Set<string>();
+    for (const section of LIBRARY_HUB_SECTIONS) {
+      for (const t of section.resourceTypes) typesToReconcile.add(t);
+    }
+
     await Promise.all(
-      types.map(async (type) => {
+      [...typesToReconcile].map(async (type) => {
         if ((counts[type] ?? 0) > 0) return;
         try {
-          const snap = await adminDb.collection('resources').where('type', '==', type).count().get();
+          const snap = await adminDb
+            .collection('resources')
+            .where('type', '==', type)
+            .count()
+            .get();
           const n = snap.data().count;
           if (n > 0) counts[type] = n;
         } catch {
@@ -129,24 +138,28 @@ export async function getResourcesByTypeAction(
 
     const rows = docs.map((doc) => {
       const data = doc.data();
+      const catalog = displayResourceCatalogFields(data);
       const { createdBy: _c, content: _big, sourceInput: _s, ...meta } = data;
       return {
         ...meta,
         id: doc.id,
+        displaySubject: catalog.subject,
+        displayLevel: catalog.level,
+        displayTopic: catalog.topic,
         createdAtMillis: millisFromFirestoreTimestamp(data.createdAt),
       };
     });
 
     rows.sort((a, b) => b.createdAtMillis - a.createdAtMillis);
 
-    const resources = rows.map(({ createdAtMillis: _m, ...rest }) => {
+    const resources = rows.map(({ createdAtMillis: _m, displaySubject, displayLevel, displayTopic, ...rest }) => {
       const data = rest as Record<string, unknown>;
       return {
         id: String(data.id ?? ""),
         title: String(data.title ?? "Untitled"),
-        topic: String(data.topic ?? ""),
-        subject: formatResourceSubject(String(data.subject ?? "")),
-        level: formatResourceLevel(String(data.level ?? "")),
+        topic: displayTopic || String(data.topic ?? ""),
+        subject: displaySubject,
+        level: displayLevel,
         createdAt: isoFromFirestoreTimestamp(data.createdAt),
         videoUrl:
           typeof data.videoUrl === "string"

@@ -10,6 +10,7 @@ import { AIRequestLog } from '@/server/services/activity';
 import { AcuTransaction, SubscriptionType, UserRole } from '@/server/schemas';
 import { Timestamp, type QuerySnapshot } from 'firebase-admin/firestore';
 import { fetchUserLabelsByIds } from '@/server/lib/admin-user-labels';
+import { formatResourceLevel, formatResourceSubject } from '@/lib/resource-labels';
 import { USD_TO_GBP_ASSUMED } from '@/server/lib/ai-provider-cost-estimate';
 import { GBP_PER_ACU_ENTRY_RATE } from '@/data/acu-economics';
 import { AI_USAGE_AGG_ROW_CAP } from '@/server/lib/platform-economics-constants';
@@ -599,8 +600,8 @@ export async function reviewResourceAction(values: z.infer<typeof ReviewSchema>)
                     type: uploadData.type,
                     title: uploadData.title ?? 'Resource',
                     topic: uploadData.topic ?? '',
-                    subject: uploadData.subject ?? 'General',
-                    level: uploadData.level ?? '',
+                    subject: formatResourceSubject(String(uploadData.subject ?? '')),
+                    level: formatResourceLevel(String(uploadData.level ?? '')),
                     url: fileUrl,
                     videoUrl: isVideo ? fileUrl : uploadData.videoUrl ?? null,
                     fileUrl: !isVideo ? fileUrl : null,

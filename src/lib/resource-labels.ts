@@ -7,7 +7,25 @@ const subjectCodeToName = new Map(
 const levelCanonical = new Map(levels.map((l) => [l.toLowerCase(), l]));
 
 const JUNK_FILTER_VALUES = new Set(
-  ['community', 'general', 'all levels', 'various', ''].map((s) => s.toLowerCase()),
+  [
+    'community',
+    'community resource',
+    'community resources',
+    'shared',
+    'general',
+    'general studies',
+    'all levels',
+    'all level',
+    'various',
+    'mixed',
+    'misc',
+    'miscellaneous',
+    'n/a',
+    'na',
+    'none',
+    'unknown',
+    '',
+  ].map((s) => s.toLowerCase()),
 );
 
 /** Turn stored subject codes (e.g. MATHEMATICS) into readable labels. */

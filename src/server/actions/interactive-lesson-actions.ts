@@ -75,6 +75,9 @@ export async function createLesson(topic: string, userId: string) {
       type: 'AI_INTERACTIVE_LESSON',
       title: enriched.lessonTitle,
       content: enriched,
+      subject: resolveQuizSubject(userProfile, enriched.lessonTitle),
+      level: academicLevel,
+      topic: topic.trim(),
     });
 
     return { success: true, lesson: enriched };

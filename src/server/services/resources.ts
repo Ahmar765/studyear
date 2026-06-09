@@ -2,6 +2,7 @@ import { adminDb } from '@/lib/firebase/admin-app';
 import * as admin from 'firebase-admin';
 import { stripUndefinedDeep } from '@/server/lib/strip-undefined-deep';
 import { PRIVATE_LIBRARY_RESOURCE_TYPES } from '@/data/public-library';
+import { resolveResourceCatalogMeta } from '@/server/lib/resource-catalog-meta';
 
 function shouldPublishGlobally(type: string): boolean {
   return !(PRIVATE_LIBRARY_RESOURCE_TYPES as Set<string>).has(type);
@@ -105,6 +106,17 @@ export const savedResourceService = {
 
     if (!skip) {
       try {
+        const catalog = await resolveResourceCatalogMeta({
+          studentId: input.studentId,
+          type: input.type,
+          title: input.title,
+          content: safeContent,
+          sourceInput: input.sourceInput ?? null,
+          subject: input.subject ?? null,
+          level: input.level ?? null,
+          topic: input.topic ?? null,
+        });
+
         await publishToGlobalLibrary({
           type: input.type,
           title: input.title,
@@ -112,9 +124,9 @@ export const savedResourceService = {
           sourceInput: input.sourceInput ?? null,
           fileUrl: input.fileUrl ?? null,
           videoUrl: input.videoUrl ?? null,
-          subject: input.subject ?? null,
-          level: input.level ?? null,
-          topic: input.topic ?? null,
+          subject: catalog.subject,
+          level: catalog.level,
+          topic: catalog.topic,
         });
       } catch (e) {
         console.error('publishToGlobalLibrary failed (saved_resources still stored):', e);

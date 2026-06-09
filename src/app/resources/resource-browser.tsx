@@ -1,7 +1,6 @@
 'use client';
 
-import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useState, useTransition } from 'react';
 import { getResourcesByTypeAction, saveUserResourceAction } from '@/server/actions/resource-actions';
 import { useAuth } from '@/hooks/use-auth';
@@ -49,6 +48,7 @@ export default function ResourceBrowser({
     canonicalSubjects = [],
     canonicalLevels = [],
 }: ResourceBrowserProps) {
+    const router = useRouter();
     const searchParams = useSearchParams();
     const typeParam = searchParams.get('type');
     const type =
@@ -69,12 +69,16 @@ export default function ResourceBrowser({
     const { toast } = useToast();
 
     useEffect(() => {
+        if (!type) {
+            router.replace('/search');
+            return;
+        }
         setSearch('');
         setSubjectFilter('__all__');
         setLevelFilter('__all__');
         setVisibleCount(PAGE_SIZE);
         setResources([]);
-    }, [type]);
+    }, [type, router]);
 
     useEffect(() => {
         if (!type) return;
@@ -172,14 +176,8 @@ export default function ResourceBrowser({
     if (!type) {
         return (
             <div className="flex-1 space-y-8 p-4 md:p-8">
-                <h2 className="text-3xl font-bold tracking-tight">Find Study Resources</h2>
-                <p className="text-muted-foreground max-w-xl">
-                    Pick a category from the hub to browse resources. Unknown or missing{' '}
-                    <code className="text-xs">type</code> in the URL cannot be loaded.
-                </p>
-                <Button asChild>
-                    <Link href="/search">Back to categories</Link>
-                </Button>
+                <Skeleton className="h-10 w-1/2" />
+                <Skeleton className="h-6 w-3/4" />
             </div>
         );
     }
@@ -294,18 +292,12 @@ export default function ResourceBrowser({
                                         </CardHeader>
                                         <CardContent className="flex-grow space-y-2">
                                             <div className="flex flex-wrap gap-2">
-                                                {formatResourceLevel(resource.level) !==
-                                                    'All levels' && (
-                                                    <Badge variant="outline">
-                                                        {formatResourceLevel(resource.level)}
-                                                    </Badge>
-                                                )}
-                                                {formatResourceSubject(resource.subject) !==
-                                                    'General' && (
-                                                    <Badge variant="secondary">
-                                                        {formatResourceSubject(resource.subject)}
-                                                    </Badge>
-                                                )}
+                                                <Badge variant="outline">
+                                                    {formatResourceLevel(resource.level)}
+                                                </Badge>
+                                                <Badge variant="secondary">
+                                                    {formatResourceSubject(resource.subject)}
+                                                </Badge>
                                             </div>
                                             <p className="text-xs text-muted-foreground pt-2">
                                                 Created: {formatCreated(resource.createdAt)}
