@@ -2,9 +2,9 @@ import { adminDb } from '@/lib/firebase/admin-app';
 import type { SystemSettings } from '@/server/schemas/system-settings';
 
 const defaultCommunications = {
-  supportEmail: 'support@studyear.ai',
-  contactEmail: 'contact@studyear.ai',
-  noreplyEmail: 'noreply@studyear.ai',
+  supportEmail: 'support@studyear.com',
+  contactEmail: 'contact@studyear.com',
+  noreplyEmail: 'contact@studyear.com',
 };
 
 /** Read-only settings loader — avoids circular imports with mail.ts. */

@@ -8,7 +8,14 @@ import {
   SystemSettingsSchema,
   type SystemSettings,
 } from '@/server/schemas/system-settings';
-import { sendContactFormNotification } from '@/server/lib/mail';
+import {
+  getMailDeliveryStatus,
+  sendContactFormNotification,
+  sendTestEmail,
+  verifySmtpConnection,
+} from '@/server/lib/mail';
+import { getVerifiedUser } from '@/server/lib/auth';
+import { ensurePlatformAdminAccess, isPlatformAdmin } from '@/server/lib/platform-admin';
 
 const defaultSettings: SystemSettings = {
   featureFlags: {
@@ -22,9 +29,9 @@ const defaultSettings: SystemSettings = {
     tutor_commission: 15,
   },
   communications: {
-    supportEmail: 'support@studyear.ai',
-    contactEmail: 'contact@studyear.ai',
-    noreplyEmail: 'noreply@studyear.ai',
+    supportEmail: 'support@studyear.com',
+    contactEmail: 'contact@studyear.com',
+    noreplyEmail: 'contact@studyear.com',
     businessDetails: {
       companyName: 'StudYear Ltd.',
       registeredAddress: '123 Learning Lane, London, UK, SW1A 0AA',
@@ -130,7 +137,7 @@ export async function submitContactFormAction(input: {
   email: string;
   enquiryType: string;
   message: string;
-}): Promise<{ success: boolean; emailSent?: boolean; error?: string }> {
+}): Promise<{ success: boolean; emailSent?: boolean; inbox?: string; error?: string }> {
   try {
     const fullName = input.fullName?.trim();
     const email = input.email?.trim().toLowerCase();
@@ -157,9 +164,115 @@ export async function submitContactFormAction(input: {
       console.warn('[contact] stored in Firestore but outbound email was not sent (check MAIL_* env).');
     }
 
-    return { success: true, emailSent: mail.sent };
+    return { success: true, emailSent: mail.sent, inbox: mail.inbox };
   } catch (error) {
     console.error('Contact form error:', error);
     return { success: false, error: 'Could not send your message. Please try again.' };
+  }
+}
+
+async function assertPlatformAdmin(idToken?: string | null) {
+  const user = await getVerifiedUser(idToken);
+  if (!user) throw new Error('You must be signed in.');
+  await ensurePlatformAdminAccess(user.uid, user.email);
+  if (!(await isPlatformAdmin(user.uid, user))) {
+    throw new Error('Administrator access required.');
+  }
+  return user;
+}
+
+export async function getMailDeliveryStatusAction(idToken?: string | null) {
+  try {
+    await assertPlatformAdmin(idToken);
+    const status = await getMailDeliveryStatus();
+    const verify = status.configured ? await verifySmtpConnection() : { ok: false };
+    return {
+      success: true,
+      ...status,
+      connectionOk: verify.ok,
+      connectionError: verify.error,
+    };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    return { success: false, error: msg };
+  }
+}
+
+export async function sendTestEmailAction(idToken: string | null | undefined, to: string) {
+  try {
+    await assertPlatformAdmin(idToken);
+    const email = to.trim().toLowerCase();
+    if (!email.includes('@')) {
+      return { success: false, error: 'Enter a valid email address.' };
+    }
+    const result = await sendTestEmail(email);
+    return {
+      success: result.sent,
+      error: result.sent ? undefined : result.error ?? 'Email could not be sent.',
+    };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    return { success: false, error: msg };
+  }
+}
+
+export type ContactSubmissionRow = {
+  id: string;
+  fullName: string;
+  email: string;
+  enquiryType: string;
+  message: string;
+  status: string;
+  createdAt: string;
+};
+
+export async function listContactSubmissionsAction(
+  idToken?: string | null,
+): Promise<{ success: boolean; submissions: ContactSubmissionRow[]; inbox?: string; error?: string }> {
+  try {
+    await assertPlatformAdmin(idToken);
+    const inbox = (await getMailDeliveryStatus()).contactInbox;
+    const snap = await adminDb
+      .collection('contact_submissions')
+      .orderBy('createdAt', 'desc')
+      .limit(100)
+      .get();
+
+    const submissions: ContactSubmissionRow[] = snap.docs.map((doc) => {
+      const d = doc.data();
+      const created = d.createdAt as admin.firestore.Timestamp | undefined;
+      return {
+        id: doc.id,
+        fullName: (d.fullName as string) ?? '',
+        email: (d.email as string) ?? '',
+        enquiryType: (d.enquiryType as string) ?? 'support',
+        message: (d.message as string) ?? '',
+        status: (d.status as string) ?? 'NEW',
+        createdAt: created?.toDate?.()?.toISOString() ?? new Date().toISOString(),
+      };
+    });
+
+    return { success: true, submissions, inbox };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    return { success: false, submissions: [], error: msg };
+  }
+}
+
+export async function updateContactSubmissionStatusAction(
+  idToken: string | null | undefined,
+  submissionId: string,
+  status: 'NEW' | 'READ' | 'REPLIED',
+) {
+  try {
+    await assertPlatformAdmin(idToken);
+    await adminDb.collection('contact_submissions').doc(submissionId).update({
+      status,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    return { success: true };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    return { success: false, error: msg };
   }
 }

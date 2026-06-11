@@ -9,6 +9,9 @@ import {
 } from '@/server/lib/billing';
 import { recordDiscountRedemption } from '@/server/lib/discount-codes';
 import type { SubscriptionType } from '@/server/schemas';
+import { sendSubscriptionReceiptEmail } from '@/server/lib/mail';
+import { subscriptionTypeDisplayName } from '@/data/subscription-plans';
+import { adminDb } from '@/lib/firebase/admin-app';
 export async function POST(req: NextRequest) {
   const body = await req.text();
   const sig = headers().get('stripe-signature') as string;
@@ -87,7 +90,27 @@ export async function POST(req: NextRequest) {
                 subscriptionType,
                 'ACTIVE'
             );
-             console.log(`Created subscription for user ${userId}`);
+            console.log(`Created subscription for user ${userId}`);
+            try {
+              const userSnap = await adminDb.doc(`users/${userId}`).get();
+              const userEmail = userSnap.data()?.email as string | undefined;
+              if (userEmail) {
+                const amountGbp =
+                  typeof session.amount_total === 'number'
+                    ? `£${(session.amount_total / 100).toFixed(2)}`
+                    : undefined;
+                void sendSubscriptionReceiptEmail({
+                  email: userEmail,
+                  name: userSnap.data()?.name as string | undefined,
+                  planLabel: subscriptionTypeDisplayName(subscriptionType),
+                  amountGbp,
+                }).catch((err) =>
+                  console.error('[stripe] subscription receipt email failed:', err),
+                );
+              }
+            } catch (mailErr) {
+              console.error('[stripe] could not send subscription receipt:', mailErr);
+            }
         }
         break;
       }

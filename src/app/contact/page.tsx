@@ -10,8 +10,8 @@ export default async function ContactPage() {
   const companyName = business?.companyName?.trim() || "StudYear Ltd.";
   const registeredAddress =
     business?.registeredAddress?.trim() || "123 Learning Lane, London, UK, SW1A 0AA";
-  const contactEmail = communications?.contactEmail?.trim() || "contact@studyear.ai";
-  const supportEmail = communications?.supportEmail?.trim() || "support@studyear.ai";
+  const contactEmail = communications?.contactEmail?.trim() || "contact@studyear.com";
+  const supportEmail = communications?.supportEmail?.trim() || "support@studyear.com";
 
   return (
     <div className="flex-1 space-y-8 p-4 md:p-8">
@@ -27,7 +27,11 @@ export default async function ContactPage() {
           <CardHeader>
             <CardTitle>Send us a Message</CardTitle>
             <CardDescription>
-              Fill out the form and our team will get back to you as soon as possible.
+              Fill out the form — a copy is delivered to{" "}
+              <a href={`mailto:${contactEmail}`} className="text-primary underline">
+                {contactEmail}
+              </a>{" "}
+              when email is configured, and always saved in our admin inbox.
             </CardDescription>
           </CardHeader>
           <CardContent>

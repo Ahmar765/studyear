@@ -9,7 +9,7 @@ type SendMailInput = {
   replyTo?: string;
 };
 
-function smtpConfigured(): boolean {
+export function smtpConfigured(): boolean {
   return Boolean(
     process.env.MAIL_SMTP_HOST?.trim() &&
       process.env.MAIL_USERNAME?.trim() &&
@@ -17,10 +17,24 @@ function smtpConfigured(): boolean {
   );
 }
 
+function smtpFromAddress(): string {
+  return (
+    process.env.MAIL_FROM_ADDRESS?.trim() ||
+    process.env.MAIL_USERNAME?.trim() ||
+    'noreply@studyear.com'
+  );
+}
+
+function smtpFromName(): string {
+  return process.env.MAIL_FROM_NAME?.trim() || 'StudYear';
+}
+
 function createTransport() {
   const port = Number(process.env.MAIL_SMTP_PORT || 465);
   const secure =
-    process.env.MAIL_SMTP_SECURE === 'true' || process.env.MAIL_SMTP_SECURE === '1' || port === 465;
+    process.env.MAIL_SMTP_SECURE === 'true' ||
+    process.env.MAIL_SMTP_SECURE === '1' ||
+    port === 465;
   return nodemailer.createTransport({
     host: process.env.MAIL_SMTP_HOST!.trim(),
     port,
@@ -29,27 +43,64 @@ function createTransport() {
       user: process.env.MAIL_USERNAME!.trim(),
       pass: process.env.MAIL_PASSWORD!.trim(),
     },
+    connectionTimeout: 15_000,
+    greetingTimeout: 15_000,
+    socketTimeout: 20_000,
   });
+}
+
+/** Mailbox that receives contact form notifications and internal alerts. */
+export async function resolveContactInboxEmail(): Promise<string> {
+  const communications = await readSystemSettingsCommunications();
+  return (
+    process.env.CONTACT_INBOX_EMAIL?.trim() ||
+    communications.contactEmail?.trim() ||
+    communications.supportEmail?.trim() ||
+    'contact@studyear.com'
+  );
+}
+
+export async function getMailDeliveryStatus(): Promise<{
+  configured: boolean;
+  host?: string;
+  fromAddress: string;
+  contactInbox: string;
+}> {
+  const contactInbox = await resolveContactInboxEmail();
+  return {
+    configured: smtpConfigured(),
+    host: process.env.MAIL_SMTP_HOST?.trim(),
+    fromAddress: smtpFromAddress(),
+    contactInbox,
+  };
+}
+
+export async function verifySmtpConnection(): Promise<{ ok: boolean; error?: string }> {
+  if (!smtpConfigured()) {
+    return { ok: false, error: 'SMTP not configured (MAIL_SMTP_HOST, MAIL_USERNAME, MAIL_PASSWORD).' };
+  }
+  try {
+    const transport = createTransport();
+    await transport.verify();
+    return { ok: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { ok: false, error: message };
+  }
 }
 
 export async function sendPlatformEmail(
   input: SendMailInput,
 ): Promise<{ sent: boolean; error?: string }> {
   if (!smtpConfigured()) {
-    console.warn('[mail] SMTP not configured (set MAIL_PASSWORD and related env vars).');
+    console.warn('[mail] SMTP not configured (set MAIL_SMTP_* env vars).');
     return { sent: false, error: 'smtp_not_configured' };
   }
-
-  const fromAddress =
-    process.env.MAIL_FROM_ADDRESS?.trim() ||
-    process.env.MAIL_USERNAME?.trim() ||
-    'noreply@studyear.com';
-  const fromName = process.env.MAIL_FROM_NAME?.trim() || 'StudYear';
 
   try {
     const transport = createTransport();
     await transport.sendMail({
-      from: `"${fromName}" <${fromAddress}>`,
+      from: `"${smtpFromName()}" <${smtpFromAddress()}>`,
       to: input.to,
       replyTo: input.replyTo,
       subject: input.subject,
@@ -64,18 +115,30 @@ export async function sendPlatformEmail(
   }
 }
 
+export async function sendTestEmail(to: string): Promise<{ sent: boolean; error?: string }> {
+  const inbox = await resolveContactInboxEmail();
+  return sendPlatformEmail({
+    to,
+    subject: 'StudYear — test email',
+    text: [
+      'This is a test message from StudYear.',
+      '',
+      `SMTP host: ${process.env.MAIL_SMTP_HOST ?? '(not set)'}`,
+      `From: ${smtpFromAddress()}`,
+      `Contact inbox: ${inbox}`,
+      '',
+      'If you received this, outbound email is working.',
+    ].join('\n'),
+  });
+}
+
 export async function sendContactFormNotification(input: {
   fullName: string;
   email: string;
   enquiryType: string;
   message: string;
-}): Promise<{ sent: boolean; error?: string }> {
-  const communications = await readSystemSettingsCommunications();
-  const to =
-    process.env.CONTACT_INBOX_EMAIL?.trim() ||
-    communications.contactEmail?.trim() ||
-    communications.supportEmail?.trim() ||
-    'contact@studyear.ai';
+}): Promise<{ sent: boolean; error?: string; inbox?: string }> {
+  const to = await resolveContactInboxEmail();
 
   const result = await sendPlatformEmail({
     to,
@@ -87,9 +150,12 @@ export async function sendContactFormNotification(input: {
       `Type: ${input.enquiryType}`,
       '',
       input.message,
+      '',
+      '—',
+      'Reply directly to this email to respond to the sender.',
     ].join('\n'),
   });
-  return { sent: result.sent, error: result.error };
+  return { sent: result.sent, error: result.error, inbox: to };
 }
 
 function appBaseUrl(): string {
@@ -149,8 +215,9 @@ export async function sendAcuTopUpReceiptEmail(input: {
   name?: string | null;
   acus: number;
   amountGbp: string;
-}): Promise<{ sent: boolean }> {
+}): Promise<{ sent: boolean; error?: string }> {
   const greet = greeting(input.name);
+  const accountUrl = `${appBaseUrl()}/account`;
   const result = await sendPlatformEmail({
     to: input.email,
     subject: 'StudYear — ACU top-up receipt',
@@ -160,11 +227,62 @@ export async function sendAcuTopUpReceiptEmail(input: {
       `Your wallet was credited with ${input.acus.toLocaleString()} ACUs.`,
       `Amount paid: ${input.amountGbp}`,
       '',
+      `View your account: ${accountUrl}`,
+      '',
       'Thank you for using StudYear.',
     ].join('\n'),
+    html: [
+      `<p>${greet}</p>`,
+      `<p>Your wallet was credited with <strong>${input.acus.toLocaleString()} ACUs</strong>.</p>`,
+      `<p>Amount paid: <strong>${input.amountGbp}</strong></p>`,
+      `<p><a href="${accountUrl}">View your account</a></p>`,
+      '<p>Thank you for using StudYear.</p>',
+    ].join(''),
   });
   if (!result.sent) {
     console.warn('[mail] ACU receipt email not sent:', result.error);
+  }
+  return result;
+}
+
+export async function sendSubscriptionReceiptEmail(input: {
+  email: string;
+  name?: string | null;
+  planLabel: string;
+  amountGbp?: string;
+}): Promise<{ sent: boolean; error?: string }> {
+  const greet = greeting(input.name);
+  const accountUrl = `${appBaseUrl()}/account`;
+  const amountLine = input.amountGbp ? `Amount: ${input.amountGbp}` : '';
+
+  const result = await sendPlatformEmail({
+    to: input.email,
+    subject: 'StudYear — subscription confirmation',
+    text: [
+      greet,
+      '',
+      `Your ${input.planLabel} subscription is now active.`,
+      amountLine,
+      '',
+      `Manage your plan: ${accountUrl}`,
+      '',
+      'Thank you for subscribing to StudYear.',
+    ]
+      .filter(Boolean)
+      .join('\n'),
+    html: [
+      `<p>${greet}</p>`,
+      `<p>Your <strong>${input.planLabel}</strong> subscription is now active.</p>`,
+      input.amountGbp ? `<p>Amount: <strong>${input.amountGbp}</strong></p>` : '',
+      `<p><a href="${accountUrl}">Manage your plan</a></p>`,
+      '<p>Thank you for subscribing to StudYear.</p>',
+    ]
+      .filter(Boolean)
+      .join(''),
+  });
+
+  if (!result.sent) {
+    console.warn('[mail] subscription receipt email not sent:', result.error);
   }
   return result;
 }

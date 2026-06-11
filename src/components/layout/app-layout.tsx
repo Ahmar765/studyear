@@ -29,6 +29,7 @@ import {
   Loader,
   GraduationCap,
   MessageSquareText,
+  Mail,
   Users,
   Building,
   Target,
@@ -104,6 +105,7 @@ const adminNavItems = [
     { href: "/admin/analytics", label: "Analytics", icon: LineChart },
     { href: "/admin/fraud", label: "Fraud", icon: UserCog },
     { href: "/admin/support", label: "Support", icon: MessageSquareText },
+    { href: "/admin/contact-inbox", label: "Contact inbox", icon: Mail },
     { href: "/admin/settings", label: "Settings", icon: Settings },
 ];
 

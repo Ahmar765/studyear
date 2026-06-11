@@ -9,7 +9,7 @@ import type { UserRole, SubscriptionType } from "@/server/schemas";
 import { deriveParentLinkCode } from "@/lib/parent-link-code";
 import { generateSchoolStaffJoinCode } from "@/lib/school-staff-join-code";
 import { ensurePlatformAdminAccess } from "@/server/lib/platform-admin";
-import { sendWelcomeEmail, sendPlatformEmail } from "@/server/lib/mail";
+import { sendWelcomeEmail, sendPlatformEmail, resolveContactInboxEmail } from "@/server/lib/mail";
 
 const allowedRoles: UserRole[] = ["STUDENT", "PARENT", "PRIVATE_TUTOR", "SCHOOL_ADMIN", "SCHOOL_TUTOR", "ADMIN"];
 
@@ -162,9 +162,9 @@ export async function signup(uid: string, email: string, role: string, displayNa
         });
 
         if (userRole === 'PRIVATE_TUTOR') {
-          const adminEmail = process.env.MAIL_FROM_ADDRESS ?? 'contact@studyear.com';
           const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://studyear.com';
-          void sendPlatformEmail({
+          void resolveContactInboxEmail().then((adminEmail) =>
+            sendPlatformEmail({
             to: adminEmail,
             subject: 'New tutor application — action required',
             html: `
@@ -178,9 +178,10 @@ export async function signup(uid: string, email: string, role: string, displayNa
               </p>
             `,
             text: `New tutor application from ${name ?? email}. Review at ${appUrl}/admin/tutors`,
-          }).then((res) => {
-            if (!res.sent) console.warn('[signup] admin tutor alert email not delivered.');
-          });
+            }).then((res) => {
+              if (!res.sent) console.warn('[signup] admin tutor alert email not delivered.');
+            }),
+          );
         }
 
         const { sessionId } = await createSession(uid, { platform: "web", userAgent: "unknown" });

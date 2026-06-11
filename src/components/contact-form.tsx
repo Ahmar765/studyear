@@ -47,15 +47,15 @@ export default function ContactForm() {
         toast({
           title: copy.title,
           description: result.emailSent
-            ? copy.description
-            : `${copy.description} Your message was saved, but we could not send an email notification — our team will still see it in the admin inbox shortly.`,
+            ? `${copy.description}${result.inbox ? ` A copy was sent to ${result.inbox}.` : ''}`
+            : 'Your message was saved. Our team will see it in Admin → Contact inbox. Email notification could not be sent — SMTP may not be configured on the server.',
         });
         if (!result.emailSent) {
           toast({
             variant: 'destructive',
-            title: 'Email delivery issue',
+            title: 'Email notification not sent',
             description:
-              'Outbound mail is not configured on the server (MAIL_SMTP_* env vars). Ask your administrator to set SMTP and Admin → Communications → Contact email.',
+              'Your message is saved in the admin contact inbox. Ask your administrator to set MAIL_SMTP_* env vars and the contact inbox email in Admin → Settings.',
           });
         }
         (e.target as HTMLFormElement).reset();
