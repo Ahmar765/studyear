@@ -117,6 +117,7 @@ export async function getSchoolTutorDashboardDataAction(
         yearGroups: [],
         assignedYearGroups: [],
         assignedClassNames: [],
+        assignedStudentIds: [],
         students: [],
         interventions: [],
         assessments: [],

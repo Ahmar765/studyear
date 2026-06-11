@@ -47,6 +47,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { SchoolStaffJoinCodePanel } from '@/components/school/school-staff-join-code-panel';
 import { StaffCohortAssignDialog } from '@/components/school/staff-cohort-assign-dialog';
+import { StaffStudentAssignDialog } from '@/components/school/staff-student-assign-dialog';
 import { LinkStudentForm } from '@/components/school-portal/link-student-form';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
@@ -149,8 +150,8 @@ export function SchoolPeopleManagement() {
               <strong>Add students</strong> by email — they must already have a StudYear account.
             </li>
             <li>
-              <strong>Assign cohorts</strong> on each teacher so they see the right year groups and
-              classes. Students appear for a teacher when their profile year group matches.
+              <strong>Assign students</strong> individually to each teacher, or use <strong>Assign
+              cohorts</strong> for whole year groups and classes.
             </li>
           </ol>
         </AlertDescription>
@@ -283,10 +284,10 @@ export function SchoolPeopleManagement() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Teacher list &amp; class assignment</CardTitle>
+            <CardTitle>Teacher list &amp; student assignment</CardTitle>
             <CardDescription>
-              Use <strong>Assign cohorts</strong> so each teacher sees students in matching year groups.
-              Leave cohorts empty to show all school students.
+              Use <strong>Assign students</strong> to pick individuals, or <strong>Assign cohorts</strong>{' '}
+              for whole year groups. Teachers see individually assigned students plus any cohort matches.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -305,7 +306,8 @@ export function SchoolPeopleManagement() {
                     <TableHead>Role</TableHead>
                     <TableHead>Email</TableHead>
                     <TableHead>Assigned cohorts</TableHead>
-                    <TableHead className="text-right">Assign to students</TableHead>
+                    <TableHead>Individual students</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -331,9 +333,23 @@ export function SchoolPeopleManagement() {
                             : 'All year groups'
                           : '—'}
                       </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {member.role === 'SCHOOL_TUTOR'
+                          ? member.assignedStudentIds.length > 0
+                            ? `${member.assignedStudentIds.length} assigned`
+                            : 'None'
+                          : '—'}
+                      </TableCell>
                       <TableCell className="text-right">
                         {member.role === 'SCHOOL_TUTOR' ? (
-                          <StaffCohortAssignDialog member={member} onSaved={load} />
+                          <div className="flex flex-wrap justify-end gap-2">
+                            <StaffStudentAssignDialog
+                              member={member}
+                              students={students}
+                              onSaved={load}
+                            />
+                            <StaffCohortAssignDialog member={member} onSaved={load} />
+                          </div>
                         ) : (
                           <span className="text-xs text-muted-foreground">Admin access</span>
                         )}
@@ -437,13 +453,16 @@ export function SchoolPeopleManagement() {
         </CardHeader>
         <CardContent className="text-sm text-muted-foreground space-y-2">
           <p>
-            Teachers do not pick individual students. You assign <strong className="text-foreground">year
-            groups</strong> (and optional <strong className="text-foreground">class names</strong>) to
-            each teacher in the table above.
+            <strong className="text-foreground">Assign students</strong> — pick specific students for a
+            teacher. If you only use this (no cohorts), the teacher sees only those students.
           </p>
           <p>
-            A student appears on a teacher&apos;s list when their profile year group matches. Students set
-            year group during their own profile setup.
+            <strong className="text-foreground">Assign cohorts</strong> — assign whole year groups and
+            optional class names. Students appear when their profile year group matches.
+          </p>
+          <p>
+            You can use both together: individually assigned students always appear, plus any students
+            matching the teacher&apos;s cohorts.
           </p>
           <Button asChild variant="link" className="h-auto p-0 text-primary">
             <a href="#teachers">

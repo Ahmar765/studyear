@@ -31,6 +31,23 @@ function teacherStudentInScope(
   return yearOk && classOk;
 }
 
+function teacherStudentVisible(
+  studentId: string,
+  yearGroup: string,
+  className: string | undefined,
+  assignedStudentIds: string[],
+  assignedYearGroups: string[],
+  assignedClassNames: string[],
+): boolean {
+  const hasIndividuals = assignedStudentIds.length > 0;
+  const hasCohorts = assignedYearGroups.length > 0 || assignedClassNames.length > 0;
+
+  if (!hasIndividuals && !hasCohorts) return true;
+  if (assignedStudentIds.includes(studentId)) return true;
+  if (!hasCohorts) return false;
+  return teacherStudentInScope(yearGroup, className, assignedYearGroups, assignedClassNames);
+}
+
 export interface SchoolTutorContext {
   schoolId: string;
   schoolName: string;
@@ -41,6 +58,8 @@ export interface SchoolTutorContext {
   /** Cohorts assigned by school admin; empty = all school students. */
   assignedYearGroups: string[];
   assignedClassNames: string[];
+  /** Students individually assigned by school admin. */
+  assignedStudentIds: string[];
   students: Array<{
     id: string;
     name: string;
@@ -139,6 +158,7 @@ export async function fetchLiveSchoolTutorContext(staffUserId: string): Promise<
   const staffLink = await getTeacherSchoolLink(staffUserId);
   const assignedYearGroups = staffLink.assignedYearGroups ?? [];
   const assignedClassNames = staffLink.assignedClassNames ?? [];
+  const assignedStudentIds = staffLink.assignedStudentIds ?? [];
 
   const [schoolSnap, profileSnap, tutorProfileSnap] = await Promise.all([
     adminDb.collection('school_accounts').doc(schoolId).get(),
@@ -246,9 +266,11 @@ export async function fetchLiveSchoolTutorContext(staffUserId: string): Promise<
     .sort((a, b) => (a.dueDate ?? '').localeCompare(b.dueDate ?? ''));
 
   const scopedStudents = students.filter((s) =>
-    teacherStudentInScope(
+    teacherStudentVisible(
+      s.id,
       s.yearGroup,
       s.className,
+      assignedStudentIds,
       assignedYearGroups,
       assignedClassNames,
     ),
@@ -263,6 +285,7 @@ export async function fetchLiveSchoolTutorContext(staffUserId: string): Promise<
     yearGroups,
     assignedYearGroups,
     assignedClassNames,
+    assignedStudentIds,
     students: scopedStudents,
     interventions: interventions.filter((i) => scopedStudents.some((s) => s.id === i.studentId)),
     assessments,

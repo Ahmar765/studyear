@@ -57,6 +57,7 @@ export function StaffCohortAssignDialog({
         staffLinkId: member.staffLinkId,
         assignedYearGroups: yearGroups.split(',').map((s) => s.trim()).filter(Boolean),
         assignedClassNames: classes.split(/[\n,]/).map((s) => s.trim()).filter(Boolean),
+        assignedStudentIds: member.assignedStudentIds,
       });
       if (res.success) {
         toast({ title: 'Assignments saved', description: `${member.name} will see the assigned cohorts.` });

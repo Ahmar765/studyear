@@ -79,6 +79,7 @@ export interface SchoolStaffMember {
     email: string;
     assignedYearGroups: string[];
     assignedClassNames: string[];
+    assignedStudentIds: string[];
 }
 
 export async function getSchoolStaffAction(idToken?: string | null): Promise<{ staff: SchoolStaffMember[], error?: string }> {
@@ -109,6 +110,9 @@ export async function getSchoolStaffAction(idToken?: string | null): Promise<{ s
                     : [],
                 assignedClassNames: Array.isArray(linkData.assignedClassNames)
                     ? (linkData.assignedClassNames as string[])
+                    : [],
+                assignedStudentIds: Array.isArray(linkData.assignedStudentIds)
+                    ? (linkData.assignedStudentIds as string[])
                     : [],
             };
         });
@@ -645,6 +649,7 @@ export async function updateSchoolStaffAssignmentsAction(
         staffLinkId: string;
         assignedYearGroups: string[];
         assignedClassNames: string[];
+        assignedStudentIds?: string[];
     },
 ): Promise<{ success: boolean; error?: string }> {
     try {
@@ -658,13 +663,35 @@ export async function updateSchoolStaffAssignmentsAction(
             return { success: false, error: 'This staff member belongs to another school.' };
         }
         if (linkSnap.data()?.role !== 'SCHOOL_TUTOR') {
-            return { success: false, error: 'Cohort assignment applies to teachers only.' };
+            return { success: false, error: 'Assignment applies to teachers only.' };
         }
-        await linkRef.update({
+
+        const update: Record<string, unknown> = {
             assignedYearGroups: input.assignedYearGroups.map((s) => s.trim()).filter(Boolean),
             assignedClassNames: input.assignedClassNames.map((s) => s.trim()).filter(Boolean),
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
+        };
+
+        if (input.assignedStudentIds !== undefined) {
+            const uniqueIds = [...new Set(input.assignedStudentIds.map((id) => id.trim()).filter(Boolean))];
+            if (uniqueIds.length > 0) {
+                const profiles = await Promise.all(
+                    uniqueIds.map((id) => adminDb.collection('student_profiles').doc(id).get()),
+                );
+                const invalid = profiles.find(
+                    (p) => !p.exists || (p.data()?.schoolAccountId as string) !== schoolId,
+                );
+                if (invalid) {
+                    return {
+                        success: false,
+                        error: 'One or more students are not linked to your school.',
+                    };
+                }
+            }
+            update.assignedStudentIds = uniqueIds;
+        }
+
+        await linkRef.update(update);
         return { success: true };
     } catch (error: unknown) {
         const msg = error instanceof Error ? error.message : String(error);
