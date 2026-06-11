@@ -10,13 +10,17 @@ import {
   type ContactSubmissionRow,
 } from '@/server/actions/settings-actions';
 import { AdminEmailTestPanel } from '@/components/admin/admin-email-test-panel';
-import { ContactInboxReplyDialog } from '@/components/admin/contact-inbox-reply-dialog';
+import {
+  ContactInboxDetailDialog,
+  truncateMessage,
+} from '@/components/admin/contact-inbox-detail-dialog';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Loader, Mail } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { cn } from '@/lib/utils';
 
 export default function AdminContactInboxPage() {
   const { user } = useAuth();
@@ -25,6 +29,8 @@ export default function AdminContactInboxPage() {
   const [inbox, setInbox] = useState<string | undefined>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | undefined>();
+  const [selected, setSelected] = useState<ContactSubmissionRow | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -48,12 +54,18 @@ export default function AdminContactInboxPage() {
     void load();
   }, [load]);
 
+  const openMessage = (row: ContactSubmissionRow) => {
+    setSelected(row);
+    setDetailOpen(true);
+  };
+
   const markStatus = async (id: string, status: 'READ' | 'REPLIED') => {
     if (!user) return;
     const token = await user.getIdToken();
     const res = await updateContactSubmissionStatusAction(token, id, status);
     if (res.success) {
       setSubmissions((prev) => prev.map((s) => (s.id === id ? { ...s, status } : s)));
+      setSelected((prev) => (prev?.id === id ? { ...prev, status } : prev));
     } else {
       toast({ variant: 'destructive', title: 'Update failed', description: res.error });
     }
@@ -64,12 +76,19 @@ export default function AdminContactInboxPage() {
       <div className="space-y-2">
         <h2 className="text-3xl font-bold tracking-tight">Contact inbox</h2>
         <p className="text-muted-foreground max-w-2xl">
-          Messages from the public contact form. Reply directly from here — emails send from your StudYear
-          mailbox via SMTP.
+          Click a message or email to read the full enquiry. Reply directly from the inbox via SMTP.
         </p>
       </div>
 
       <AdminEmailTestPanel />
+
+      <ContactInboxDetailDialog
+        submission={selected}
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+        onMarkRead={(id) => void markStatus(id, 'READ')}
+        onReplied={load}
+      />
 
       {loading ? (
         <div className="flex items-center justify-center min-h-[20vh]">
@@ -103,7 +122,7 @@ export default function AdminContactInboxPage() {
             <CardHeader>
               <CardTitle>Submissions</CardTitle>
               <CardDescription>
-                {submissions.length} message{submissions.length === 1 ? '' : 's'} — newest first
+                {submissions.length} message{submissions.length === 1 ? '' : 's'} — click to open and read
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -120,49 +139,47 @@ export default function AdminContactInboxPage() {
                       <TableHead>Type</TableHead>
                       <TableHead>Message</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {submissions.map((row) => (
-                      <TableRow key={row.id}>
+                      <TableRow
+                        key={row.id}
+                        className={cn(
+                          'cursor-pointer hover:bg-muted/50',
+                          row.status === 'NEW' && 'bg-primary/[0.03]',
+                        )}
+                        onClick={() => openMessage(row)}
+                      >
                         <TableCell className="text-xs whitespace-nowrap">
                           {new Date(row.createdAt).toLocaleString()}
                         </TableCell>
                         <TableCell>
                           <div className="font-medium">{row.fullName}</div>
-                          <a
-                            href={`mailto:${row.email}`}
-                            className="text-xs text-primary hover:underline"
+                          <button
+                            type="button"
+                            className="text-xs text-primary hover:underline text-left"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openMessage(row);
+                            }}
                           >
                             {row.email}
-                          </a>
+                          </button>
                         </TableCell>
                         <TableCell>
                           <Badge variant="outline">{row.enquiryType}</Badge>
                         </TableCell>
-                        <TableCell className="max-w-xs text-sm text-muted-foreground whitespace-pre-wrap">
-                          {row.message}
+                        <TableCell className="max-w-sm">
+                          <p className="text-sm text-muted-foreground line-clamp-2">
+                            {truncateMessage(row.message)}
+                          </p>
+                          <span className="text-xs text-primary mt-1 inline-block">Read message →</span>
                         </TableCell>
                         <TableCell>
                           <Badge variant={row.status === 'NEW' ? 'default' : 'secondary'}>
                             {row.status}
                           </Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex flex-wrap justify-end gap-2">
-                            <ContactInboxReplyDialog submission={row} onSent={load} />
-                            {row.status === 'NEW' ? (
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => void markStatus(row.id, 'READ')}
-                              >
-                                Mark read
-                              </Button>
-                            ) : null}
-                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
