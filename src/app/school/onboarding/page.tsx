@@ -305,7 +305,7 @@ function SchoolOnboardingInner() {
                   configured in Settings.
                 </p>
                 <Button asChild variant="secondary">
-                  <Link href="/school/staff">Open staff deployment hub</Link>
+                  <Link href="/school/people#teachers">Add teachers</Link>
                 </Button>
               </div>
             )}
@@ -318,7 +318,7 @@ function SchoolOnboardingInner() {
                   insights on your Command Centre.
                 </p>
                 <Button asChild variant="secondary">
-                  <Link href="/school/students">Manage students</Link>
+                  <Link href="/school/people#students">Add students</Link>
                 </Button>
               </div>
             )}

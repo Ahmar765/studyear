@@ -52,13 +52,8 @@ export function SchoolCommandCentreView({ data }: { data: SchoolCommandCentrePay
 
       <section className="flex flex-wrap gap-3">
         <Button asChild variant="outline">
-          <Link href="/school/students">
-            Student operations <ArrowRight className="ml-2 h-4 w-4" />
-          </Link>
-        </Button>
-        <Button asChild variant="outline">
-          <Link href="/school/staff">
-            Staff deployment <ArrowRight className="ml-2 h-4 w-4" />
+          <Link href="/school/people">
+            People management <ArrowRight className="ml-2 h-4 w-4" />
           </Link>
         </Button>
         <Button asChild variant="outline">

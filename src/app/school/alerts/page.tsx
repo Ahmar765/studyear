@@ -93,7 +93,7 @@ export default function SchoolAlertsPage() {
                         Weakest Subject: <span className="font-semibold">{student.weakestSubject}</span>
                     </div>
                     <Button asChild variant="secondary">
-                        <Link href={`/school/students/${student.id}`}>View Profile</Link>
+                        <Link href="/school/people#students">View roster</Link>
                     </Button>
                 </Card>
               ))}
