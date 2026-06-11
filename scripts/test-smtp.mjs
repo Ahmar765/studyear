@@ -26,6 +26,7 @@ const configs = [
 ];
 
 console.log('Testing user:', user);
+let working = null;
 for (const c of configs) {
   const t = nodemailer.createTransport({
     host: c.host,
@@ -34,11 +35,28 @@ for (const c of configs) {
     requireTLS: c.requireTLS,
     auth: { user, pass },
     connectionTimeout: 12000,
+    tls: { minVersion: 'TLSv1.2' },
   });
   try {
     await t.verify();
     console.log('OK', c.name, c.host, c.port);
+    if (!working) working = { ...c, transport: t };
   } catch (e) {
     console.log('FAIL', c.name, String(e.message).slice(0, 100));
   }
+}
+
+if (working) {
+  const to = env.CONTACT_INBOX_EMAIL || user;
+  const from = env.MAIL_FROM_ADDRESS || user;
+  const info = await working.transport.sendMail({
+    from: `"StudYear Test" <${from}>`,
+    to,
+    subject: `StudYear — SMTP test ${new Date().toISOString().slice(0, 19)}`,
+    text: 'If you received this, SMTP is working. Welcome emails, receipts, and contact form notifications should deliver when MAIL_* env vars match in production.',
+  });
+  console.log('SENT test email to', to, 'messageId:', info.messageId);
+} else {
+  console.log('No working SMTP config — test email not sent.');
+  process.exit(1);
 }

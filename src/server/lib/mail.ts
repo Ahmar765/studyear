@@ -29,10 +29,19 @@ function smtpFromName(): string {
   return process.env.MAIL_FROM_NAME?.trim() || 'StudYear';
 }
 
+function normalizeMailSecret(value: string | undefined): string {
+  if (!value) return '';
+  return value
+    .trim()
+    .replace(/^["']|["']$/g, '')
+    .replace(/\r?\n/g, '')
+    .replace(/\uFEFF/g, '');
+}
+
 function smtpAuth() {
   return {
-    user: process.env.MAIL_USERNAME!.trim(),
-    pass: process.env.MAIL_PASSWORD!.trim().replace(/^["']|["']$/g, ''),
+    user: normalizeMailSecret(process.env.MAIL_USERNAME),
+    pass: normalizeMailSecret(process.env.MAIL_PASSWORD),
   };
 }
 
@@ -86,15 +95,22 @@ export async function resolveContactInboxEmail(): Promise<string> {
 export async function getMailDeliveryStatus(): Promise<{
   configured: boolean;
   host?: string;
+  port?: number;
+  username?: string;
   fromAddress: string;
   contactInbox: string;
+  passwordLength: number;
 }> {
   const contactInbox = await resolveContactInboxEmail();
+  const auth = smtpAuth();
   return {
     configured: smtpConfigured(),
     host: process.env.MAIL_SMTP_HOST?.trim(),
+    port: Number(process.env.MAIL_SMTP_PORT || 465),
+    username: auth.user || undefined,
     fromAddress: smtpFromAddress(),
     contactInbox,
+    passwordLength: auth.pass.length,
   };
 }
 

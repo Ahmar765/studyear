@@ -26,6 +26,10 @@ export function AdminEmailTestPanel() {
     connectionError?: string;
     fromAddress?: string;
     contactInbox?: string;
+    host?: string;
+    port?: number;
+    username?: string;
+    passwordLength?: number;
   } | null>(null);
 
   const loadStatus = useCallback(async () => {
@@ -39,6 +43,10 @@ export function AdminEmailTestPanel() {
         connectionError: res.connectionError,
         fromAddress: res.fromAddress,
         contactInbox: res.contactInbox,
+        host: res.host,
+        port: res.port,
+        username: res.username,
+        passwordLength: res.passwordLength,
       });
       setTestEmail((prev) => prev || res.contactInbox || '');
     }
@@ -77,6 +85,14 @@ export function AdminEmailTestPanel() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {mailStatus?.configured ? (
+          <p className="text-xs text-muted-foreground rounded-md border bg-muted/40 px-3 py-2">
+            <strong className="text-foreground">Server env (live):</strong>{' '}
+            {mailStatus.host}:{mailStatus.port} · user {mailStatus.username ?? '—'} · password{' '}
+            {mailStatus.passwordLength ?? 0} characters (compare with local — should match exactly)
+          </p>
+        ) : null}
+
         {mailStatus ? (
           mailStatus.configured && mailStatus.connectionOk ? (
             <Alert className="border-emerald-500/40 bg-emerald-500/5">
@@ -112,8 +128,16 @@ export function AdminEmailTestPanel() {
                           the mailbox password in hPanel → Emails.
                         </li>
                         <li>
-                          Update <code>MAIL_PASSWORD</code> in Firebase App Hosting env vars (not just local
-                          .env).
+                          After changing Firebase env vars, trigger a <strong>new rollout</strong> —
+                          old containers keep the previous password until redeployed.
+                        </li>
+                        <li>
+                          Check <strong>Server env (live)</strong> above: password length must match
+                          your mailbox password exactly (often 11 chars for this account).
+                        </li>
+                        <li>
+                          Re-save <code>MAIL_PASSWORD</code> with no spaces or quotes; prefer Firebase{' '}
+                          <strong>Secret Manager</strong> for passwords containing <code>@</code>.
                         </li>
                         <li>
                           Try <code>MAIL_SMTP_HOST=smtp.titan.email</code> if your mailbox uses Titan.
