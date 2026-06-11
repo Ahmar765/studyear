@@ -102,7 +102,25 @@ export function AdminEmailTestPanel() {
                     variables, then redeploy.
                   </p>
                 ) : (
-                  <p>{mailStatus.connectionError ?? 'Could not connect to SMTP.'}</p>
+                  <div className="space-y-2">
+                    <p>{mailStatus.connectionError ?? 'Could not connect to SMTP.'}</p>
+                    {mailStatus.connectionError?.includes('535') ||
+                    mailStatus.connectionError?.toLowerCase().includes('authentication') ? (
+                      <ul className="list-disc list-inside text-xs space-y-1 mt-2">
+                        <li>
+                          Log in at Hostinger webmail with the same email/password — if that fails, reset
+                          the mailbox password in hPanel → Emails.
+                        </li>
+                        <li>
+                          Update <code>MAIL_PASSWORD</code> in Firebase App Hosting env vars (not just local
+                          .env).
+                        </li>
+                        <li>
+                          Try <code>MAIL_SMTP_HOST=smtp.titan.email</code> if your mailbox uses Titan.
+                        </li>
+                      </ul>
+                    ) : null}
+                  </div>
                 )}
                 <p>
                   Contact form submissions still appear in{' '}

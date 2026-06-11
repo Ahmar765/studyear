@@ -29,23 +29,46 @@ function smtpFromName(): string {
   return process.env.MAIL_FROM_NAME?.trim() || 'StudYear';
 }
 
+function smtpAuth() {
+  return {
+    user: process.env.MAIL_USERNAME!.trim(),
+    pass: process.env.MAIL_PASSWORD!.trim().replace(/^["']|["']$/g, ''),
+  };
+}
+
+function formatSmtpError(message: string): string {
+  if (/535|authentication failed|EAUTH|invalid login/i.test(message)) {
+    return [
+      'SMTP login rejected (535) — the mailbox username or password is wrong.',
+      'Use the full email as MAIL_USERNAME (e.g. contact@studyear.com).',
+      'MAIL_PASSWORD must be the mailbox webmail password (Hostinger → Emails → Manage → reset if unsure), not your hPanel login.',
+      'After resetting, update Firebase App Hosting env vars and redeploy.',
+      'If email uses Titan, try MAIL_SMTP_HOST=smtp.titan.email',
+    ].join(' ');
+  }
+  return message;
+}
+
 function createTransport() {
   const port = Number(process.env.MAIL_SMTP_PORT || 465);
+  const secureExplicit = process.env.MAIL_SMTP_SECURE?.trim().toLowerCase();
   const secure =
-    process.env.MAIL_SMTP_SECURE === 'true' ||
-    process.env.MAIL_SMTP_SECURE === '1' ||
-    port === 465;
+    secureExplicit === 'true' || secureExplicit === '1'
+      ? true
+      : secureExplicit === 'false' || secureExplicit === '0'
+        ? false
+        : port === 465;
+
   return nodemailer.createTransport({
     host: process.env.MAIL_SMTP_HOST!.trim(),
     port,
     secure,
-    auth: {
-      user: process.env.MAIL_USERNAME!.trim(),
-      pass: process.env.MAIL_PASSWORD!.trim(),
-    },
+    requireTLS: !secure && port === 587,
+    auth: smtpAuth(),
     connectionTimeout: 15_000,
     greetingTimeout: 15_000,
     socketTimeout: 20_000,
+    tls: { minVersion: 'TLSv1.2' },
   });
 }
 
@@ -85,7 +108,7 @@ export async function verifySmtpConnection(): Promise<{ ok: boolean; error?: str
     return { ok: true };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return { ok: false, error: message };
+    return { ok: false, error: formatSmtpError(message) };
   }
 }
 
@@ -111,7 +134,7 @@ export async function sendPlatformEmail(
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error('[mail] send failed:', message);
-    return { sent: false, error: message };
+    return { sent: false, error: formatSmtpError(message) };
   }
 }
 
