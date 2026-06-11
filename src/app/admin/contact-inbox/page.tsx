@@ -10,11 +10,12 @@ import {
   type ContactSubmissionRow,
 } from '@/server/actions/settings-actions';
 import { AdminEmailTestPanel } from '@/components/admin/admin-email-test-panel';
+import { ContactInboxReplyDialog } from '@/components/admin/contact-inbox-reply-dialog';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader, Mail, ExternalLink } from 'lucide-react';
+import { Loader, Mail } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 export default function AdminContactInboxPage() {
@@ -63,8 +64,8 @@ export default function AdminContactInboxPage() {
       <div className="space-y-2">
         <h2 className="text-3xl font-bold tracking-tight">Contact inbox</h2>
         <p className="text-muted-foreground max-w-2xl">
-          Messages from the public contact form. When SMTP is configured, copies are also emailed to your
-          contact mailbox.
+          Messages from the public contact form. Reply directly from here — emails send from your StudYear
+          mailbox via SMTP.
         </p>
       </div>
 
@@ -148,23 +149,20 @@ export default function AdminContactInboxPage() {
                             {row.status}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-right space-x-2">
-                          <Button asChild variant="outline" size="sm">
-                            <a href={`mailto:${row.email}?subject=Re: StudYear enquiry`}>
-                              <ExternalLink className="mr-1 h-3.5 w-3.5" />
-                              Reply
-                            </a>
-                          </Button>
-                          {row.status === 'NEW' ? (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => void markStatus(row.id, 'READ')}
-                            >
-                              Mark read
-                            </Button>
-                          ) : null}
+                        <TableCell className="text-right">
+                          <div className="flex flex-wrap justify-end gap-2">
+                            <ContactInboxReplyDialog submission={row} onSent={load} />
+                            {row.status === 'NEW' ? (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => void markStatus(row.id, 'READ')}
+                              >
+                                Mark read
+                              </Button>
+                            ) : null}
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}

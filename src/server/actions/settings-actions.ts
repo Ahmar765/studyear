@@ -11,6 +11,7 @@ import {
 import {
   getMailDeliveryStatus,
   sendContactFormNotification,
+  sendContactInboxReplyEmail,
   sendTestEmail,
   verifySmtpConnection,
 } from '@/server/lib/mail';
@@ -270,6 +271,67 @@ export async function updateContactSubmissionStatusAction(
       status,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
+    return { success: true };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    return { success: false, error: msg };
+  }
+}
+
+export async function replyToContactSubmissionAction(
+  idToken: string | null | undefined,
+  input: {
+    submissionId: string;
+    subject: string;
+    message: string;
+  },
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const adminUser = await assertPlatformAdmin(idToken);
+    const subject = input.subject?.trim();
+    const message = input.message?.trim();
+    if (!subject || !message) {
+      return { success: false, error: 'Subject and message are required.' };
+    }
+
+    const ref = adminDb.collection('contact_submissions').doc(input.submissionId);
+    const snap = await ref.get();
+    if (!snap.exists) {
+      return { success: false, error: 'Submission not found.' };
+    }
+
+    const data = snap.data()!;
+    const toEmail = (data.email as string)?.trim().toLowerCase();
+    const toName = (data.fullName as string)?.trim() ?? '';
+    if (!toEmail || !toEmail.includes('@')) {
+      return { success: false, error: 'This submission has no valid email address.' };
+    }
+
+    const mail = await sendContactInboxReplyEmail({
+      toEmail,
+      toName,
+      subject,
+      body: message,
+      originalMessage: (data.message as string) ?? '',
+      enquiryType: (data.enquiryType as string) ?? 'support',
+    });
+
+    if (!mail.sent) {
+      return {
+        success: false,
+        error: mail.error ?? 'Email could not be sent. Check SMTP settings.',
+      };
+    }
+
+    await ref.update({
+      status: 'REPLIED',
+      lastReplyAt: admin.firestore.FieldValue.serverTimestamp(),
+      lastReplyBy: adminUser.email ?? adminUser.uid,
+      lastReplySubject: subject,
+      replyCount: admin.firestore.FieldValue.increment(1),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
     return { success: true };
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);

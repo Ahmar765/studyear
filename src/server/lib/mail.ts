@@ -197,6 +197,47 @@ export async function sendContactFormNotification(input: {
   return { sent: result.sent, error: result.error, inbox: to };
 }
 
+export async function sendContactInboxReplyEmail(input: {
+  toEmail: string;
+  toName: string;
+  subject: string;
+  body: string;
+  originalMessage?: string;
+  enquiryType?: string;
+}): Promise<{ sent: boolean; error?: string }> {
+  const inbox = await resolveContactInboxEmail();
+  const greet = input.toName.trim() ? `Hi ${input.toName.trim()},` : 'Hi there,';
+  const quotedOriginal = input.originalMessage?.trim()
+    ? [
+        '',
+        '—',
+        'Your original message:',
+        input.originalMessage.trim(),
+      ].join('\n')
+    : '';
+
+  const text = [greet, '', input.body.trim(), quotedOriginal, '', '— StudYear Support'].join('\n');
+
+  const htmlQuoted = input.originalMessage?.trim()
+    ? `<hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0"/><p style="color:#6b7280;font-size:13px"><strong>Your original message</strong> (${input.enquiryType ?? 'enquiry'}):</p><blockquote style="margin:0;padding-left:12px;border-left:3px solid #e5e7eb;color:#6b7280">${input.originalMessage.trim().replace(/\n/g, '<br/>')}</blockquote>`
+    : '';
+
+  const result = await sendPlatformEmail({
+    to: input.toEmail.trim(),
+    replyTo: inbox,
+    subject: input.subject.trim(),
+    text,
+    html: [
+      `<p>${greet}</p>`,
+      `<p>${input.body.trim().replace(/\n/g, '<br/>')}</p>`,
+      htmlQuoted,
+      '<p>— StudYear Support</p>',
+    ].join(''),
+  });
+
+  return result;
+}
+
 function appBaseUrl(): string {
   const fromEnv = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/$/, '');
   if (fromEnv) return fromEnv;
