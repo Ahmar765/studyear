@@ -1,6 +1,6 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
-import { Users, DollarSign, BrainCircuit, BookCopy, Settings, BarChart, ShieldAlert, UserSearch, Building, Activity, Award, UserCheck, Newspaper, TrendingUp } from "lucide-react";
+import { Users, DollarSign, BrainCircuit, BookCopy, Settings, BarChart, ShieldAlert, UserSearch, Building, Activity, Award, UserCheck, Newspaper, TrendingUp, Mail } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { getAdminDashboardStatsAction, getPlatformEconomicsOverviewAction } from "@/server/actions/admin-actions";
@@ -12,6 +12,7 @@ const adminSections = [
     { title: "Tutor Management", description: "Review tutor applications and manage tutor profiles.", icon: UserCheck, href: "/admin/tutors" },
     { title: "School Management", description: "Review and approve new school partner accounts.", icon: Building, href: "/admin/schools" },
     { title: "Support Tools", description: "Access support features like 'View as User' to assist customers.", icon: UserSearch, href: "/admin/support" },
+    { title: "Contact inbox & email test", description: "View contact form messages and send a test email.", icon: Mail, href: "/admin/contact-inbox" },
     { title: "Blog", description: "Create posts, publish to the public site, and view read counts.", icon: Newspaper, href: "/admin/blog" },
     { title: "Content Management", description: "Manage subjects, topics, and moderate generated content.", icon: BookCopy, href: "/admin/content" },
     { title: "Revenue & billing", description: "Stripe gross, payments, discount codes, and ACU ledger.", icon: DollarSign, href: "/admin/billing" },

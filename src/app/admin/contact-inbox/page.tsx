@@ -9,6 +9,7 @@ import {
   updateContactSubmissionStatusAction,
   type ContactSubmissionRow,
 } from '@/server/actions/settings-actions';
+import { AdminEmailTestPanel } from '@/components/admin/admin-email-test-panel';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -57,14 +58,6 @@ export default function AdminContactInboxPage() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex flex-1 items-center justify-center min-h-[40vh]">
-        <Loader className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
   return (
     <div className="flex-1 space-y-8 p-4 md:p-8">
       <div className="space-y-2">
@@ -75,107 +68,117 @@ export default function AdminContactInboxPage() {
         </p>
       </div>
 
-      {inbox ? (
-        <Alert>
-          <Mail className="h-4 w-4" />
-          <AlertTitle>Contact form delivers to</AlertTitle>
-          <AlertDescription>
-            <a href={`mailto:${inbox}`} className="text-primary underline">
-              {inbox}
-            </a>
-            {' — '}
-            set in Admin → Settings → Communications, or via <code className="text-xs">CONTACT_INBOX_EMAIL</code>{' '}
-            env var.
-          </AlertDescription>
-        </Alert>
-      ) : null}
+      <AdminEmailTestPanel />
 
-      {error ? (
-        <Alert variant="destructive">
-          <AlertTitle>Could not load inbox</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      ) : null}
+      {loading ? (
+        <div className="flex items-center justify-center min-h-[20vh]">
+          <Loader className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      ) : (
+        <>
+          {inbox ? (
+            <Alert>
+              <Mail className="h-4 w-4" />
+              <AlertTitle>Contact form delivers to</AlertTitle>
+              <AlertDescription>
+                <a href={`mailto:${inbox}`} className="text-primary underline">
+                  {inbox}
+                </a>
+                {' — '}
+                set in Admin → Settings → Contact inbox email, or via{' '}
+                <code className="text-xs">CONTACT_INBOX_EMAIL</code> env var.
+              </AlertDescription>
+            </Alert>
+          ) : null}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Submissions</CardTitle>
-          <CardDescription>
-            {submissions.length} message{submissions.length === 1 ? '' : 's'} — newest first
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {submissions.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-8 text-center border border-dashed rounded-lg">
-              No contact messages yet.
-            </p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>From</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Message</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {submissions.map((row) => (
-                  <TableRow key={row.id}>
-                    <TableCell className="text-xs whitespace-nowrap">
-                      {new Date(row.createdAt).toLocaleString()}
-                    </TableCell>
-                    <TableCell>
-                      <div className="font-medium">{row.fullName}</div>
-                      <a
-                        href={`mailto:${row.email}`}
-                        className="text-xs text-primary hover:underline"
-                      >
-                        {row.email}
-                      </a>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{row.enquiryType}</Badge>
-                    </TableCell>
-                    <TableCell className="max-w-xs text-sm text-muted-foreground whitespace-pre-wrap">
-                      {row.message}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={row.status === 'NEW' ? 'default' : 'secondary'}>
-                        {row.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right space-x-2">
-                      <Button asChild variant="outline" size="sm">
-                        <a href={`mailto:${row.email}?subject=Re: StudYear enquiry`}>
-                          <ExternalLink className="mr-1 h-3.5 w-3.5" />
-                          Reply
-                        </a>
-                      </Button>
-                      {row.status === 'NEW' ? (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => void markStatus(row.id, 'READ')}
-                        >
-                          Mark read
-                        </Button>
-                      ) : null}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+          {error ? (
+            <Alert variant="destructive">
+              <AlertTitle>Could not load inbox</AlertTitle>
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          ) : null}
 
-      <Button asChild variant="outline">
-        <Link href="/admin/settings">Email &amp; SMTP settings</Link>
-      </Button>
+          <Card>
+            <CardHeader>
+              <CardTitle>Submissions</CardTitle>
+              <CardDescription>
+                {submissions.length} message{submissions.length === 1 ? '' : 's'} — newest first
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {submissions.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-8 text-center border border-dashed rounded-lg">
+                  No contact messages yet.
+                </p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>From</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Message</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {submissions.map((row) => (
+                      <TableRow key={row.id}>
+                        <TableCell className="text-xs whitespace-nowrap">
+                          {new Date(row.createdAt).toLocaleString()}
+                        </TableCell>
+                        <TableCell>
+                          <div className="font-medium">{row.fullName}</div>
+                          <a
+                            href={`mailto:${row.email}`}
+                            className="text-xs text-primary hover:underline"
+                          >
+                            {row.email}
+                          </a>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{row.enquiryType}</Badge>
+                        </TableCell>
+                        <TableCell className="max-w-xs text-sm text-muted-foreground whitespace-pre-wrap">
+                          {row.message}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={row.status === 'NEW' ? 'default' : 'secondary'}>
+                            {row.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right space-x-2">
+                          <Button asChild variant="outline" size="sm">
+                            <a href={`mailto:${row.email}?subject=Re: StudYear enquiry`}>
+                              <ExternalLink className="mr-1 h-3.5 w-3.5" />
+                              Reply
+                            </a>
+                          </Button>
+                          {row.status === 'NEW' ? (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => void markStatus(row.id, 'READ')}
+                            >
+                              Mark read
+                            </Button>
+                          ) : null}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+
+          <Button asChild variant="outline">
+            <Link href="/admin/settings">Email &amp; message copy settings</Link>
+          </Button>
+        </>
+      )}
     </div>
   );
 }
