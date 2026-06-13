@@ -1,22 +1,24 @@
 /**
- * Influencer programme — 20% commission on first payment only (not ACU top-ups).
- * Payout after refund window closes; admin approval required.
+ * @deprecated Use `@/data/growth-partner-programme` — StudYear Growth Partner Programme.
  */
-export const INFLUENCER_RULES = {
-  commissionPercentFirstPaymentOnly: 0.2,
-  /** Do not pay commission on ACU top-ups. */
-  commissionOnAcuTopUps: false,
-  tutorOnboardingFeeGbp: 10,
-} as const;
+export { GROWTH_PARTNER_PROGRAMME as INFLUENCER_RULES } from '@/data/growth-partner-programme';
 
-export function influencerCommissionGbp(firstPaymentGbp: number): number {
-  return Math.round(firstPaymentGbp * INFLUENCER_RULES.commissionPercentFirstPaymentOnly * 100) / 100;
+import {
+  GROWTH_PARTNER_PROGRAMME,
+  commissionGbpFromNet,
+} from '@/data/growth-partner-programme';
+
+export function influencerCommissionGbp(netEligibleGbp: number): number {
+  return commissionGbpFromNet(
+    netEligibleGbp,
+    GROWTH_PARTNER_PROGRAMME.influencer.commissionRate,
+  );
 }
 
-/** Example commission table for admin / influencer dashboard copy. */
+/** Example commission table for dashboard copy. */
 export const INFLUENCER_COMMISSION_EXAMPLES = [
-  { firstPaymentGbp: 5, commissionGbp: 1 },
-  { firstPaymentGbp: 10, commissionGbp: 2 },
-  { firstPaymentGbp: 20, commissionGbp: 4 },
-  { firstPaymentGbp: 39, commissionGbp: 7.8 },
+  { netRevenueGbp: 100, commissionGbp: influencerCommissionGbp(100) },
+  { netRevenueGbp: 500, commissionGbp: influencerCommissionGbp(500) },
+  { netRevenueGbp: 1000, commissionGbp: influencerCommissionGbp(1000) },
+  { netRevenueGbp: 5000, commissionGbp: influencerCommissionGbp(5000) },
 ] as const;

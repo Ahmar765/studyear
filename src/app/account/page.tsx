@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { User as UserIcon, Loader, Edit, LayoutDashboard, KeyRound, Trash2, Crown, PlusCircle, AlertTriangle, Fuel } from 'lucide-react';
+import { User as UserIcon, Loader, Edit, LayoutDashboard, KeyRound, Trash2, Crown, PlusCircle, AlertTriangle, Fuel, Gift } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -392,6 +392,23 @@ function AccountPageInner() {
                       </Link>
                     </Button>
                   )}
+                </CardFooter>
+              </Card>
+            ) : null}
+            {!isPlatformAdmin ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Gift /> Growth Partner Programme
+                  </CardTitle>
+                  <CardDescription>
+                    Invite friends, tutors, or schools — earn 250 ACUs per paid referral.
+                  </CardDescription>
+                </CardHeader>
+                <CardFooter>
+                  <Button asChild variant="outline">
+                    <Link href="/growth-partner">Open referral dashboard</Link>
+                  </Button>
                 </CardFooter>
               </Card>
             ) : null}

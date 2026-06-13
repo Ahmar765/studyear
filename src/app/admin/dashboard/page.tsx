@@ -15,6 +15,7 @@ const adminSections = [
     { title: "Contact inbox & email test", description: "View contact form messages and send a test email.", icon: Mail, href: "/admin/contact-inbox" },
     { title: "Blog", description: "Create posts, publish to the public site, and view read counts.", icon: Newspaper, href: "/admin/blog" },
     { title: "Content Management", description: "Manage subjects, topics, and moderate generated content.", icon: BookCopy, href: "/admin/content" },
+    { title: "Growth Partner Programme", description: "Approve influencers, review referrals, and monitor commission caps.", icon: TrendingUp, href: "/admin/growth-partners" },
     { title: "Revenue & billing", description: "Stripe gross, payments, discount codes, and ACU ledger.", icon: DollarSign, href: "/admin/billing" },
     { title: "Analytics & Reporting", description: "View generation volumes and student engagement metrics.", icon: BarChart, href: "/admin/analytics" },
     { title: "System & AI Settings", description: "Control AI rate limits, feature flags, and other global settings.", icon: Settings, href: "/admin/settings" },

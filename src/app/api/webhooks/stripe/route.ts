@@ -2,12 +2,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { headers } from 'next/headers';
 import Stripe from 'stripe';
-import {
-  grantSubscriptionMonthlyAcusForInvoice,
+import { recordAcuTopUpFromCheckoutSession,
   manageSubscriptionStatusChange,
-  recordAcuTopUpFromCheckoutSession,
+  grantSubscriptionMonthlyAcusForInvoice,
 } from '@/server/lib/billing';
 import { recordDiscountRedemption } from '@/server/lib/discount-codes';
+import { recordGrowthPartnerPayment, clawBackPayment } from '@/server/lib/growth-partner';
 import type { SubscriptionType } from '@/server/schemas';
 import { sendSubscriptionReceiptEmail } from '@/server/lib/mail';
 import { subscriptionTypeDisplayName } from '@/data/subscription-plans';
@@ -59,6 +59,20 @@ export async function POST(req: NextRequest) {
               console.log(
                 `Updated ACU balance and logged payment for user ${userId} with product ${session.metadata.productCode}`,
               );
+              if (session.payment_status === 'paid' && session.amount_total) {
+                const discountPence =
+                  (session.total_details?.amount_discount ?? 0) as number;
+                await recordGrowthPartnerPayment({
+                  payerUserId: userId,
+                  amountPaidPence: session.amount_total,
+                  stripeEventId: session.id,
+                  source: 'checkout',
+                  isTrial: false,
+                  discountPence,
+                }).catch((err) =>
+                  console.error('[growth-partner] checkout payment record failed', err),
+                );
+              }
             } else if (outcome.ok && outcome.duplicate) {
               console.log(`checkout.session.completed duplicate/skipped for session ${session.id}`);
             } else if (!outcome.ok) {
@@ -90,6 +104,20 @@ export async function POST(req: NextRequest) {
                 subscriptionType,
                 'ACTIVE'
             );
+            if (session.payment_status === 'paid' && session.amount_total) {
+              const discountPence =
+                (session.total_details?.amount_discount ?? 0) as number;
+              await recordGrowthPartnerPayment({
+                payerUserId: userId,
+                amountPaidPence: session.amount_total,
+                stripeEventId: session.id,
+                source: 'checkout',
+                isTrial: false,
+                discountPence,
+              }).catch((err) =>
+                console.error('[growth-partner] subscription checkout record failed', err),
+              );
+            }
             console.log(`Created subscription for user ${userId}`);
             try {
               const userSnap = await adminDb.doc(`users/${userId}`).get();
@@ -161,6 +189,23 @@ export async function POST(req: NextRequest) {
         } else if (grant.skipReason && grant.skipReason !== 'no_monthly_acu_allowance') {
           console.log(
             `Subscription ACU grant skipped for invoice ${invoice.id}: ${grant.skipReason}`,
+          );
+        }
+
+        if ((invoice.amount_paid ?? 0) > 0) {
+          const discountPence = (invoice.total_discount_amounts ?? []).reduce(
+            (sum, d) => sum + (d.amount ?? 0),
+            0,
+          );
+          await recordGrowthPartnerPayment({
+            payerUserId: userId,
+            amountPaidPence: invoice.amount_paid ?? 0,
+            stripeEventId: invoice.id,
+            source: 'invoice',
+            isTrial: invoice.billing_reason === 'subscription_create' && invoice.amount_paid === 0,
+            discountPence,
+          }).catch((err) =>
+            console.error('[growth-partner] invoice payment record failed', err),
           );
         }
 
@@ -259,6 +304,18 @@ export async function POST(req: NextRequest) {
             (subscription.status === 'active' || subscription.status === 'trialing') ? 'ACTIVE' : 'INACTIVE'
         );
          console.log(`Subscription updated for user ${userId}, status: ${subscription.status}`);
+        break;
+      }
+      case 'charge.refunded': {
+        const charge = event.data.object as Stripe.Charge;
+        const paymentIntentId = charge.payment_intent as string | undefined;
+        const checkoutSessionId = charge.metadata?.checkoutSessionId;
+        const clawId = checkoutSessionId ?? paymentIntentId ?? charge.id;
+        if (clawId) {
+          await clawBackPayment(clawId).catch((err) =>
+            console.error('[growth-partner] clawback failed', err),
+          );
+        }
         break;
       }
       default:

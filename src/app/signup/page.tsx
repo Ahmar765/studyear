@@ -3,6 +3,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -17,6 +18,9 @@ import { UserCredential, createUserWithEmailAndPassword, GoogleAuthProvider, sig
 import { getFirebaseAuth } from "@/lib/firebase/client-app";
 import { Separator } from "@/components/ui/separator";
 import { Loader } from "lucide-react";
+import { normalizeGrowthPartnerCode } from "@/lib/growth-partner-code";
+
+const REFERRAL_STORAGE_KEY = "studyear_referral_code";
 
 
 function SubmitButton({ isSubmitting }: { isSubmitting: boolean }) {
@@ -30,6 +34,21 @@ export default function SignupPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
   
+  const searchParams = useSearchParams();
+  const [referralCode, setReferralCode] = useState<string | null>(null);
+  
+  useEffect(() => {
+    const ref = searchParams.get("ref");
+    if (ref) {
+      const normalized = normalizeGrowthPartnerCode(ref) ?? ref.trim().toUpperCase();
+      sessionStorage.setItem(REFERRAL_STORAGE_KEY, normalized);
+      setReferralCode(normalized);
+      return;
+    }
+    const stored = sessionStorage.getItem(REFERRAL_STORAGE_KEY);
+    if (stored) setReferralCode(stored);
+  }, [searchParams]);
+
   useEffect(() => {
     // We keep this to redirect logged-in users
     if (user && !loading) {
@@ -49,7 +68,9 @@ export default function SignupPage() {
 
     try {
         const userCredential: UserCredential = await createUserWithEmailAndPassword(getFirebaseAuth(), email, password);
-        const result = await signup(userCredential.user.uid, email, role);
+        const storedRef =
+          referralCode ?? sessionStorage.getItem(REFERRAL_STORAGE_KEY) ?? undefined;
+        const result = await signup(userCredential.user.uid, email, role, undefined, undefined, storedRef);
 
         if (result.message === "Success") {
             if (result.sessionId) {
@@ -90,11 +111,13 @@ export default function SignupPage() {
     const provider = new GoogleAuthProvider();
     try {
         const result = await signInWithPopup(getFirebaseAuth(), provider);
+        const storedRef = sessionStorage.getItem(REFERRAL_STORAGE_KEY) ?? undefined;
         const { sessionId } = await handleSocialSignIn(
             result.user.uid,
             result.user.email,
             result.user.displayName,
             result.user.photoURL,
+            storedRef,
         );
         if (sessionId) {
             sessionStorage.setItem('sessionId', sessionId);
@@ -131,6 +154,11 @@ export default function SignupPage() {
           <CardTitle className="text-2xl">Sign Up</CardTitle>
           <CardDescription>
             Enter your information to create an account.
+            {referralCode && (
+              <span className="mt-1 block text-primary">
+                Referred by code {referralCode}
+              </span>
+            )}
           </CardDescription>
         </CardHeader>
         <form onSubmit={handleSignup}>

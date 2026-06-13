@@ -10,6 +10,7 @@ import { deriveParentLinkCode } from "@/lib/parent-link-code";
 import { generateSchoolStaffJoinCode } from "@/lib/school-staff-join-code";
 import { ensurePlatformAdminAccess } from "@/server/lib/platform-admin";
 import { sendWelcomeEmail, sendPlatformEmail, resolveContactInboxEmail } from "@/server/lib/mail";
+import { attributeReferral } from "@/server/lib/growth-partner";
 
 const allowedRoles: UserRole[] = ["STUDENT", "PARENT", "PRIVATE_TUTOR", "SCHOOL_ADMIN", "SCHOOL_TUTOR", "ADMIN"];
 
@@ -84,7 +85,7 @@ async function tryPromoteToAdmin(uid: string, email: string) {
     return false;
 }
 
-export async function signup(uid: string, email: string, role: string, displayName?: string | null, photoURL?: string | null) {
+export async function signup(uid: string, email: string, role: string, displayName?: string | null, photoURL?: string | null, referralCode?: string | null) {
     if (!allowedRoles.includes(role as UserRole)) {
         return { message: "Error", error: "Invalid role selected." };
     }
@@ -161,6 +162,17 @@ export async function signup(uid: string, email: string, role: string, displayNa
           }
         });
 
+        if (referralCode?.trim()) {
+          void attributeReferral({
+            referredUserId: uid,
+            referralCode: referralCode.trim(),
+          }).then((result) => {
+            if (!result.ok) {
+              console.info(`[signup] referral not applied for ${uid}: ${result.reason}`);
+            }
+          });
+        }
+
         if (userRole === 'PRIVATE_TUTOR') {
           const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://studyear.com';
           void resolveContactInboxEmail().then((adminEmail) =>
@@ -198,6 +210,7 @@ export async function handleSocialSignIn(
     email: string | null,
     displayName: string | null,
     photoURL: string | null,
+    referralCode?: string | null,
 ) {
     const userRef = adminDb.doc(`users/${uid}`);
     const userDoc = await userRef.get();
@@ -209,7 +222,7 @@ export async function handleSocialSignIn(
     }
 
     if (isNewUser) {
-       await signup(uid, email, userRole, displayName, photoURL);
+       await signup(uid, email, userRole, displayName, photoURL, referralCode);
     } else {
         await adminAuth.setCustomUserClaims(uid, { role: userDoc.data()?.role || userRole });
     }
