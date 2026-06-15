@@ -246,7 +246,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (loading) return;
 
-    const publicPages = ['/', '/login', '/signup', '/how-it-works', '/terms-of-service', '/about', '/forgot-password', '/privacy-policy', '/disclaimer', '/cookies', '/contact', '/blog'];
+    const publicPages = ['/', '/login', '/signup', '/how-it-works', '/terms-of-service', '/about', '/forgot-password', '/privacy-policy', '/disclaimer', '/cookies', '/contact', '/blog', '/growth-partner'];
     const isPublicPage = publicPages.some(page => pathname === page) || isBlogPath(pathname);
     const isAuthPage = ['/login', '/signup', '/forgot-password'].includes(pathname);
     const isImpersonationPage = pathname === '/auth/impersonate';
@@ -274,7 +274,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       effectiveRole === 'STUDENT' &&
       !onboardingComplete &&
       pathname !== '/profile-setup' &&
-      !pathname.startsWith('/account')
+      !pathname.startsWith('/account') &&
+      pathname !== '/growth-partner'
     ) {
       router.replace('/profile-setup');
       return;
@@ -301,6 +302,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           pathname.startsWith('/checkout') ||
           pathname === '/account' ||
           pathname.startsWith('/account/') ||
+          pathname === '/growth-partner' ||
           pathname === '/profile-setup' ||
           pathname.startsWith('/contribute') ||
           pathname.startsWith('/search') ||
@@ -310,6 +312,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           pathname.startsWith('/checkout') ||
           pathname === '/account' ||
           pathname.startsWith('/account/') ||
+          pathname === '/growth-partner' ||
           pathname === '/profile-setup' ||
           pathname.startsWith('/top-up') ||
           pathname.startsWith('/ai-tutor') ||
@@ -317,6 +320,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         const teacherAllowedOutsideTeacherRoutes =
           pathname === '/account' ||
           pathname.startsWith('/account/') ||
+          pathname === '/growth-partner' ||
           pathname === '/profile-setup' ||
           pathname.startsWith('/create/') ||
           pathname.startsWith('/ai-tutor') ||
@@ -329,6 +333,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           pathname.startsWith('/create') ||
           pathname === '/account' ||
           pathname.startsWith('/account/') ||
+          pathname === '/growth-partner' ||
           pathname === '/profile-setup' ||
           pathname.startsWith('/contribute') ||
           pathname.startsWith('/search') ||
@@ -344,6 +349,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             pathname.startsWith('/top-up') ||
             pathname === '/account' ||
             pathname.startsWith('/account/') ||
+            pathname === '/growth-partner' ||
             pathname === '/profile-setup' ||
             pathname.startsWith('/contribute') ||
             pathname.startsWith('/search') ||

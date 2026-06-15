@@ -14,10 +14,23 @@ import {
 import { ACUService } from '@/server/services/acu-service';
 
 const PROFILES = 'growth_partner_profiles';
+const CODE_INDEX = 'growth_partner_code_index';
 const ATTRIBUTIONS = 'referral_attributions';
 const PAYMENT_EVENTS = 'growth_partner_payment_events';
 const ACU_REWARDS = 'growth_partner_acu_rewards';
 const COMMISSIONS = 'growth_partner_commissions';
+
+async function indexReferralCode(userId: string, referralCode: string) {
+  await adminDb.collection(CODE_INDEX).doc(referralCode).set({
+    userId,
+    referralCode,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  await adminDb.doc(`users/${userId}`).set(
+    { growthPartnerCode: referralCode },
+    { merge: true },
+  );
+}
 
 function monthKey(date = new Date()): string {
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
@@ -51,7 +64,11 @@ export async function ensureGrowthPartnerProfile(
   const ref = adminDb.collection(PROFILES).doc(userId);
   const snap = await ref.get();
   if (snap.exists) {
-    return snap.data() as GrowthPartnerProfile;
+    const profile = snap.data() as GrowthPartnerProfile;
+    void indexReferralCode(userId, profile.referralCode).catch((err) =>
+      console.error('[growth-partner] code index sync failed', err),
+    );
+    return profile;
   }
   const now = admin.firestore.Timestamp.now();
   const code = deriveGrowthPartnerCode(userId);
@@ -68,6 +85,7 @@ export async function ensureGrowthPartnerProfile(
     updatedAt: now,
   };
   await ref.set(profile);
+  await indexReferralCode(userId, code);
   return profile;
 }
 
@@ -76,13 +94,33 @@ export async function findReferrerByCode(
 ): Promise<GrowthPartnerProfile | null> {
   const normalized = normalizeGrowthPartnerCode(code);
   if (!normalized) return null;
+
+  const indexed = await adminDb.collection(CODE_INDEX).doc(normalized).get();
+  if (indexed.exists) {
+    const userId = indexed.data()?.userId as string | undefined;
+    if (userId) {
+      return ensureGrowthPartnerProfile(userId);
+    }
+  }
+
+  const userSnap = await adminDb
+    .collection('users')
+    .where('growthPartnerCode', '==', normalized)
+    .limit(1)
+    .get();
+  if (!userSnap.empty) {
+    return ensureGrowthPartnerProfile(userSnap.docs[0].id);
+  }
+
   const snap = await adminDb
     .collection(PROFILES)
     .where('referralCode', '==', normalized)
     .limit(1)
     .get();
   if (snap.empty) return null;
-  return snap.docs[0].data() as GrowthPartnerProfile;
+  const profile = snap.docs[0].data() as GrowthPartnerProfile;
+  await indexReferralCode(profile.userId, profile.referralCode);
+  return profile;
 }
 
 export async function attributeReferral(params: {

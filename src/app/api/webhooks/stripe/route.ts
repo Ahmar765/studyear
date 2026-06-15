@@ -104,20 +104,6 @@ export async function POST(req: NextRequest) {
                 subscriptionType,
                 'ACTIVE'
             );
-            if (session.payment_status === 'paid' && session.amount_total) {
-              const discountPence =
-                (session.total_details?.amount_discount ?? 0) as number;
-              await recordGrowthPartnerPayment({
-                payerUserId: userId,
-                amountPaidPence: session.amount_total,
-                stripeEventId: session.id,
-                source: 'checkout',
-                isTrial: false,
-                discountPence,
-              }).catch((err) =>
-                console.error('[growth-partner] subscription checkout record failed', err),
-              );
-            }
             console.log(`Created subscription for user ${userId}`);
             try {
               const userSnap = await adminDb.doc(`users/${userId}`).get();

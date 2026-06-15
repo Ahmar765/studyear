@@ -55,8 +55,9 @@ export function GrowthPartnerDashboard() {
         } else {
           setData(result.data);
         }
-      } catch {
-        setError('Could not load dashboard.');
+      } catch (err) {
+        console.error('[growth-partner] dashboard load failed', err);
+        setError('Could not load dashboard. Try refreshing or signing out and back in.');
       } finally {
         setLoading(false);
       }

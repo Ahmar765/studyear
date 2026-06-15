@@ -10,7 +10,7 @@ import { deriveParentLinkCode } from "@/lib/parent-link-code";
 import { generateSchoolStaffJoinCode } from "@/lib/school-staff-join-code";
 import { ensurePlatformAdminAccess } from "@/server/lib/platform-admin";
 import { sendWelcomeEmail, sendPlatformEmail, resolveContactInboxEmail } from "@/server/lib/mail";
-import { attributeReferral } from "@/server/lib/growth-partner";
+import { attributeReferral, ensureGrowthPartnerProfile } from "@/server/lib/growth-partner";
 
 const allowedRoles: UserRole[] = ["STUDENT", "PARENT", "PRIVATE_TUTOR", "SCHOOL_ADMIN", "SCHOOL_TUTOR", "ADMIN"];
 
@@ -149,6 +149,8 @@ export async function signup(uid: string, email: string, role: string, displayNa
 
     try {
         await batch.commit();
+
+        await ensureGrowthPartnerProfile(uid);
         
         const isAdmin = await tryPromoteToAdmin(uid, email);
         if (!isAdmin) {

@@ -42,6 +42,7 @@ import ParentLinkCodeCard from '@/components/student/parent-link-code-card';
 import { isDisplayableImageUrl } from '@/lib/format-safe-date';
 import { getSchoolAcuPoolForTeacherAction } from '@/server/actions/teacher-actions';
 import { claimFreeQuarterlyAcusAction } from '@/server/actions/free-plan-actions';
+import { ensureGrowthPartnerProfileAction } from '@/server/actions/growth-partner-actions';
 
 
 function AccountPageInner() {
@@ -107,6 +108,18 @@ function AccountPageInner() {
       }
     })();
   }, [user, isStudentLike, userProfile?.subscription, toast]);
+
+  useEffect(() => {
+    if (!user) return;
+    void (async () => {
+      try {
+        const token = await user.getIdToken();
+        await ensureGrowthPartnerProfileAction(token);
+      } catch {
+        // Non-blocking — referral dashboard creates profile on visit too
+      }
+    })();
+  }, [user]);
 
   useEffect(() => {
     if (searchParams.get('purchase') !== 'success') return;

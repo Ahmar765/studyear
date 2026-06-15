@@ -13,6 +13,7 @@ import {
 } from '@/server/lib/growth-partner';
 import { growthPartnerReferralUrl } from '@/lib/growth-partner-code';
 import { GROWTH_PARTNER_PROGRAMME, tierDisplayName } from '@/data/growth-partner-programme';
+import { toPlainJson } from '@/server/lib/serialize-firestore';
 
 export async function getGrowthPartnerDashboardAction(idToken?: string | null) {
   const user = await getVerifiedUser(idToken);
@@ -25,13 +26,27 @@ export async function getGrowthPartnerDashboardAction(idToken?: string | null) {
 
   return {
     error: null,
-    data: {
+    data: toPlainJson({
       ...dashboard,
+      profile: {
+        userId: profile.userId,
+        referralCode: profile.referralCode,
+        tier: profile.tier,
+        successfulPaidReferrals: profile.successfulPaidReferrals ?? 0,
+        status: profile.status,
+      },
       referralUrl: growthPartnerReferralUrl(profile.referralCode),
       tierLabel: tierDisplayName(profile.tier),
       programme: GROWTH_PARTNER_PROGRAMME,
-    },
+    }),
   };
+}
+
+export async function ensureGrowthPartnerProfileAction(idToken?: string | null) {
+  const user = await getVerifiedUser(idToken);
+  if (!user?.uid) return { ok: false as const };
+  await ensureGrowthPartnerProfile(user.uid);
+  return { ok: true as const };
 }
 
 export async function applyReferralCodeAction(
