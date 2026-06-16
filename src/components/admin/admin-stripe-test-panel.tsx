@@ -74,9 +74,15 @@ export function AdminStripeTestPanel() {
               <li>
                 Secret key:{' '}
                 {status.env?.configured
-                  ? `${status.env.keyType} key`
+                  ? `${status.env.secretKeyPrefix ?? status.env.keyType}… (${status.env.keyType})`
                   : 'missing STRIPE_SECRET_KEY'}
               </li>
+              {status.env?.secretKeyPrefix === 'sk_live' && !status.connectionOk && (
+                <li className="text-destructive font-medium">
+                  Production is still using an old sk_live key — update STRIPE_SECRET_KEY in Firebase
+                  App Hosting to your new rk_live or sk_live key, then redeploy.
+                </li>
+              )}
               <li>
                 Webhook secret:{' '}
                 {status.env?.webhookConfigured ? 'set' : 'missing STRIPE_WEBHOOK_SECRET'}

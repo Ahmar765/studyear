@@ -5,6 +5,8 @@ export type StripeKeyCheck = {
   keyType: 'missing' | 'secret' | 'restricted' | 'invalid';
   publishableConfigured: boolean;
   webhookConfigured: boolean;
+  /** First 7 chars only — safe to show in admin UI (e.g. sk_live, rk_live). */
+  secretKeyPrefix?: string;
   hint?: string;
 };
 
@@ -39,6 +41,7 @@ export function inspectStripeEnv(): StripeKeyCheck {
       keyType: 'restricted',
       publishableConfigured: !!publishable,
       webhookConfigured: !!webhook,
+      secretKeyPrefix: secret.slice(0, 7),
       hint:
         'Restricted key (rk_) detected. Prefer a standard Secret key (sk_) for checkout. If you keep rk_, grant Checkout Sessions, Customers, Prices, Coupons, Promotion codes, and Webhooks in Stripe.',
     };
@@ -50,6 +53,7 @@ export function inspectStripeEnv(): StripeKeyCheck {
       keyType: 'secret',
       publishableConfigured: !!publishable,
       webhookConfigured: !!webhook,
+      secretKeyPrefix: secret.slice(0, 7),
     };
   }
 
@@ -58,6 +62,7 @@ export function inspectStripeEnv(): StripeKeyCheck {
     keyType: 'invalid',
     publishableConfigured: !!publishable,
     webhookConfigured: !!webhook,
+    secretKeyPrefix: secret.slice(0, Math.min(7, secret.length)),
     hint: 'STRIPE_SECRET_KEY must start with sk_live_, sk_test_, rk_live_, or rk_test_.',
   };
 }

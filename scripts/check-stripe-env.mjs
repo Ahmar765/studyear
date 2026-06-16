@@ -80,4 +80,23 @@ if (samplePrice) {
   }
 }
 
+const priceVars = Object.entries(process.env).filter(([k]) => k.startsWith('STRIPE_PRICE_'));
+if (priceVars.length > 0) {
+  console.log('\nAll STRIPE_PRICE_* in .env:');
+  for (const [key, id] of priceVars.sort(([a], [b]) => a.localeCompare(b))) {
+    if (!id?.trim()) {
+      console.log(`  ${key}: (empty)`);
+      continue;
+    }
+    try {
+      const price = await stripe.prices.retrieve(id.trim());
+      const amount = (price.unit_amount ?? 0) / 100;
+      const recurring = price.recurring ? ` / ${price.recurring.interval}` : ' (one-time)';
+      console.log(`  ${key}: OK — ${price.currency} ${amount}${recurring}`);
+    } catch {
+      console.log(`  ${key}: NOT FOUND on this account (${id})`);
+    }
+  }
+}
+
 console.log('\nProduction: set the same vars in Firebase → App Hosting → Environment variables, then redeploy.');
