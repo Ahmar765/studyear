@@ -36,6 +36,19 @@ export const SCHOOL_STARTER_MONTHLY_ACUS = SUBSCRIPTION_MONTHLY_ACUS.SCHOOL_STAR
 export const SCHOOL_GROWTH_MONTHLY_ACUS = SUBSCRIPTION_MONTHLY_ACUS.SCHOOL_GROWTH!;
 export const SCHOOL_ENTERPRISE_MONTHLY_ACUS = SUBSCRIPTION_MONTHLY_ACUS.SCHOOL_ENTERPRISE!;
 
+/** Standalone Child Free student tier — not a Stripe product; separate from paid plans. */
+export const CHILD_FREE_PLAN = {
+  name: 'Child Free',
+  price: '0',
+  priceSuffix: '',
+  tagline: 'Student account — 100 ACUs every month, no card required.',
+  features: [
+    '100 ACUs every month (Child Free only)',
+    'AI homework help & explanations',
+    'Not combined with paid plans — upgrade via checkout for more',
+  ],
+} as const;
+
 export const STUDENT_SUBSCRIPTION_PLANS: CheckoutPlanDefinition[] = [
   {
     productCode: 'STUDENT_ACCESS',

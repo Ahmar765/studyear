@@ -39,7 +39,7 @@ export function exceedsMarginFloor(params: {
 
 /** Bonus / referral / free ACU expiry windows (days). */
 export const ACU_EXPIRY_DAYS = {
-  FREE_QUARTERLY: 90,
+  FREE_MONTHLY: 30,
   BONUS: 60,
   REFERRAL: 90,
 } as const;

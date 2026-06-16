@@ -9,6 +9,7 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "seed:platform-admin": "node scripts/seed-platform-admin.mjs",
+    "seed:child-free": "node scripts/seed-child-free-student.mjs",
     "stripe:seed-subscription-prices": "node scripts/stripe-seed-subscription-prices.mjs",
     "stripe:seed-subscription-prices:missing": "node scripts/stripe-seed-subscription-prices.mjs --only-missing",
     "stripe:seed-acu-packs": "node scripts/stripe-seed-acu-pack-prices.mjs",

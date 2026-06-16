@@ -45,8 +45,8 @@ const STUDENT_LEARNING_ACCESS: FeatureKey[] = [
 
 export const PLAN_ENTITLEMENTS: Record<SubscriptionType, FeatureKey[]> = {
   /**
-   * Child Free: basic access only — 100 ACUs every 3 months (see free-plan-acu.ts).
-   * No Assignment Review, no premium toolkit, no heavy course generation.
+   * Child Free: basic access only — 100 ACUs every month (see free-plan-acu.ts).
+   * Paid subscriptions never receive these grants.
    */
   FREE: [
     "AI_EXPLANATION",

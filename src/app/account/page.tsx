@@ -41,7 +41,7 @@ import {
 import ParentLinkCodeCard from '@/components/student/parent-link-code-card';
 import { isDisplayableImageUrl } from '@/lib/format-safe-date';
 import { getSchoolAcuPoolForTeacherAction } from '@/server/actions/teacher-actions';
-import { claimFreeQuarterlyAcusAction } from '@/server/actions/free-plan-actions';
+import { claimFreeMonthlyAcusAction } from '@/server/actions/free-plan-actions';
 import { ensureGrowthPartnerProfileAction } from '@/server/actions/growth-partner-actions';
 
 
@@ -99,11 +99,11 @@ function AccountPageInner() {
 
     void (async () => {
       const token = await user.getIdToken();
-      const result = await claimFreeQuarterlyAcusAction(token);
+      const result = await claimFreeMonthlyAcusAction(token);
       if (result.ok && result.granted && result.acus) {
         toast({
           title: 'Free ACUs added',
-          description: `${result.acus} ACUs added to your wallet (Child Free quarterly allowance).`,
+          description: `${result.acus} ACUs added to your wallet (Child Free monthly allowance).`,
         });
       }
     })();
@@ -471,7 +471,7 @@ function AccountPageInner() {
                       {isSchoolAdmin
                         ? 'School workspace ACUs power AI across your cohort. Top up with ACU packs or subscribe to a school plan for monthly shared ACUs.'
                         : isStudentLike
-                          ? 'Child Free includes 100 ACUs every 3 months. Paid plans from £5/mo add monthly ACU allowances; Premium (£10) unlocks the full toolkit.'
+                          ? 'Child Free includes 100 ACUs every month (this plan only — not added to paid subscriptions). Paid plans from £5/mo add separate monthly ACU allowances; Premium (£10) unlocks the full toolkit.'
                           : isParent
                             ? 'Parent plans from £5/mo. Pro+ and Elite unlock AI advisor, intervention mode, and larger monthly ACU bundles.'
                             : 'Your current StudYear plan. Manage upgrades via Stripe checkout.'}

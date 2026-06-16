@@ -159,6 +159,10 @@ export default function SignupPage() {
                 Referred by code {referralCode}
               </span>
             )}
+            <span className="mt-2 block text-sm text-muted-foreground">
+              Students start on <strong className="text-foreground">Child Free</strong> — 100 ACUs
+              every month on that plan only (not added to paid accounts).
+            </span>
           </CardDescription>
         </CardHeader>
         <form onSubmit={handleSignup}>

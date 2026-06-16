@@ -15,10 +15,13 @@ import { useEffectiveRole } from '@/hooks/use-effective-role';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import {
+  CHILD_FREE_PLAN,
   PARENT_SUBSCRIPTION_PLANS,
   SCHOOL_SUBSCRIPTION_PLANS,
   STUDENT_SUBSCRIPTION_PLANS,
 } from '@/data/subscription-plans';
+import { activateChildFreePlanAction } from '@/server/actions/free-plan-actions';
+import { useRouter } from 'next/navigation';
 import { ACU_PACKAGES } from '@/data/acu-packages';
 import { Separator } from '@/components/ui/separator';
 import type { AppliedDiscount } from '@/components/checkout/checkout-discount-code';
@@ -138,6 +141,76 @@ function AcuPackageCard({
               : 'Purchase now'}
         </Button>
       </CardContent>
+    </Card>
+  );
+}
+
+function FreePlanCard() {
+  const [isPending, startTransition] = useTransition();
+  const { toast } = useToast();
+  const { user } = useAuth();
+  const router = useRouter();
+
+  const handleActivate = () => {
+    startTransition(async () => {
+      if (!user) {
+        toast({
+          variant: 'destructive',
+          title: 'Sign in required',
+          description: 'Create a free student account first, then return here.',
+        });
+        router.push('/signup');
+        return;
+      }
+      const token = await user.getIdToken();
+      const result = await activateChildFreePlanAction(token);
+      if (!result.ok) {
+        toast({ variant: 'destructive', title: 'Could not activate', description: result.error });
+        return;
+      }
+      toast({
+        title: 'Child Free activated',
+        description: result.acusGranted
+          ? `${result.acusGranted} ACUs added — 100 every month on this plan only.`
+          : 'You are on Child Free — 100 ACUs every month (not added to paid plans).',
+      });
+      router.push('/dashboard');
+    });
+  };
+
+  return (
+    <Card className="flex flex-col border-emerald-500/40 bg-emerald-500/5">
+      <CardHeader className="text-center">
+        <Badge variant="secondary" className="mx-auto w-fit mb-2">
+          No payment
+        </Badge>
+        <CardTitle className="text-3xl font-bold">{CHILD_FREE_PLAN.name}</CardTitle>
+        <CardDescription>{CHILD_FREE_PLAN.tagline}</CardDescription>
+      </CardHeader>
+      <CardContent className="flex-grow space-y-4">
+        <div className="text-center">
+          <span className="text-4xl font-bold">£{CHILD_FREE_PLAN.price}</span>
+          <span className="text-muted-foreground"> / forever</span>
+        </div>
+        <ul className="space-y-2 text-sm text-muted-foreground">
+          {CHILD_FREE_PLAN.features.map((feature) => (
+            <li key={feature} className="flex items-center gap-2">
+              <Check className="h-4 w-4 shrink-0 text-green-500" />
+              <span>{feature}</span>
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+      <CardFooter>
+        <Button
+          className="w-full"
+          variant="outline"
+          onClick={handleActivate}
+          disabled={isPending}
+        >
+          {isPending ? <Loader className="animate-spin" /> : 'Continue with Child Free'}
+        </Button>
+      </CardFooter>
     </Card>
   );
 }
@@ -469,13 +542,14 @@ function CheckoutPageContent() {
               Student plans — monthly only
             </h2>
             <p className="text-muted-foreground text-sm max-w-2xl mx-auto">
-              <strong className="text-foreground">Child Free</strong> includes 100 ACUs every 3 months.
-              Paid plans add monthly ACU allowances — from{' '}
+              <strong className="text-foreground">Child Free</strong> is a separate student account — 100 ACUs
+              every month, never added to paid plans. Paid plans add larger monthly allowances — from{' '}
               <strong className="text-foreground">£5 Student Access</strong> through to{' '}
               <strong className="text-foreground">£30 Student Max</strong> for daily heavy usage.
             </p>
           </div>
-          <div className="grid sm:grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+          <div className="grid sm:grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-6">
+            <FreePlanCard />
             {STUDENT_SUBSCRIPTION_PLANS.map((plan) => (
               <SubscriptionCard key={plan.productCode} {...plan} {...discountProps(appliedDiscount)} />
             ))}

@@ -11,6 +11,7 @@ import { generateSchoolStaffJoinCode } from "@/lib/school-staff-join-code";
 import { ensurePlatformAdminAccess } from "@/server/lib/platform-admin";
 import { sendWelcomeEmail, sendPlatformEmail, resolveContactInboxEmail } from "@/server/lib/mail";
 import { attributeReferral, ensureGrowthPartnerProfile } from "@/server/lib/growth-partner";
+import { provisionChildFreeStudentAccount } from "@/server/lib/provision-free-account";
 
 const allowedRoles: UserRole[] = ["STUDENT", "PARENT", "PRIVATE_TUTOR", "SCHOOL_ADMIN", "SCHOOL_TUTOR", "ADMIN"];
 
@@ -151,6 +152,14 @@ export async function signup(uid: string, email: string, role: string, displayNa
         await batch.commit();
 
         await ensureGrowthPartnerProfile(uid);
+
+        if (userRole === 'STUDENT') {
+          void provisionChildFreeStudentAccount(uid, userRole).then((result) => {
+            if (!result.ok && result.reason !== 'already_on_paid_plan') {
+              console.warn(`[signup] Child Free provision skipped for ${uid}: ${result.reason}`);
+            }
+          });
+        }
         
         const isAdmin = await tryPromoteToAdmin(uid, email);
         if (!isAdmin) {

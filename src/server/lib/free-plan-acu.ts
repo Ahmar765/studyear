@@ -3,18 +3,33 @@ import * as admin from 'firebase-admin';
 import { ACUService } from '@/server/services/acu-service';
 import { FREE_PLAN_RULES } from '@/data/free-plan-rules';
 
+const PAID_SUBSCRIPTION_TYPES = new Set([
+  'STUDENT_ACCESS',
+  'STUDENT_PREMIUM',
+  'STUDENT_PREMIUM_PLUS',
+  'STUDENT_MAX',
+  'PARENT_VIEW',
+  'PARENT_PRO',
+  'PARENT_PRO_PLUS',
+  'PARENT_ELITE',
+  'PRIVATE_TUTOR',
+  'SCHOOL_STARTER',
+  'SCHOOL_GROWTH',
+  'SCHOOL_ENTERPRISE',
+]);
+
 /**
- * Grant quarterly free ACUs to Child Free students (100 ACUs every 90 days).
- * Idempotent per grant window — safe to call on login or scheduled job.
+ * Grant monthly Child Free ACUs (100/month) — only for active FREE student accounts.
+ * Never runs for paid subscriptions. Idempotent per grant window.
  */
-export async function grantFreeQuarterlyAcusIfDue(userId: string): Promise<{
+export async function grantFreeMonthlyAcusIfDue(userId: string): Promise<{
   granted: boolean;
   acus?: number;
   skipReason?: string;
 }> {
   const userSnap = await adminDb.collection('users').doc(userId).get();
   const data = userSnap.data();
-  if (!data || data.role !== 'STUDENT') {
+  if (!data || String(data.role ?? '').toUpperCase() !== 'STUDENT') {
     return { granted: false, skipReason: 'not_student' };
   }
 
@@ -23,7 +38,18 @@ export async function grantFreeQuarterlyAcusIfDue(userId: string): Promise<{
     return { granted: false, skipReason: 'not_free_plan' };
   }
 
-  const grantRef = adminDb.collection('free_quarterly_acu_grants').doc(userId);
+  const subSnap = await adminDb.collection('subscriptions').doc(userId).get();
+  const subType = String(subSnap.data()?.type ?? subscription).toUpperCase();
+  const subStatus = String(subSnap.data()?.status ?? '').toUpperCase();
+  if (
+    subType !== 'FREE' &&
+    PAID_SUBSCRIPTION_TYPES.has(subType) &&
+    subStatus === 'ACTIVE'
+  ) {
+    return { granted: false, skipReason: 'paid_subscription_active' };
+  }
+
+  const grantRef = adminDb.collection('free_monthly_acu_grants').doc(userId);
   const now = Date.now();
   const intervalMs = FREE_PLAN_RULES.grantIntervalDays * 24 * 60 * 60 * 1000;
 
@@ -37,7 +63,7 @@ export async function grantFreeQuarterlyAcusIfDue(userId: string): Promise<{
       grantRef,
       {
         lastGrantedAt: admin.firestore.FieldValue.serverTimestamp(),
-        acus: FREE_PLAN_RULES.quarterlyAcus,
+        acus: FREE_PLAN_RULES.monthlyAcus,
         expiresAfterDays: FREE_PLAN_RULES.acuExpiryDays,
       },
       { merge: true },
@@ -51,14 +77,17 @@ export async function grantFreeQuarterlyAcusIfDue(userId: string): Promise<{
 
   await ACUService.creditACUs({
     userId,
-    amount: FREE_PLAN_RULES.quarterlyAcus,
+    amount: FREE_PLAN_RULES.monthlyAcus,
     type: 'BONUS',
-    description: `Child Free — ${FREE_PLAN_RULES.quarterlyAcus} ACUs (quarterly allowance)`,
+    description: `Child Free — ${FREE_PLAN_RULES.monthlyAcus} ACUs (monthly allowance)`,
     metadata: {
-      source: 'free_quarterly_grant',
+      source: 'free_monthly_grant',
       expiresAfterDays: FREE_PLAN_RULES.acuExpiryDays,
     },
   });
 
-  return { granted: true, acus: FREE_PLAN_RULES.quarterlyAcus };
+  return { granted: true, acus: FREE_PLAN_RULES.monthlyAcus };
 }
+
+/** @deprecated Use grantFreeMonthlyAcusIfDue */
+export const grantFreeQuarterlyAcusIfDue = grantFreeMonthlyAcusIfDue;
