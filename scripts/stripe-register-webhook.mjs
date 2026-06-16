@@ -26,6 +26,7 @@ const EVENTS = [
   'invoice.payment_failed',
   'customer.subscription.deleted',
   'customer.subscription.updated',
+  'charge.refunded',
 ];
 
 function loadDotEnv() {

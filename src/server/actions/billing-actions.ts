@@ -22,6 +22,8 @@ import {
   SCHOOL_SUBSCRIPTION_PLANS,
   STUDENT_SUBSCRIPTION_PLANS,
 } from '@/data/subscription-plans';
+import { ensurePlatformAdminAccess, isPlatformAdmin } from '@/server/lib/platform-admin';
+import { testStripeConnection } from '@/server/lib/stripe-server';
 
 const MARKETING_SUBSCRIPTION_PLANS = [
   ...STUDENT_SUBSCRIPTION_PLANS,
@@ -451,4 +453,24 @@ export async function finalizeAcuCheckoutSessionAction(
       error instanceof Error ? error.message : 'Could not finalize checkout.';
     return { ok: false, error: message };
   }
+}
+
+export async function getStripeConnectionStatusAction(idToken?: string | null) {
+  const user = await verifyIdTokenString(idToken);
+  if (!user?.uid) {
+    return { success: false, error: 'Unauthorized' };
+  }
+  await ensurePlatformAdminAccess(user.uid, user.email ?? null);
+  if (!(await isPlatformAdmin(user.uid))) {
+    return { success: false, error: 'Forbidden' };
+  }
+
+  const result = await testStripeConnection();
+  return {
+    success: true,
+    connectionOk: result.ok,
+    connectionError: result.error,
+    livemode: result.livemode,
+    env: result.env,
+  };
 }

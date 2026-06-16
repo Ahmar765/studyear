@@ -38,10 +38,18 @@ Also set:
 
 ### Stripe (checkout)
 
-- `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`
-- `STRIPE_SECRET_KEY`
-- `STRIPE_WEBHOOK_SECRET`
-- `STRIPE_PRICE_STUDENT_PREMIUM`, `STRIPE_PRICE_STUDENT_PREMIUM_PLUS`, etc.
+Set in **Firebase App Hosting → Environment variables** (BUILD + RUNTIME for `NEXT_PUBLIC_*`):
+
+- `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` — starts with `pk_live_…`
+- `STRIPE_SECRET_KEY` — **must start with `sk_live_…`** (standard Secret key from Stripe → Developers → API keys). Do **not** use a publishable key (`pk_`) here. Restricted keys (`rk_`) only work if granted Checkout, Customers, Prices, Coupons, and Webhooks permissions.
+- `STRIPE_WEBHOOK_SECRET` — from Stripe → Developers → Webhooks → your endpoint → Signing secret (`whsec_…`). Endpoint URL: `https://studyear.com/api/webhooks/stripe`
+- `STRIPE_PRICE_STUDENT_PREMIUM`, `STRIPE_PRICE_STUDENT_PREMIUM_PLUS`, etc. (see `.env.template`)
+
+**Webhook events required:** `checkout.session.completed`, `invoice.paid`, `invoice.payment_failed`, `customer.subscription.updated`, `customer.subscription.deleted`, `charge.refunded`
+
+After updating keys in Firebase, **roll out a new deployment**. Verify in **Admin → Billing → Stripe connection** panel.
+
+Local check: `npm run stripe:check-env`
 
 ### Email (signup welcome + admin ACU credits + contact form)
 

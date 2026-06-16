@@ -13,7 +13,8 @@
     "stripe:seed-subscription-prices:missing": "node scripts/stripe-seed-subscription-prices.mjs --only-missing",
     "stripe:seed-acu-packs": "node scripts/stripe-seed-acu-pack-prices.mjs",
     "stripe:seed-acu-packs:missing": "node scripts/stripe-seed-acu-pack-prices.mjs --only-missing",
-    "stripe:register-webhook": "node scripts/stripe-register-webhook.mjs"
+    "stripe:register-webhook": "node scripts/stripe-register-webhook.mjs",
+    "stripe:check-env": "node scripts/check-stripe-env.mjs"
   },
   "engines": {
     "node": "20"

@@ -4,6 +4,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { getAcuTransactionsAction, getRecentPaymentsAction, getPlatformEconomicsOverviewAction } from "@/server/actions/admin-actions";
 import DiscountCodesSection from "@/app/admin/billing/discount-codes-section";
+import { AdminStripeTestPanel } from "@/components/admin/admin-stripe-test-panel";
 import { fetchUserLabelsByIds } from "@/server/lib/admin-user-labels";
 import { PlatformEconomicsSummary } from "@/app/admin/_components/platform-economics-summary";
 
@@ -29,6 +30,8 @@ export default async function AdminBillingPage() {
                 Stripe gross vs estimated AI spend (see disclaimers below). Subscription renewals only appear here when logged as payment rows.
             </p>
         </div>
+
+        <AdminStripeTestPanel />
 
         <PlatformEconomicsSummary overview={economicsOverview} error={economicsError} />
 
