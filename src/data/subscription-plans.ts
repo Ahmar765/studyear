@@ -36,6 +36,18 @@ export const SCHOOL_STARTER_MONTHLY_ACUS = SUBSCRIPTION_MONTHLY_ACUS.SCHOOL_STAR
 export const SCHOOL_GROWTH_MONTHLY_ACUS = SUBSCRIPTION_MONTHLY_ACUS.SCHOOL_GROWTH!;
 export const SCHOOL_ENTERPRISE_MONTHLY_ACUS = SUBSCRIPTION_MONTHLY_ACUS.SCHOOL_ENTERPRISE!;
 
+export const CHILD_FREE_PLAN = {
+  name: 'Child Free',
+  price: '0',
+  priceSuffix: '',
+  tagline: 'Start learning — no card required.',
+  features: [
+    '100 ACUs every 3 months',
+    'AI homework help & explanations',
+    'Upgrade anytime for more tools and monthly ACUs',
+  ],
+} as const;
+
 export const STUDENT_SUBSCRIPTION_PLANS: CheckoutPlanDefinition[] = [
   {
     productCode: 'STUDENT_ACCESS',
