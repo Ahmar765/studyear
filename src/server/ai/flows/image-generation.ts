@@ -14,7 +14,7 @@ export type GenerateImageOutput = z.infer<typeof GenerateImageOutputSchema>;
 
 export async function generateImage(input: GenerateImageInput): Promise<GenerateImageOutput> {
   const { media, info } = await ai.generate({
-    model: 'googleai/imagen-4.0-fast-generate-001',
+    model: 'googleai/imagen-4.0-generate-001',
     prompt: input.prompt,
     config: {
       aspectRatio: '16:9',

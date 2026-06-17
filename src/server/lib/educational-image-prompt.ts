@@ -6,28 +6,25 @@ export function buildEducationalImagePrompt(params: {
   subject?: string | null;
   rationale?: string | null;
 }): string {
-  const level = params.studyLevel?.trim() || 'UK secondary school (GCSE/A-Level)';
+  const level = params.studyLevel?.trim() || 'secondary school';
   const subject = params.subject?.trim() || 'General';
   const context = params.rationale?.trim();
 
   return [
-    'Create a clear educational diagram or illustration for UK students.',
+    `Create a clear, clean educational diagram or illustration on the topic: "${params.topic}".`,
+    `Subject area: ${subject}. Intended audience: ${level} students in the UK.`,
+    context ? `Additional context: ${context}` : '',
     '',
-    `Title: ${params.title}`,
-    `Subject: ${subject}`,
-    `Study level: ${level}`,
-    `Topic: ${params.topic}`,
-    context ? `Context: ${context}` : '',
-    '',
-    'Rules:',
-    '- ALL text labels must be in UK English with correct curriculum terminology (e.g. biceps brachii, triceps, quadriceps — not symbols, abbreviations, or foreign script)',
-    '- Every labelled part must be readable English text connected with clear leader lines',
-    '- For anatomy/biology: label muscles, bones, organs, and structures using standard UK GCSE/A-Level names',
-    '- Layout suitable for revision — match the study level (not childish for GCSE/A-Level)',
-    '- No foreign language text, no gibberish, no decorative nonsense labels, no clutter',
-    '- For graphs: label axes, units, and legend entries in UK English',
-    '- Suitable for classroom, parent, and exam revision use',
+    'VISUAL REQUIREMENTS:',
+    '- Draw only the subject described above. Do not mix unrelated topics in the same image.',
+    '- For science/anatomy: show accurate anatomical structures with short leader lines pointing to each labelled part.',
+    '- Labels must be plain, readable English words only — the correct biological or technical name for each part.',
+    '- Keep labels minimal and precise (e.g. "biceps brachii", "triceps", "deltoid"). Do not add any other text.',
+    '- No titles, headings, legends, watermarks, or level descriptors inside the image.',
+    '- Do not reproduce any text from these instructions as visual text in the image.',
+    '- Clean white or light background. No decorative clutter.',
+    '- Style: clear textbook diagram, suitable for revision.',
   ]
-    .filter(Boolean)
-    .join('\n');
+  .filter(Boolean)
+  .join('\n');
 }
