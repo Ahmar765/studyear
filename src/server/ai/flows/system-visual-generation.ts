@@ -129,5 +129,5 @@ OUTPUT:
 An ultra-realistic, cinematic 4K image. Sharp, premium, and brand-defining.
     `;
 
-  return generateImage({ prompt: masterPrompt });
+  return generateImage({ prompt: masterPrompt, aspectRatio: '16:9' });
 }

@@ -700,6 +700,75 @@ body {
   backdrop-filter: blur(12px);
 }
 
+/* =========================================================
+   PRINT / SAVE AS PDF
+   Hide chrome, keep resource content readable on paper.
+   ========================================================= */
+@media print {
+  /* Hide all nav, sidebars, buttons, toast, banners */
+  nav,
+  aside,
+  header,
+  footer,
+  [data-print-hide],
+  [role="navigation"],
+  [role="banner"],
+  [role="contentinfo"],
+  .cookie-banner,
+  .install-prompt {
+    display: none !important;
+  }
+
+  /* Force white background + black text */
+  body,
+  [data-print-body] {
+    background: white !important;
+    color: black !important;
+  }
+
+  /* Remove card shadows / rounded corners that print as grey blobs */
+  .card,
+  [class*="shadow"],
+  [class*="rounded"] {
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    border-color: #ccc !important;
+  }
+
+  /* Avoid breaking cards across page boundaries */
+  .card {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Expand content to full width */
+  main,
+  [data-print-body] {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Images inside resource cards — constrain size */
+  img {
+    max-width: 100% !important;
+    height: auto !important;
+  }
+
+  /* SVG charts — keep them on one page */
+  svg {
+    max-width: 100% !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Page margins */
+  @page {
+    margin: 1.5cm;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .landing-marquee-track,
   .landing-float,

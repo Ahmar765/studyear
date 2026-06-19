@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,8 +22,12 @@ import {
   BookOpen,
   CalendarDays,
   CheckCircle2,
+  Download,
+  FileDown,
   HeartHandshake,
+  Loader2,
   Moon,
+  Presentation,
   Sparkles,
   Sun,
   Sunrise,
@@ -33,6 +37,7 @@ import { resourceMetadata, ResourceType } from "@/data/academic";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
+import { exportAsPdf, exportAsPptx } from "@/lib/export-resource";
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return v !== null && typeof v === "object" && !Array.isArray(v);
@@ -1031,6 +1036,7 @@ export default function SavedResourceDetailClient({ id }: { id: string }) {
   const [payload, setPayload] = useState<
     Awaited<ReturnType<typeof fetchSavedResourceById>> | null
   >(null);
+  const [isPptxPending, startPptxTransition] = useTransition();
 
   useEffect(() => {
     if (authLoading || !id) return;
@@ -1110,13 +1116,43 @@ export default function SavedResourceDetailClient({ id }: { id: string }) {
       : null;
 
   return (
-    <div className="flex-1 space-y-8 p-4 md:p-8">
-      <Button asChild variant="ghost" size="sm" className="-ml-2 gap-2">
-        <Link href="/saved-resources">
-          <ArrowLeft className="h-4 w-4" />
-          Back to saved resources
-        </Link>
-      </Button>
+    <div className="flex-1 space-y-8 p-4 md:p-8" data-print-body>
+      <div className="flex items-center justify-between gap-4 flex-wrap" data-print-hide>
+        <Button asChild variant="ghost" size="sm" className="-ml-2 gap-2">
+          <Link href="/saved-resources">
+            <ArrowLeft className="h-4 w-4" />
+            Back to saved resources
+          </Link>
+        </Button>
+
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={() => exportAsPdf()}
+          >
+            <FileDown className="h-4 w-4" />
+            Download PDF
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            disabled={isPptxPending}
+            onClick={() =>
+              startPptxTransition(() => exportAsPptx(resource))
+            }
+          >
+            {isPptxPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Presentation className="h-4 w-4" />
+            )}
+            {isPptxPending ? "Generating…" : "Export PowerPoint"}
+          </Button>
+        </div>
+      </div>
 
       <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-2">

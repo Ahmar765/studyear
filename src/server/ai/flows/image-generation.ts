@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 export const GenerateImageInputSchema = z.object({
   prompt: z.string().min(3, "Please enter a prompt with at least 3 characters."),
+  aspectRatio: z.enum(['1:1', '4:3', '16:9', '3:4', '9:16']).optional(),
 });
 export type GenerateImageInput = z.infer<typeof GenerateImageInputSchema>;
 
@@ -17,7 +18,7 @@ export async function generateImage(input: GenerateImageInput): Promise<Generate
     model: 'googleai/imagen-4.0-generate-001',
     prompt: input.prompt,
     config: {
-      aspectRatio: '16:9',
+      aspectRatio: input.aspectRatio ?? '1:1',
     },
   });
 

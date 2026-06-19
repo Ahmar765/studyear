@@ -148,7 +148,7 @@ async function generateEducationalVisualsImpl(params: {
           subject: params.subject,
           rationale: parsed.rationale,
         });
-        const img = await generateImage({ prompt });
+        const img = await generateImage({ prompt, aspectRatio: '1:1' });
         out.push({ ...parsed, imageUrl: img.imageUrl });
         continue;
       }

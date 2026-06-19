@@ -53,7 +53,7 @@ export async function createVisualResourceAction(input: VisualRequest): Promise<
                     subject: validation.data.subject,
                   })
                 : validation.data.prompt;
-          const imageResult = await generateImage({ prompt: finalPrompt! });
+          const imageResult = await generateImage({ prompt: finalPrompt!, aspectRatio: '1:1' });
           visualOutput = { imageUrl: imageResult.imageUrl, revisedPrompt: imageResult.revisedPrompt };
         } else {
             throw new Error("Unsupported visual type.");
