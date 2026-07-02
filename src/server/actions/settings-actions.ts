@@ -57,7 +57,6 @@ const defaultSettings: SystemSettings = {
     fallbackOrder: ['vertex', 'openai'],
     modelMap: {
       openai: { costEffective: 'gpt-4-turbo', performance: 'gpt-4o' },
-      // Genkit / Gemini API: prefer 2.5 series; 1.5 IDs are often retired or error-prone.
       gemini: { costEffective: 'gemini-2.5-flash', performance: 'gemini-2.5-pro' },
       vertex: { costEffective: 'gemini-2.5-flash', performance: 'gemini-2.5-pro' },
     },

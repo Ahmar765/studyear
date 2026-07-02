@@ -9,6 +9,7 @@ import type { SubscriptionType } from '../schemas';
 import { runPaidAIFeature, PaidAIFeatureResult } from '../services/run-paid-ai-feature';
 import { FeatureKey } from '@/data/acu-costs';
 import { buildAiUsagePricingFields } from '@/server/lib/ai-provider-cost-estimate';
+import { withRetry } from '@/server/lib/retry';
 
 async function routeByTaskType(taskType: AITaskType): Promise<{ provider: AIProvider; model: string; fallbackChain: { provider: AIProvider; model: string }[] }> {
     const settings = await getSystemSettings();
@@ -66,7 +67,11 @@ export class AIGatewayService {
             let lastError: Error | null = null;
 
             try {
-                output = await flow(input.promptPayload, { model: routing.model });
+                output = await withRetry(
+                    () => flow(input.promptPayload, { model: routing.model }),
+                    4,   // max attempts
+                    5_000, // 5 s base delay
+                );
             } catch (primaryError: any) {
                 console.error(`AI Gateway: Primary model '${routing.model}' for task '${ctx.taskType}' failed.`, primaryError);
                 lastError = primaryError;
@@ -74,7 +79,11 @@ export class AIGatewayService {
                 for (const fallback of routing.fallbackChain) {
                     try {
                         console.log(`AI Gateway: Attempting fallback to model '${fallback.model}'.`);
-                        output = await flow(input.promptPayload, { model: fallback.model });
+                        output = await withRetry(
+                            () => flow(input.promptPayload, { model: fallback.model }),
+                            3,    // fewer retries for fallbacks
+                            3_000,
+                        );
                         finalModel = fallback.model;
                         finalProvider = fallback.provider;
                         fallbackUsed = true;
