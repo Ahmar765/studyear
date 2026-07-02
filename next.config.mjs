@@ -1,6 +1,5 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  serverExternalPackages: ['pdf-parse'],
   env: {
     CLOUDINARY_CLOUD_NAME:
       process.env.CLOUDINARY_CLOUD_NAME || process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
@@ -12,6 +11,29 @@ const nextConfig = {
   },
   eslint: {
     ignoreDuringBuilds: true,
+  },
+  webpack: (config, { isServer, webpack }) => {
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+        https: false,
+        http: false,
+        net: false,
+        tls: false,
+        stream: false,
+        child_process: false,
+      };
+      
+      // Fix "UnhandledSchemeError: Reading from node:fs is not handled by plugins"
+      // Strip 'node:' prefix so that it hits the fallback = false above.
+      config.plugins.push(
+        new webpack.NormalModuleReplacementPlugin(/^node:/, (resource) => {
+          resource.request = resource.request.replace(/^node:/, '');
+        })
+      );
+    }
+    return config;
   },
   images: {
     remotePatterns: [
@@ -42,6 +64,7 @@ const nextConfig = {
     ],
   },
   experimental: {
+    serverComponentsExternalPackages: ['pdf-parse'],
     serverActions: {
       bodySizeLimit: '2mb', // Default is 1mb
       // Extend the server action timeout for longer tasks like video generation
